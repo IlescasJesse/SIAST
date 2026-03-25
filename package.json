@@ -1,0 +1,28 @@
+{
+  "name": "sistema-tickets-finanzas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo MVP para sistema de tickets de finanzas",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @stf/api\" \"npm run dev -w @stf/web\"",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "nextjs",
+    "express",
+    "tickets",
+    "monorepo"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2"
+  }
+}
