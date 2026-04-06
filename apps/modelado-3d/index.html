@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SIAST — Edificio Saúl Martínez</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        background: #0A0E1A;
+        color: #e0e6f0;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        overflow: hidden;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      #canvas-container {
+        position: fixed;
+        inset: 0;
+      }
+
+      canvas { display: block; }
+
+      /* ── Panel lateral ── */
+      #info-panel {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        width: 260px;
+        background: rgba(10, 18, 40, 0.88);
+        border: 1px solid rgba(66, 153, 225, 0.3);
+        border-radius: 10px;
+        padding: 16px;
+        backdrop-filter: blur(12px);
+        transition: opacity 0.3s;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #info-panel.visible { opacity: 1; pointer-events: auto; }
+
+      #info-panel h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #90cdf4;
+        margin-bottom: 8px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      #info-panel .field { margin-bottom: 6px; font-size: 13px; color: #a0aec0; }
+      #info-panel .field span { color: #e2e8f0; font-weight: 500; }
+
+      #info-panel .tickets-count {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 6px;
+        background: rgba(255, 23, 68, 0.15);
+        border: 1px solid rgba(255, 23, 68, 0.3);
+        font-size: 12px;
+        color: #fc8181;
+        display: none;
+      }
+      #info-panel .tickets-count.visible { display: block; }
+
+      /* ── Controles de piso ── */
+      #floor-controls {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        background: rgba(10, 18, 40, 0.85);
+        padding: 10px 16px;
+        border-radius: 40px;
+        border: 1px solid rgba(66, 153, 225, 0.25);
+        backdrop-filter: blur(10px);
+      }
+
+      .floor-btn {
+        background: transparent;
+        border: 1px solid rgba(66, 153, 225, 0.4);
+        color: #90cdf4;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: inherit;
+      }
+
+      .floor-btn:hover { background: rgba(66, 153, 225, 0.15); }
+      .floor-btn.active { background: rgba(66, 153, 225, 0.25); color: #fff; border-color: #4299e1; }
+
+      /* ── Loader ── */
+      #loader {
+        position: fixed;
+        inset: 0;
+        background: #0A0E1A;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        transition: opacity 0.6s;
+      }
+
+      #loader.hidden { opacity: 0; pointer-events: none; }
+
+      #loader .logo {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        color: #4299e1;
+        margin-bottom: 8px;
+      }
+
+      #loader .sub { font-size: 12px; color: #4a5568; margin-bottom: 32px; }
+
+      #loader .bar-wrap {
+        width: 200px;
+        height: 3px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      #loader .bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #2b6cb0, #4299e1);
+        border-radius: 3px;
+        transition: width 0.4s ease;
+      }
+
+      /* ── Login mode overlay ── */
+      #login-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      #login-overlay.visible { display: flex; }
+
+      #login-overlay .title {
+        font-size: 28px;
+        font-weight: 700;
+        color: #4299e1;
+        letter-spacing: 0.08em;
+        text-shadow: 0 0 30px rgba(66,153,225,0.5);
+        margin-bottom: 4px;
+      }
+
+      #login-overlay .subtitle {
+        font-size: 12px;
+        color: #4a5568;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loader">
+      <div class="logo">SIAST</div>
+      <div class="sub">Edificio Saúl Martínez — Secretaría de Finanzas</div>
+      <div class="bar-wrap"><div class="bar" id="loader-bar"></div></div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="info-panel">
+      <h3 id="panel-area-name">Área</h3>
+      <div class="field">Piso: <span id="panel-floor">—</span></div>
+      <div class="field">ID: <span id="panel-id">—</span></div>
+      <div class="field">Cuadrícula: <span id="panel-grid">—</span></div>
+      <div class="tickets-count" id="panel-tickets"></div>
+    </div>
+
+    <div id="floor-controls">
+      <button class="floor-btn" data-floor="all">Todo</button>
+      <button class="floor-btn" data-floor="0">PB</button>
+      <button class="floor-btn" data-floor="1">N1</button>
+      <button class="floor-btn" data-floor="2">N2</button>
+      <button class="floor-btn" data-floor="3">N3</button>
+    </div>
+
+    <div id="login-overlay">
+      <div class="title">SIAST</div>
+      <div class="subtitle">Sistema Integral de Atención y Soporte Técnico</div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

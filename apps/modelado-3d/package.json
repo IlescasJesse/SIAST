@@ -1,0 +1,18 @@
+{
+  "name": "@stf/modelado-3d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "vite build",
+    "preview": "vite preview --port 5174"
+  },
+  "dependencies": {
+    "three": "^0.169.0",
+    "@tweenjs/tween.js": "^23.1.3"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}
