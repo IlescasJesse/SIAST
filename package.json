@@ -11,7 +11,7 @@
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:3d\" \"npm run dev:web\"",
     "dev:api": "npm run dev -w ./apps/api",
     "dev:3d": "npm run dev -w ./apps/modelado-3d",
-    "dev:web": "node -e \"const fs=require('fs');const{spawn}=require('child_process');if(!fs.existsSync('apps/web/package.json')){console.log('apps/web no existe; saltando web');process.exit(0);}const npm=process.platform==='win32'?'npm.cmd':'npm';const p=spawn(npm,['run','dev','-w','./apps/web'],{stdio:'inherit'});p.on('exit',c=>process.exit(c??0));\"",
+    "dev:web": "npm run dev -w ./apps/web",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "format": "prettier --write ."

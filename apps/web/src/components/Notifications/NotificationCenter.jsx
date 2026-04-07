@@ -58,9 +58,9 @@ export const NotificationCenter = () => {
                   sx={{
                     borderRadius: 2,
                     mb: 0.5,
-                    bgcolor: n.leida ? "transparent" : "rgba(21,101,192,0.1)",
+                    bgcolor: n.leida ? "transparent" : "rgba(157,36,73,0.07)",
                     cursor: "pointer",
-                    "&:hover": { bgcolor: "rgba(255,255,255,0.05)" },
+                    "&:hover": { bgcolor: "rgba(157,36,73,0.04)" },
                   }}
                 >
                   <ListItemText

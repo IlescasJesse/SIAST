@@ -14,6 +14,7 @@ import catalogosRoutes from "./routes/catalogos.routes.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { configurarSockets } from "./sockets/tickets.socket.js";
 import { setIo } from "./services/notificaciones.service.js";
+import { syncEmpleados } from "./services/sirh.service.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -83,4 +84,9 @@ app.use(errorMiddleware);
 httpServer.listen(port, () => {
   console.log(`🚀 SIAST API lista en http://localhost:${port}`);
   console.log(`🔌 Socket.IO activo`);
+
+  // Sincronizar empleados desde SIRH si está habilitado
+  syncEmpleados().catch((err) => {
+    console.error("[SIRH] Error inesperado en syncEmpleados:", err);
+  });
 });

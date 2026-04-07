@@ -31,7 +31,7 @@ export const Sidebar = ({ open, onClose, variant = "permanent" }) => {
   const content = (
     <Box sx={{ width: DRAWER_W, height: "100%", display: "flex", flexDirection: "column", pt: 1 }}>
       <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography variant="caption" color="primary.light" fontWeight={700} letterSpacing={2} sx={{ textTransform: "uppercase" }}>
+        <Typography variant="caption" color="primary.main" fontWeight={700} letterSpacing={2} sx={{ textTransform: "uppercase" }}>
           SIAST
         </Typography>
         <Typography variant="caption" display="block" color="text.secondary" sx={{ fontSize: 10 }}>
@@ -45,14 +45,7 @@ export const Sidebar = ({ open, onClose, variant = "permanent" }) => {
             key={item.to}
             selected={pathname.startsWith(item.to) && item.to !== "/"}
             onClick={() => { navigate(item.to); onClose?.(); }}
-            sx={{
-              borderRadius: 2, mx: 1, mb: 0.5,
-              "&.Mui-selected": {
-                bgcolor: "rgba(21,101,192,0.2)",
-                color: "primary.light",
-                "& .MuiListItemIcon-root": { color: "primary.light" },
-              },
-            }}
+            sx={{ borderRadius: 2, mx: 1, mb: 0.5 }}
           >
             <ListItemIcon sx={{ minWidth: 36, color: "text.secondary" }}>{item.icon}</ListItemIcon>
             <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }} />
@@ -64,14 +57,14 @@ export const Sidebar = ({ open, onClose, variant = "permanent" }) => {
 
   if (variant === "temporary") {
     return (
-      <Drawer open={open} onClose={onClose} variant="temporary" sx={{ "& .MuiDrawer-paper": { width: DRAWER_W, bgcolor: "background.paper" } }}>
+      <Drawer open={open} onClose={onClose} variant="temporary" sx={{ "& .MuiDrawer-paper": { width: DRAWER_W } }}>
         {content}
       </Drawer>
     );
   }
 
   return (
-    <Drawer variant="permanent" sx={{ width: DRAWER_W, flexShrink: 0, "& .MuiDrawer-paper": { width: DRAWER_W, boxSizing: "border-box", bgcolor: "background.paper", borderRight: "1px solid rgba(255,255,255,0.08)" } }}>
+    <Drawer variant="permanent" sx={{ width: DRAWER_W, flexShrink: 0, "& .MuiDrawer-paper": { width: DRAWER_W, boxSizing: "border-box" } }}>
       {content}
     </Drawer>
   );

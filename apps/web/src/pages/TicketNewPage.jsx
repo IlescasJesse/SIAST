@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Box, Grid, Card, CardContent, Typography, TextField,
   Select, MenuItem, FormControl, InputLabel, Button,
-  Alert, CircularProgress, Chip, Divider,
+  Alert, CircularProgress, Chip,
 } from "@mui/material";
 import { createTicket } from "../api/tickets.js";
 import { getAreas } from "../api/catalogos.js";
@@ -26,7 +26,6 @@ export const TicketNewPage = () => {
     subcategoria: "",
     prioridad: "MEDIA",
     ubicacionAreaId: user?.areaId ?? "",
-    piso: user?.piso ?? "",
   });
 
   useEffect(() => {
@@ -46,16 +45,13 @@ export const TicketNewPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!form.asunto.trim() || !form.descripcion.trim() || !form.categoria || !form.subcategoria) {
-      setError("Completa todos los campos obligatorios");
+    if (!form.asunto.trim() || !form.descripcion.trim() || !form.categoria || !form.subcategoria || !form.ubicacionAreaId) {
+      setError("Completa todos los campos obligatorios, incluyendo la ubicación");
       return;
     }
     setLoading(true);
     try {
-      const ticket = await createTicket({
-        ...form,
-        empleadoRfc: user?.rfc,
-      });
+      const ticket = await createTicket(form);
       navigate(`/tickets/${ticket.ticket?.id ?? ticket.id}`);
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al crear el ticket");
@@ -68,7 +64,6 @@ export const TicketNewPage = () => {
     set("ubicacionAreaId", areaId);
     const area = areas.find((a) => a.id === areaId);
     if (area) {
-      set("piso", area.piso);
       setHighlight({ floor: area.floor, roomId: area.id });
     }
   };
@@ -89,7 +84,20 @@ export const TicketNewPage = () => {
                 </Typography>
                 <Typography fontWeight={600}>{user.nombreCompleto}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  RFC: {user.rfc} · {user.area} · {LABEL_PISO[user.piso] ?? user.piso}
+                  RFC: {user.rfc}
+                </Typography>
+                {user.puesto && (
+                  <Typography variant="body2" color="text.secondary">
+                    Puesto: {user.puesto}
+                  </Typography>
+                )}
+                {(user.adscripcion || user.departamento) && (
+                  <Typography variant="body2" color="text.secondary">
+                    Adscripción: {user.adscripcion ?? user.departamento}
+                  </Typography>
+                )}
+                <Typography variant="body2" color="text.secondary">
+                  Ubicación: {user.area} · {LABEL_PISO[user.piso] ?? user.piso}
                 </Typography>
                 {user.ticketsActivos >= 2 && (
                   <Alert severity="warning" sx={{ mt: 1 }}>

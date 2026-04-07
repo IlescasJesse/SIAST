@@ -39,21 +39,21 @@ export const AppShell = () => {
 
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* AppBar */}
-        <AppBar position="static" elevation={0} sx={{ bgcolor: "background.paper", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        <AppBar position="static" elevation={1}>
           <Toolbar variant="dense">
             {isMobile && (
               <IconButton edge="start" color="inherit" onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
                 <MenuIcon />
               </IconButton>
             )}
-            <Typography variant="subtitle1" fontWeight={700} color="primary.light" sx={{ flex: 1 }}>
+            <Typography variant="subtitle1" fontWeight={700} color="inherit" sx={{ flex: 1 }}>
               {user?.rol === "EMPLEADO" ? "Mesa de Ayuda — SIAST" : "SIAST Admin"}
             </Typography>
 
             <NotificationCenter />
 
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small" sx={{ ml: 1 }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: "primary.dark", fontSize: 14 }}>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: "primary.dark", color: "#ffffff", fontSize: 14 }}>
                 {(user?.nombre?.[0] ?? "U").toUpperCase()}
               </Avatar>
             </IconButton>

@@ -114,7 +114,7 @@ export const TicketDetailPage = () => {
                 </Box>
               </Box>
 
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, p: 1.5, bgcolor: "rgba(255,255,255,0.03)", borderRadius: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, p: 1.5, bgcolor: "rgba(0,0,0,0.03)", borderRadius: 1 }}>
                 {ticket.descripcion}
               </Typography>
 

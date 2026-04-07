@@ -83,10 +83,10 @@ export const DashboardPage = () => {
       {/* Stats */}
       {stats && user?.rol === "ADMIN" && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6} sm={3}><StatCard icon={<ConfirmationNumberIcon />} label="Abiertos" value={stats.abiertos} color="#2196F3" /></Grid>
-          <Grid item xs={6} sm={3}><StatCard icon={<HourglassEmptyIcon />} label="En atención" value={stats.pendientes} color="#FF9800" /></Grid>
-          <Grid item xs={6} sm={3}><StatCard icon={<CheckCircleIcon />} label="Resueltos" value={stats.resueltos} color="#4CAF50" /></Grid>
-          <Grid item xs={6} sm={3}><StatCard icon={<ReportProblemIcon />} label="Urgentes" value={stats.urgentes} color="#F44336" /></Grid>
+          <Grid item xs={6} sm={3}><StatCard icon={<ConfirmationNumberIcon />} label="Abiertos" value={stats.abiertos} color="#1565c0" /></Grid>
+          <Grid item xs={6} sm={3}><StatCard icon={<HourglassEmptyIcon />} label="En atención" value={stats.pendientes} color="#e65100" /></Grid>
+          <Grid item xs={6} sm={3}><StatCard icon={<CheckCircleIcon />} label="Resueltos" value={stats.resueltos} color="#2e7d32" /></Grid>
+          <Grid item xs={6} sm={3}><StatCard icon={<ReportProblemIcon />} label="Urgentes" value={stats.urgentes} color="#c62828" /></Grid>
         </Grid>
       )}
 

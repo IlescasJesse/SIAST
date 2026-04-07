@@ -72,8 +72,9 @@ export const crearTicket = async (
     categoria: string;
     subcategoria: string;
     prioridad?: string;
-    ubicacionAreaId: string;
-    piso: string;
+    ubicacionAreaId?: string;
+    areaId?: string; // alias alternativo
+    piso?: string; // opcional — se deriva del área
     rfcSolicitante?: string;
   },
 ) => {
@@ -95,10 +96,19 @@ export const crearTicket = async (
     }
   }
 
-  const area = await prisma.areaEdificio.findUnique({ where: { id: body.ubicacionAreaId } });
+  // Resolver área: puede venir como 'ubicacionAreaId' o 'areaId'
+  const areaIdResuelto = body.ubicacionAreaId || body.areaId;
+  if (!areaIdResuelto) {
+    throw Object.assign(new Error("El campo ubicacionAreaId es obligatorio"), { status: 400 });
+  }
+
+  const area = await prisma.areaEdificio.findUnique({ where: { id: areaIdResuelto } });
   if (!area) {
     throw Object.assign(new Error("Área no encontrada"), { status: 404 });
   }
+
+  // El piso se deriva siempre del área para evitar inconsistencias
+  const pisoResuelto = area.piso;
 
   const ticket = await prisma.ticket.create({
     data: {
@@ -108,8 +118,8 @@ export const crearTicket = async (
       subcategoria: body.subcategoria as never,
       prioridad: (body.prioridad ?? "MEDIA") as never,
       empleadoRfc,
-      areaId: body.ubicacionAreaId,
-      piso: body.piso as never,
+      areaId: areaIdResuelto,
+      piso: pisoResuelto,
       creadoPorId: user.rol !== "EMPLEADO" ? user.id : undefined,
     },
     include: ticketInclude,
