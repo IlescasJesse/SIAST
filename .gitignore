@@ -7,3 +7,10 @@ coverage
 .env.local
 .DS_Store
 CREDENCIALES.md
+
+# WhatsApp Web JS - sesiones y caché
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Claude Code - worktrees temporales (no pertenecen al proyecto)
+.claude/worktrees/

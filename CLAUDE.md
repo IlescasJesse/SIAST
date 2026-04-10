@@ -1,6 +1,35 @@
-# CLAUDE.md
+# SIAST — Secretaría de Finanzas del Estado de Oaxaca
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> Contexto global de Jesse cargado automáticamente desde `~/.claude/CLAUDE.md`
+
+## Stack
+
+Next.js + TypeScript + Tailwind CSS + shadcn/ui + Express + Three.js
+Monorepo: npm workspaces (`apps/web`, `apps/api`, `packages/shared`, `packages/ui`, `packages/database`)
+
+> ⚠️ UI: **shadcn/ui con Tailwind** — NO usar MUI en este proyecto
+
+## Estado Actual
+
+- Backend con mock data en memoria → roadmap: migrar a Prisma + MySQL
+- Frontend funcional con datos simulados
+- SIRH (`localhost:3000`) pendiente — activar con `SIRH_ENABLED=true` en `.env` del API
+
+## Contexto de Dominio
+
+- Sistema gubernamental — Secretaría de Finanzas, Oaxaca
+- Usuarios: funcionarios del gobierno estatal
+- Datos fiscales y presupuestales
+- Cumplir normativas de gobierno digital mexicano
+
+## Al agregar features
+
+- Verificar si la feature depende del mock o necesita DB real
+- Si requiere DB: implementar schema Prisma primero
+- Mantener tipos en `packages/shared`
+- shadcn/ui para todos los componentes nuevos
+
+---
 
 ## Agentes disponibles
 
@@ -12,6 +41,7 @@ Usa `/agent` para invocar un agente especializado según la tarea:
 | `senior-programacion` | `/agent senior-programacion` | Arquitectura, features fullstack, revisión de código |
 | `analizador-db` | `/agent analizador-db` | Esquema DB, migraciones, queries, análisis de datos |
 
+---
 
 ## Comandos
 
@@ -44,6 +74,8 @@ npm run db:seed      # tsx prisma/seed.ts
 npm run db:studio    # prisma studio (puerto 5555)
 ```
 
+---
+
 ## Arquitectura
 
 Monorepo con **npm workspaces**:
@@ -51,7 +83,7 @@ Monorepo con **npm workspaces**:
 ```
 apps/
   api/          # Express 5 + TypeScript + Prisma + Socket.IO (puerto 3001)
-  web/          # Next.js App Router (puerto 3008) — pendiente
+  web/          # Next.js App Router (puerto 3008)
 packages/
   shared/       # tipos Zod SIAST: Ticket, Empleado, Rol, etc.
   ui/           # componentes base: Button, Card, Input, Table, Badge
@@ -72,6 +104,8 @@ packages/
 ## Requisito: MySQL
 
 La API requiere MySQL (MariaDB via XAMPP). Iniciar antes de `npm run dev:api`.
+
+---
 
 ## API — Endpoints principales
 
@@ -96,11 +130,13 @@ GET /api/catalogos/tecnicos
 GET /api/catalogos/areas
 GET /api/catalogos/pisos
 
-GET /api/usuarios               ← solo ADMIN
+GET  /api/usuarios               ← solo ADMIN
 POST /api/usuarios
 PATCH /api/usuarios/:id
 DELETE /api/usuarios/:id
 ```
+
+---
 
 ## Socket.IO — Eventos
 
@@ -114,13 +150,16 @@ DELETE /api/usuarios/:id
 | `ticket:asignado_empleado` | server → empleado | su ticket fue asignado |
 | `ticket:estado_cambiado` | server → empleado | cambio de estado |
 
+---
+
 ## Estilo de código
 
 Prettier: `semi: true`, `singleQuote: false`, `trailingComma: "all"`, `printWidth: 100`.
 
+---
+
 ## Notas importantes
 
-- SIRH (`localhost:3000`) pendiente. Activar con `SIRH_ENABLED=true` en `.env` del API.
 - Empleados se autentican solo con RFC (sin contraseña).
 - Staff (Admin, Técnicos, Mesa Ayuda) usan usuario + contraseña.
 - Máximo 2 tickets activos por empleado simultáneamente.

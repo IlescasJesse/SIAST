@@ -1,0 +1,32 @@
+Fase 1 — Definición
+1) Elegir nombre final (sigla + nombre largo).
+2) Alcance MVP: categorías (hardware, redes, internet, telefonía, transporte, electricidad, sanitarios, otros).
+3) Roles: solicitante, técnico, supervisor/admin.
+
+Fase 2 — Diseño
+4) Diseño del flujo de ticket (crear → asignar → en proceso → resuelto → cerrado).
+5) Campos mínimos por ticket y SLA/prioridad.
+6) Catálogos (SQL) vs datos transaccionales (Mongo o SQL).
+
+Fase 3 — Implementación
+7) Monorepo (nuevo directorio) con:
+   - frontend (React/Next)
+   - backend (Node/Express o Nest)
+   - DB (por definir)
+8) Dashboard visual (KPIs, gráficas, tabla de tickets, filtros).
+9) Rutas completas (frontend + API).
+10) Autenticación (dependiendo si usarán SSO/LDAP o usuarios internos).
+
+Fase 4 — Extras
+11) Notificaciones (correo) + bitácora.
+12) Adjuntos (fotos de luminarias, fallas, etc).
+13) (Opcional) Vista 3D del edificio para ubicar incidencias.
+
+Objetivo 3D:
+- El usuario fija su ubicación física (pin) la primera vez (requisición inicial).
+- Cada ticket se crea con ubicación:
+  - Puede heredar la ubicación del usuario (default)
+  - O el usuario puede colocar/ajustar un pin específico para ese ticket.
+- Navegación limitada por contexto: ver solo Ala X, Piso Y (no todo el edificio).
+- Drag & snap para colocar pines con precisión.
+- Varios tickets pueden compartir el mismo lugar (misma zona y/o coordenadas cercanas).

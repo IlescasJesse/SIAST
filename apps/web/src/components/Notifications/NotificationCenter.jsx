@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Badge, IconButton, Drawer, Box, Typography, List, ListItem,
-  ListItemText, Chip, Button, Divider, Tooltip,
+  ListItemText, Chip, Button, Divider, Tooltip, Alert,
 } from "@mui/material";
 import NotificationsIcon from "@mui/icons-material/Notifications";
+import NotificationsOffIcon from "@mui/icons-material/NotificationsOff";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useNotifStore } from "../../store/notificaciones.js";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -19,14 +22,28 @@ const TIPO_ICON = {
 
 export const NotificationCenter = () => {
   const [open, setOpen] = useState(false);
-  const { notificaciones, noLeidas, marcarLeida, marcarTodasLeidas } = useNotifStore();
+  const navigate = useNavigate();
+  const { notificaciones, noLeidas, marcarLeida, marcarTodasLeidas, pedirPermiso, permisoNotif } =
+    useNotifStore();
+
+  const handleClick = (n) => {
+    marcarLeida(n.id);
+    const ticketId = n.data?.ticketId ?? n.data?.id;
+    if (ticketId) {
+      setOpen(false);
+      navigate(`/tickets/${ticketId}`);
+    }
+  };
+
+  const permisoDenegado = permisoNotif === "denied";
+  const permisoPendiente = permisoNotif === "default";
 
   return (
     <>
-      <Tooltip title="Notificaciones">
+      <Tooltip title={permisoDenegado ? "Notificaciones bloqueadas" : "Notificaciones"}>
         <IconButton color="inherit" onClick={() => setOpen(true)}>
           <Badge badgeContent={noLeidas} color="error" max={99}>
-            <NotificationsIcon />
+            {permisoDenegado ? <NotificationsOffIcon /> : <NotificationsIcon />}
           </Badge>
         </IconButton>
       </Tooltip>
@@ -45,6 +62,29 @@ export const NotificationCenter = () => {
           </Box>
           <Divider sx={{ mb: 1 }} />
 
+          {/* Banner de permiso pendiente */}
+          {permisoPendiente && (
+            <Alert
+              severity="info"
+              sx={{ mb: 1, fontSize: 12 }}
+              action={
+                <Button size="small" color="inherit" onClick={pedirPermiso}>
+                  Permitir
+                </Button>
+              }
+            >
+              Activa las notificaciones de escritorio
+            </Alert>
+          )}
+
+          {/* Banner permiso denegado */}
+          {permisoDenegado && (
+            <Alert severity="warning" sx={{ mb: 1, fontSize: 12 }}>
+              Notificaciones bloqueadas en el navegador. Habilítalas desde la configuración del
+              sitio en Chrome.
+            </Alert>
+          )}
+
           {notificaciones.length === 0 ? (
             <Typography color="text.secondary" sx={{ mt: 4, textAlign: "center" }}>
               Sin notificaciones
@@ -54,12 +94,12 @@ export const NotificationCenter = () => {
               {notificaciones.map((n) => (
                 <ListItem
                   key={n.id}
-                  onClick={() => marcarLeida(n.id)}
+                  onClick={() => handleClick(n)}
                   sx={{
                     borderRadius: 2,
                     mb: 0.5,
                     bgcolor: n.leida ? "transparent" : "rgba(157,36,73,0.07)",
-                    cursor: "pointer",
+                    cursor: (n.data?.ticketId ?? n.data?.id) ? "pointer" : "default",
                     "&:hover": { bgcolor: "rgba(157,36,73,0.04)" },
                   }}
                 >
@@ -67,10 +107,20 @@ export const NotificationCenter = () => {
                     primary={
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <span>{TIPO_ICON[n.tipo] ?? "📌"}</span>
-                        <Typography variant="body2" fontWeight={n.leida ? 400 : 600}>
+                        <Typography variant="body2" fontWeight={n.leida ? 400 : 600} sx={{ flex: 1 }}>
                           {n.titulo}
                         </Typography>
-                        {!n.leida && <Chip label="Nuevo" size="small" color="primary" sx={{ height: 16, fontSize: 10 }} />}
+                        {!n.leida && (
+                          <Chip
+                            label="Nuevo"
+                            size="small"
+                            color="primary"
+                            sx={{ height: 16, fontSize: 10 }}
+                          />
+                        )}
+                        {(n.data?.ticketId ?? n.data?.id) && (
+                          <OpenInNewIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+                        )}
                       </Box>
                     }
                     secondary={

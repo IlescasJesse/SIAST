@@ -115,6 +115,8 @@ model Empleado {
   // Datos del SIRH adicionales
   adscripcion    String?      @db.VarChar(200) // ej: "SECRETARÍA DE FINANZAS Y ADMINISTRACIÓN"
 
+  telefono       String?      @db.VarChar(20) // celular para OTP (se registra en primer acceso)
+
   // Ubicación física en el edificio
   areaId         String       @db.VarChar(100) // ej: "n2_informatica"
   piso           PisoEdificio
@@ -132,6 +134,22 @@ model Empleado {
   @@index([areaId])
   @@index([piso])
   @@map("empleados")
+}
+
+// ============================================================
+// OTP TOKENS (autenticación de empleados vía WhatsApp/SMS)
+// ============================================================
+
+model OtpToken {
+  id        Int      @id @default(autoincrement())
+  rfc       String   @db.VarChar(13)
+  codigo    String   @db.VarChar(6)
+  usado     Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([rfc])
+  @@map("otp_tokens")
 }
 
 // ============================================================

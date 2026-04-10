@@ -1,11 +1,14 @@
 import * as THREE from "three";
 import { buildBuilding, setFloorVisibility, setRoomTicketState, FLOOR_Y } from "./building.js";
 import { highlightRoom, updateHighlight, clearHighlight } from "./highlight.js";
-import { createCamera, flyToFloor, setLoginMode, updateLoginCamera } from "./camera.js";
+import { createCamera, flyToFloor, setLoginMode as setCameraLoginMode, updateLoginCamera } from "./camera.js";
 import { addLabels, updateLabelVisibility } from "./labels.js";
 import { ALL_ROOMS, ROOM_MAP, FLOOR_LABELS } from "./rooms.js";
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = `http://${window.location.hostname}:5101`;
+
+// Token JWT recibido desde el frontend React vía postMessage
+let _jwtToken = null;
 
 // ════════════════════════════════════════════════════════════
 // RENDERER
@@ -23,14 +26,14 @@ document.getElementById("canvas-container").appendChild(renderer.domElement);
 // ESCENA
 // ════════════════════════════════════════════════════════════
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0e1a);
-scene.fog = new THREE.Fog(0x0a0e1a, 80, 180);
+scene.background = new THREE.Color(0xf0f4f8);
+scene.fog = new THREE.Fog(0xf0f4f8, 80, 180);
 
 // Luces
-const ambient = new THREE.AmbientLight(0x8baad4, 0.6);
+const ambient = new THREE.AmbientLight(0xffffff, 1.2);
 scene.add(ambient);
 
-const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.2);
+const dirLight = new THREE.DirectionalLight(0xfff8f0, 1.4);
 dirLight.position.set(30, 60, 40);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(2048, 2048);
@@ -42,11 +45,11 @@ dirLight.shadow.camera.top = 70;
 dirLight.shadow.camera.bottom = -70;
 scene.add(dirLight);
 
-const hemi = new THREE.HemisphereLight(0x1a3a5c, 0x0a0e1a, 0.4);
+const hemi = new THREE.HemisphereLight(0xc9dff5, 0xddecd0, 0.6);
 scene.add(hemi);
 
 // Grid del suelo
-const gridHelper = new THREE.GridHelper(80, 80, 0x1a3a6e, 0x0d1f40);
+const gridHelper = new THREE.GridHelper(80, 80, 0xb0c4d8, 0xdce8f2);
 gridHelper.position.y = -0.2;
 scene.add(gridHelper);
 
@@ -174,7 +177,7 @@ window.SIAST3D = {
 
   setLoginMode(enabled) {
     loginMode = enabled;
-    setLoginMode(enabled);
+    setCameraLoginMode(enabled);
     controls.enabled = !enabled;
     document.getElementById("login-overlay").classList.toggle("visible", enabled);
     document.getElementById("floor-controls").style.display = enabled ? "none" : "flex";
@@ -201,8 +204,8 @@ window.SIAST3D = {
 
   async showEmployee(rfc) {
     try {
-      // TODO: SIRH integration — cuando SIRH_ENABLED=true, usar datos del SIRH
-      const res = await fetch(`${API_BASE}/api/employee/location?rfc=${rfc}`);
+      const headers = _jwtToken ? { Authorization: `Bearer ${_jwtToken}` } : {};
+      const res = await fetch(`${API_BASE}/api/employee/location?rfc=${rfc}`, { headers });
       if (!res.ok) return;
       const data = await res.json();
       this.highlightRoom(data.floor, data.areaId);
@@ -221,6 +224,9 @@ window.addEventListener("message", (e) => {
   if (!type) return;
 
   switch (type) {
+    case "SET_TOKEN":
+      _jwtToken = payload.token ?? null;
+      break;
     case "HIGHLIGHT_ROOM":
       window.SIAST3D.highlightRoom(payload.floor, payload.roomId);
       break;

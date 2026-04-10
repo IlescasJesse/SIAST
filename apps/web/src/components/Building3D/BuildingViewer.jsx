@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import { Box } from "@mui/material";
+import { useAuthStore } from "../../store/auth.js";
 
-const VIEWER_URL = import.meta.env.VITE_VIEWER_URL ?? "http://localhost:5174";
+const VIEWER_URL =
+  import.meta.env.VITE_VIEWER_URL ?? `http://${window.location.hostname}:5174`;
 
 /**
  * Wrapper del iframe 3D con helpers postMessage.
@@ -12,6 +14,7 @@ const VIEWER_URL = import.meta.env.VITE_VIEWER_URL ?? "http://localhost:5174";
  */
 export const BuildingViewer = ({ onRoomClick, autoHighlight, loginMode = false, sx = {} }) => {
   const ref = useRef(null);
+  const token = useAuthStore((s) => s.token);
 
   const send = (type, payload) => {
     ref.current?.contentWindow?.postMessage({ type, payload }, "*");
@@ -28,11 +31,17 @@ export const BuildingViewer = ({ onRoomClick, autoHighlight, loginMode = false, 
     return () => window.removeEventListener("message", handler);
   }, [onRoomClick]);
 
-  // Activar login mode cuando el iframe cargue
+  // Activar login mode y pasar token cuando el iframe cargue
   const onLoad = () => {
+    if (token) send("SET_TOKEN", { token });
     if (loginMode) send("SET_LOGIN_MODE", { enabled: true });
     if (autoHighlight) send("HIGHLIGHT_ROOM", autoHighlight);
   };
+
+  // Actualizar token en el iframe si cambia (re-login, refresh)
+  useEffect(() => {
+    if (token) send("SET_TOKEN", { token });
+  }, [token]);
 
   // Reaccionar a cambios externos
   useEffect(() => {

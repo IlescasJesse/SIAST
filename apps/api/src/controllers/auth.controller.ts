@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import * as authService from "../services/auth.service.js";
+import * as otpService from "../services/otp.service.js";
 import type { AuthRequest } from "../types/index.js";
 import { prisma } from "../config/database.js";
 
@@ -8,6 +9,35 @@ export const loginRFC = async (req: Request, res: Response, next: NextFunction) 
   try {
     const { rfc } = req.body as { rfc: string };
     const result = await authService.loginRFC(rfc);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── OTP ──────────────────────────────────────────────────────
+
+export const solicitarOtp = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { rfc, telefono } = req.body as { rfc: string; telefono?: string };
+    if (!rfc) { res.status(400).json({ error: "RFC requerido" }); return; }
+
+    const result = await otpService.solicitarOtp(rfc.toUpperCase(), telefono);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const verificarOtp = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { rfc, codigo } = req.body as { rfc: string; codigo: string };
+    if (!rfc || !codigo) { res.status(400).json({ error: "RFC y código requeridos" }); return; }
+
+    await otpService.verificarOtp(rfc.toUpperCase(), codigo);
+
+    // OTP válido → emitir sesión JWT (reutiliza la lógica existente de loginRFC)
+    const result = await authService.loginRFC(rfc.toUpperCase());
     res.json(result);
   } catch (err) {
     next(err);

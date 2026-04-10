@@ -15,20 +15,25 @@ import { errorMiddleware } from "./middleware/error.middleware.js";
 import { configurarSockets } from "./sockets/tickets.socket.js";
 import { setIo } from "./services/notificaciones.service.js";
 import { syncEmpleados } from "./services/sirh.service.js";
+import { initWhatsApp } from "./services/whatsapp.service.js";
 
 const app = express();
 const httpServer = createServer(app);
-const port = Number(process.env.PORT ?? 3001);
+const port = Number(process.env.PORT ?? 5101);
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:5173";
 const VIEWER_URL = process.env.VIEWER_URL ?? "http://localhost:5174";
+const IS_PROD = process.env.NODE_ENV === "production";
+
+// En desarrollo permite cualquier origen (acceso desde la red local)
+const corsOrigin = IS_PROD ? [FRONTEND_URL, VIEWER_URL, "http://localhost:3008"] : true;
 
 // ============================================================
 // Socket.IO
 // ============================================================
 const io = new Server(httpServer, {
   cors: {
-    origin: [FRONTEND_URL, VIEWER_URL, "http://localhost:3008"],
+    origin: corsOrigin,
     credentials: true,
   },
 });
@@ -40,7 +45,7 @@ setIo(io);
 // ============================================================
 app.use(
   cors({
-    origin: [FRONTEND_URL, VIEWER_URL, "http://localhost:3008"],
+    origin: corsOrigin,
     credentials: true,
   }),
 );
@@ -65,25 +70,17 @@ app.get("/health", (_req, res) => {
 // ============================================================
 // Error handler global
 // ============================================================
-app.use(
-  (
-    err: Error & { status?: number },
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    const status = err.status ?? 500;
-    res.status(status).json({ error: err.message ?? "Error interno del servidor" });
-  },
-);
 app.use(errorMiddleware);
 
 // ============================================================
 // Arranque
 // ============================================================
-httpServer.listen(port, () => {
+httpServer.listen(port, "0.0.0.0", () => {
   console.log(`🚀 SIAST API lista en http://localhost:${port}`);
   console.log(`🔌 Socket.IO activo`);
+
+  // Inicializar cliente WhatsApp para OTP
+  initWhatsApp();
 
   // Sincronizar empleados desde SIRH si está habilitado
   syncEmpleados().catch((err) => {

@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5173 },
+  server: { port: 5173, host: true },
   resolve: {
     alias: {
       "@stf/shared": path.resolve(__dirname, "../../packages/shared/src/index.ts"),

@@ -11,15 +11,14 @@
 
 import { PisoEdificio } from "@prisma/client";
 import { prisma } from "../config/database.js";
+import { sirhFetch } from "./sirhAuth.service.js";
 
 // ============================================================
 // Config
 // ============================================================
 
 const SIRH_ENABLED = process.env.SIRH_ENABLED === "true";
-const SIRH_BASE_URL = process.env.SIRH_BASE_URL ?? "http://localhost:3000";
 const SIRH_EMPLOYEES_PATH = "/api/personal/getEmployees";
-const SIRH_URL = `${SIRH_BASE_URL}${SIRH_EMPLOYEES_PATH}`;
 
 // ============================================================
 // Tipos del payload SIRH
@@ -218,7 +217,7 @@ async function upsertEmpleado(data: ReturnType<typeof buildEmpleadoData>): Promi
 // ============================================================
 
 export async function fetchAllEmployees(): Promise<SirhEmpleado[]> {
-  const resp = await fetch(SIRH_URL, { signal: AbortSignal.timeout(15_000) });
+  const resp = await sirhFetch(SIRH_EMPLOYEES_PATH);
   if (!resp.ok) {
     throw new Error(`SIRH respondio ${resp.status} ${resp.statusText}`);
   }
@@ -233,7 +232,7 @@ export async function syncEmpleados(): Promise<void> {
   if (!SIRH_ENABLED) return;
 
   console.log("[SIRH] Iniciando sincronizacion de empleados...");
-  console.log(`[SIRH] URL: ${SIRH_URL}`);
+  console.log(`[SIRH] URL: ${process.env.SIRH_BASE_URL ?? "http://localhost:3000"}${SIRH_EMPLOYEES_PATH}`);
 
   let todos: SirhEmpleado[];
   try {

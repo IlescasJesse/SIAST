@@ -56,7 +56,7 @@ export const createRoomMesh = (room) => {
   const edges = new THREE.EdgesGeometry(geo);
   const line = new THREE.LineSegments(
     edges,
-    new THREE.LineBasicMaterial({ color: 0x1a2744, transparent: true, opacity: 0.6 }),
+    new THREE.LineBasicMaterial({ color: 0x7a90a8, transparent: true, opacity: 0.55 }),
   );
   mesh.add(line);
 
@@ -69,9 +69,9 @@ export const createRoomMesh = (room) => {
 const createSlab = (floor) => {
   const geo = new THREE.BoxGeometry(32 * CELL, 0.3, 27 * CELL);
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x0d1b2a,
-    roughness: 0.9,
-    metalness: 0.05,
+    color: 0xc8d8e8,
+    roughness: 0.85,
+    metalness: 0.02,
     transparent: true,
     opacity: 1,
   });
