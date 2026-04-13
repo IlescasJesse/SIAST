@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Box, Tabs, Tab, TextField, Button, Typography,
   Alert, InputAdornment, IconButton, CircularProgress, Chip,
@@ -22,6 +22,8 @@ const PASO_OTP = "otp";          // ingresar código recibido
 
 export const LoginPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect") ?? null;
   const { solicitarOtp, verificarOtp, loginStaff } = useAuthStore();
   const { conectar } = useNotifStore();
   const [tab, setTab] = useState(0);
@@ -101,7 +103,7 @@ export const LoginPage = () => {
     try {
       const data = await verificarOtp(rfc.toUpperCase(), codigo);
       conectar(data.user);
-      navigate("/tickets/nuevo");
+      navigate(redirectTo ?? "/tickets/nuevo");
     } catch (err) {
       setError(err.response?.data?.error ?? "Código incorrecto o expirado");
     } finally {
@@ -132,7 +134,7 @@ export const LoginPage = () => {
     try {
       const data = await loginStaff(usuario, password);
       conectar(data.user);
-      navigate("/dashboard");
+      navigate(redirectTo ?? "/dashboard");
     } catch (err) {
       setError(err.response?.data?.error ?? "Credenciales incorrectas");
     } finally {

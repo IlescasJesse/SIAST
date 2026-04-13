@@ -39,6 +39,7 @@ async function pedirPermisoNotificaciones() {
 export const useNotifStore = create((set, get) => ({
   notificaciones: [],
   noLeidas: 0,
+  ticketsVersion: 0,   // se incrementa con cada evento de ticket para forzar refetch
   socket: null,
   permisoNotif: typeof window !== "undefined" ? Notification.permission : "default",
 
@@ -68,6 +69,7 @@ export const useNotifStore = create((set, get) => ({
       set((s) => ({
         notificaciones: [{ ...notif, id: Date.now(), leida: false }, ...s.notificaciones],
         noLeidas: s.noLeidas + 1,
+        ticketsVersion: s.ticketsVersion + 1,
       }));
     };
 

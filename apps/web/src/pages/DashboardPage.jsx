@@ -17,6 +17,7 @@ import { asignarTicket } from "../api/tickets.js";
 import { StatusChip } from "../components/common/StatusChip.jsx";
 import { PriorityChip } from "../components/common/PriorityChip.jsx";
 import { useAuthStore } from "../store/auth.js";
+import { useNotifStore } from "../store/notificaciones.js";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -35,6 +36,7 @@ const StatCard = ({ icon, label, value, color }) => (
 export const DashboardPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const ticketsVersion = useNotifStore((s) => s.ticketsVersion);
   const [data, setData] = useState(null);
   const [tecnicos, setTecnicos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,7 @@ export const DashboardPage = () => {
     }
   };
 
-  useEffect(() => { load(); }, [filtroEstado]);
+  useEffect(() => { load(); }, [filtroEstado, ticketsVersion]);
 
   const stats = data
     ? {

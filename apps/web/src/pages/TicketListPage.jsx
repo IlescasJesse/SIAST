@@ -13,6 +13,7 @@ import { getTickets } from "../api/tickets.js";
 import { StatusChip } from "../components/common/StatusChip.jsx";
 import { PriorityChip } from "../components/common/PriorityChip.jsx";
 import { useAuthStore } from "../store/auth.js";
+import { useNotifStore } from "../store/notificaciones.js";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -22,6 +23,7 @@ const PRIORIDADES = ["BAJA", "MEDIA", "ALTA", "URGENTE"];
 export const TicketListPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const ticketsVersion = useNotifStore((s) => s.ticketsVersion);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState("");
@@ -42,7 +44,7 @@ export const TicketListPage = () => {
     }
   };
 
-  useEffect(() => { load(); }, [filtroEstado, filtroPrioridad]);
+  useEffect(() => { load(); }, [filtroEstado, filtroPrioridad, ticketsVersion]);
 
   const filtrados = tickets.filter((t) => {
     if (!busqueda.trim()) return true;

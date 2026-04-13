@@ -1,6 +1,7 @@
 import type { Server } from "socket.io";
 import { prisma } from "../config/database.js";
 import type { TipoNotificacion } from "@stf/shared";
+import { enviarNotifTicketAsignado } from "./whatsapp.service.js";
 
 let io: Server | null = null;
 
@@ -59,41 +60,63 @@ export const emitirTicketNuevo = async (ticket: {
 export const emitirTicketAsignado = async (params: {
   ticketId: number;
   asunto: string;
+  prioridad: string;
   tecnicoId: number;
   tecnicoNombre: string;
   adminNombre: string;
   empleadoRfc: string;
+  empleadoNombre: string;
+  areaLabel: string;
 }) => {
-  // Notificación al técnico
-  await crearNotificacion({
-    tipo: "TICKET_ASIGNADO",
-    titulo: `Ticket #${params.ticketId} asignado a ti`,
-    mensaje: `Se te asignó el ticket: ${params.asunto}`,
-    usuarioId: params.tecnicoId,
-    ticketId: params.ticketId,
-  });
+  // Notificaciones en BD
+  await Promise.all([
+    crearNotificacion({
+      tipo: "TICKET_ASIGNADO",
+      titulo: `Ticket #${params.ticketId} asignado a ti`,
+      mensaje: `Se te asignó el ticket: ${params.asunto}`,
+      usuarioId: params.tecnicoId,
+      ticketId: params.ticketId,
+    }),
+    crearNotificacion({
+      tipo: "TICKET_ASIGNADO",
+      titulo: `Tu ticket #${params.ticketId} fue asignado`,
+      mensaje: `Tu ticket fue asignado a ${params.tecnicoNombre}`,
+      empleadoRfc: params.empleadoRfc,
+      ticketId: params.ticketId,
+    }),
+  ]);
 
-  // Notificación al empleado
-  await crearNotificacion({
-    tipo: "TICKET_ASIGNADO",
-    titulo: `Tu ticket #${params.ticketId} fue asignado`,
-    mensaje: `Tu ticket fue asignado a ${params.tecnicoNombre}`,
-    empleadoRfc: params.empleadoRfc,
-    ticketId: params.ticketId,
-  });
-
+  // Socket.IO
   io?.to(`user:${params.tecnicoId}`).emit("ticket:asignado", {
     ticketId: params.ticketId,
     asunto: params.asunto,
     asignadoPor: params.adminNombre,
   });
-
   io?.to(`emp:${params.empleadoRfc}`).emit("ticket:asignado_empleado", {
     ticketId: params.ticketId,
     asunto: params.asunto,
     tecnico: params.tecnicoNombre,
     mensaje: `Tu ticket #${params.ticketId} ha sido asignado a ${params.tecnicoNombre}`,
   });
+
+  // WA al técnico si tiene teléfono registrado
+  const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
+  prisma.usuario
+    .findUnique({ where: { id: params.tecnicoId }, select: { telefono: true } })
+    .then((tec) => {
+      if (!tec?.telefono) return;
+      return enviarNotifTicketAsignado({
+        telefono: tec.telefono,
+        nombreTecnico: params.tecnicoNombre,
+        ticketId: params.ticketId,
+        asunto: params.asunto,
+        prioridad: params.prioridad,
+        empleadoNombre: params.empleadoNombre,
+        areaLabel: params.areaLabel,
+        url: `${frontendUrl}/tickets/${params.ticketId}`,
+      });
+    })
+    .catch((err) => console.error("[WhatsApp] Error al notificar técnico:", err));
 };
 
 export const emitirCambioEstado = async (params: {
@@ -108,18 +131,49 @@ export const emitirCambioEstado = async (params: {
       ? ("TICKET_RESUELTO" as TipoNotificacion)
       : ("TICKET_ACTUALIZADO" as TipoNotificacion);
 
-  await crearNotificacion({
-    tipo,
-    titulo: `Ticket #${params.ticketId} — ${params.estadoNuevo}`,
-    mensaje: `El estado cambió de ${params.estadoAnterior} a ${params.estadoNuevo}`,
-    empleadoRfc: params.empleadoRfc,
-    ticketId: params.ticketId,
-  });
+  const notifPromises: Promise<unknown>[] = [
+    crearNotificacion({
+      tipo,
+      titulo: `Ticket #${params.ticketId} — ${params.estadoNuevo}`,
+      mensaje: `El estado cambió de ${params.estadoAnterior} a ${params.estadoNuevo}`,
+      empleadoRfc: params.empleadoRfc,
+      ticketId: params.ticketId,
+    }),
+  ];
 
-  io?.to(`emp:${params.empleadoRfc}`).emit("ticket:estado_cambiado", {
+  // Notificación en BD al técnico asignado
+  if (params.tecnicoId) {
+    notifPromises.push(
+      crearNotificacion({
+        tipo,
+        titulo: `Ticket #${params.ticketId} — ${params.estadoNuevo}`,
+        mensaje: `El estado del ticket cambió de ${params.estadoAnterior} a ${params.estadoNuevo}`,
+        usuarioId: params.tecnicoId,
+        ticketId: params.ticketId,
+      }),
+    );
+  }
+
+  await Promise.all(notifPromises);
+
+  const payload = {
     ticketId: params.ticketId,
     estadoAnterior: params.estadoAnterior,
     estadoNuevo: params.estadoNuevo,
+    mensaje: `Ticket #${params.ticketId} cambió a: ${params.estadoNuevo}`,
+  };
+
+  // Notificar al empleado dueño del ticket
+  io?.to(`emp:${params.empleadoRfc}`).emit("ticket:estado_cambiado", {
+    ...payload,
     mensaje: `Tu ticket #${params.ticketId} cambió a estado: ${params.estadoNuevo}`,
   });
+
+  // Notificar al técnico asignado
+  if (params.tecnicoId) {
+    io?.to(`user:${params.tecnicoId}`).emit("ticket:estado_cambiado", payload);
+  }
+
+  // Notificar a admins / mesa de ayuda
+  io?.to("admins").emit("ticket:estado_cambiado", payload);
 };

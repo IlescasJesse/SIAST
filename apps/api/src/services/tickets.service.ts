@@ -1,6 +1,7 @@
 import { prisma } from "../config/database.js";
 import type { JwtPayload } from "../types/index.js";
 import * as notif from "./notificaciones.service.js";
+import { enviarNotifTicketCreado } from "./whatsapp.service.js";
 
 const TRANSICIONES: Record<string, string[]> = {
   ABIERTO: ["ASIGNADO", "CANCELADO"],
@@ -144,6 +145,23 @@ export const crearTicket = async (
     areaLabel: area.label,
   });
 
+  // Enviar WA al empleado con liga directa al ticket (no bloquea la respuesta)
+  prisma.empleado
+    .findUnique({ where: { rfc: empleadoRfc }, select: { telefono: true, nombreCompleto: true } })
+    .then((emp) => {
+      if (!emp?.telefono) return;
+      const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
+      return enviarNotifTicketCreado({
+        telefono: emp.telefono,
+        nombre: emp.nombreCompleto,
+        ticketId: ticket.id,
+        asunto: ticket.asunto,
+        prioridad: ticket.prioridad,
+        url: `${frontendUrl}/tickets/${ticket.id}`,
+      });
+    })
+    .catch((err) => console.error("[WhatsApp] Error al notificar ticket creado:", err));
+
   return ticket;
 };
 
@@ -187,13 +205,22 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
     },
   });
 
+  // Obtener datos del empleado para el mensaje WA al técnico
+  const empleado = await prisma.empleado.findUnique({
+    where: { rfc: ticket.empleadoRfc },
+    select: { nombreCompleto: true },
+  });
+
   await notif.emitirTicketAsignado({
     ticketId: id,
     asunto: ticket.asunto,
+    prioridad: ticket.prioridad,
     tecnicoId,
     tecnicoNombre: `${tecnico.nombre} ${tecnico.apellidos}`,
     adminNombre: user.nombre,
     empleadoRfc: ticket.empleadoRfc,
+    empleadoNombre: empleado?.nombreCompleto ?? ticket.empleadoRfc,
+    areaLabel: updated.area?.label ?? "",
   });
 
   return updated;

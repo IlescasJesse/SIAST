@@ -8,6 +8,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario } from "../api/usuarios.js";
 
 const ROLES_STAFF = ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA"];
@@ -19,7 +20,7 @@ const ROL_COLOR = {
   MESA_AYUDA: "success",
 };
 
-const emptyForm = { nombre: "", apellidos: "", usuario: "", password: "", rol: "MESA_AYUDA" };
+const emptyForm = { nombre: "", apellidos: "", usuario: "", password: "", rol: "MESA_AYUDA", telefono: "", email: "" };
 
 export const UsuariosPage = () => {
   const [usuarios, setUsuarios] = useState([]);
@@ -48,7 +49,7 @@ export const UsuariosPage = () => {
   };
 
   const openEditar = (u) => {
-    setForm({ nombre: u.nombre, apellidos: u.apellidos, usuario: u.usuario, password: "", rol: u.rol });
+    setForm({ nombre: u.nombre, apellidos: u.apellidos, usuario: u.usuario, password: "", rol: u.rol, telefono: u.telefono ?? "", email: u.email ?? "" });
     setError("");
     setDialog(u);
   };
@@ -112,6 +113,7 @@ export const UsuariosPage = () => {
                 <TableCell>#</TableCell>
                 <TableCell>Nombre</TableCell>
                 <TableCell>Usuario</TableCell>
+                <TableCell>Teléfono WA</TableCell>
                 <TableCell>Rol</TableCell>
                 <TableCell>Estado</TableCell>
                 <TableCell align="right">Acciones</TableCell>
@@ -126,6 +128,16 @@ export const UsuariosPage = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{u.usuario}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    {u.telefono ? (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                        <WhatsAppIcon sx={{ fontSize: 14, color: "#25D366" }} />
+                        <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{u.telefono}</Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="caption" color="text.disabled">—</Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Chip label={u.rol.replace("_", " ")} size="small" color={ROL_COLOR[u.rol] ?? "default"} />
@@ -166,6 +178,24 @@ export const UsuariosPage = () => {
             fullWidth
             required={dialog === "crear"}
           />
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <TextField
+              label="Teléfono WhatsApp"
+              value={form.telefono}
+              onChange={(e) => set("telefono", e.target.value.replace(/\D/g, "").slice(0, 10))}
+              fullWidth
+              inputProps={{ maxLength: 10, inputMode: "numeric" }}
+              helperText="10 dígitos — para recibir notificaciones de tickets asignados"
+              InputProps={{ startAdornment: <WhatsAppIcon sx={{ mr: 1, fontSize: 18, color: "#25D366" }} /> }}
+            />
+            <TextField
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+              fullWidth
+            />
+          </Box>
           <FormControl fullWidth required>
             <InputLabel>Rol</InputLabel>
             <Select value={form.rol} label="Rol" onChange={(e) => set("rol", e.target.value)}>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import {
   Box, AppBar, Toolbar, Typography, IconButton,
@@ -16,8 +16,12 @@ const DRAWER_W = 220;
 export const AppShell = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { desconectar } = useNotifStore();
+  const { conectar, desconectar } = useNotifStore();
   const theme = useTheme();
+
+  useEffect(() => {
+    if (user) conectar(user);
+  }, [user?.id]);
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);

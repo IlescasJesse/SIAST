@@ -13,6 +13,7 @@ import { StatusChip } from "../components/common/StatusChip.jsx";
 import { PriorityChip } from "../components/common/PriorityChip.jsx";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
 import { useAuthStore } from "../store/auth.js";
+import { useNotifStore } from "../store/notificaciones.js";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { LABEL_PISO } from "@stf/shared";
@@ -31,6 +32,7 @@ export const TicketDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const ticketsVersion = useNotifStore((s) => s.ticketsVersion);
   const [ticket, setTicket] = useState(null);
   const [tecnicos, setTecnicos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export const TicketDetailPage = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [id, ticketsVersion]);
 
   const handleEstado = async () => {
     setSaving(true);

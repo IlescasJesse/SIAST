@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { theme } from "./theme/index.js";
 import { useAuthStore } from "./store/auth.js";
@@ -11,10 +11,14 @@ import { TicketDetailPage } from "./pages/TicketDetailPage.jsx";
 import { UsuariosPage } from "./pages/UsuariosPage.jsx";
 import { PerfilPage } from "./pages/PerfilPage.jsx";
 
-// Ruta protegida: redirige a /login si no hay sesión
+// Ruta protegida: redirige a /login preservando la ruta actual como ?redirect=
 const ProtectedRoute = ({ roles }) => {
   const { user, token } = useAuthStore();
-  if (!token || !user) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!token || !user) {
+    const redirectParam = location.pathname !== "/" ? `?redirect=${encodeURIComponent(location.pathname)}` : "";
+    return <Navigate to={`/login${redirectParam}`} replace />;
+  }
   if (roles && !roles.includes(user.rol)) return <Navigate to="/tickets" replace />;
   return <Outlet />;
 };

@@ -128,6 +128,81 @@ export interface EnvioOtpResult {
 
 // ── Envío ─────────────────────────────────────────────────────────────────────
 
+/** Envía un mensaje genérico si el cliente está listo, con fallback a consola */
+async function enviarMensaje(telefono: string, mensaje: string): Promise<void> {
+  if (clientState === "ready" && client) {
+    const numberId = await (client as any).getNumberId(`52${telefono}`);
+    if (numberId) await client.sendMessage(numberId._serialized, mensaje);
+    return;
+  }
+  console.log(`[WhatsApp] (consola) → ${telefono}\n${mensaje}\n`);
+}
+
+/**
+ * Notifica al empleado que su ticket fue creado, con liga directa.
+ */
+export async function enviarNotifTicketCreado(params: {
+  telefono: string;
+  nombre: string;
+  ticketId: number;
+  asunto: string;
+  prioridad: string;
+  url: string;
+}): Promise<void> {
+  const PRIORIDAD_EMOJI: Record<string, string> = {
+    BAJA: "🟢",
+    MEDIA: "🟡",
+    ALTA: "🟠",
+    URGENTE: "🔴",
+  };
+  const emoji = PRIORIDAD_EMOJI[params.prioridad] ?? "📋";
+  const mensaje =
+    `*SIAST* — Secretaría de Finanzas Oaxaca\n\n` +
+    `Hola ${params.nombre.split(" ")[0]}, tu solicitud de soporte fue registrada.\n\n` +
+    `${emoji} *Ticket #${params.ticketId}*\n` +
+    `${params.asunto}\n` +
+    `Prioridad: *${params.prioridad}*\n\n` +
+    `Sigue el estado de tu ticket aquí:\n` +
+    `${params.url}\n\n` +
+    `_Ingresa con tu RFC para ver los detalles._`;
+
+  await enviarMensaje(params.telefono, mensaje);
+}
+
+/**
+ * Notifica al técnico que le fue asignado un ticket, con liga directa.
+ */
+export async function enviarNotifTicketAsignado(params: {
+  telefono: string;
+  nombreTecnico: string;
+  ticketId: number;
+  asunto: string;
+  prioridad: string;
+  empleadoNombre: string;
+  areaLabel: string;
+  url: string;
+}): Promise<void> {
+  const PRIORIDAD_EMOJI: Record<string, string> = {
+    BAJA: "🟢",
+    MEDIA: "🟡",
+    ALTA: "🟠",
+    URGENTE: "🔴",
+  };
+  const emoji = PRIORIDAD_EMOJI[params.prioridad] ?? "📋";
+  const mensaje =
+    `*SIAST* — Secretaría de Finanzas Oaxaca\n\n` +
+    `Hola ${params.nombreTecnico.split(" ")[0]}, se te asignó un ticket.\n\n` +
+    `${emoji} *Ticket #${params.ticketId}*\n` +
+    `${params.asunto}\n` +
+    `Prioridad: *${params.prioridad}*\n` +
+    `Solicitante: ${params.empleadoNombre}\n` +
+    `Ubicación: ${params.areaLabel}\n\n` +
+    `Ver y atender el ticket:\n` +
+    `${params.url}`;
+
+  await enviarMensaje(params.telefono, mensaje);
+}
+
 /**
  * Envía un código OTP por WhatsApp.
  * Si el cliente no está listo cae a modo consola (útil en dev).
@@ -158,8 +233,8 @@ export async function enviarOtp(
 
   // ── Modo consola (fallback dev) ───────────────────────────────────────────
   console.log("\n┌─────────────────────────────────────────┐");
-  console.log(`│  OTP CONSOLA → ******${telefono.slice(-4)}            │`);
-  console.log(`│  Código: ${codigo}                          │`);
+  console.log(`│  OTP CONSOLA → ******${telefono.slice(-4)}             │`);
+  console.log(`│  Código: ${codigo}                           │`);
   console.log("└─────────────────────────────────────────┘\n");
 
   const isDev = process.env.NODE_ENV !== "production";

@@ -5,6 +5,7 @@ import { LABEL_PISO } from "@stf/shared";
 import { fetchEmpleadoByRfc } from "./sirh.service.js";
 
 const RFC_REGEX = /^[A-Z]{4}\d{6}[A-Z0-9]{3}$/;
+const EMPLEADO_JWT_EXPIRES_IN = process.env.EMPLEADO_JWT_EXPIRES_IN ?? "30d";
 
 export const loginRFC = async (rfc: string) => {
   if (!RFC_REGEX.test(rfc.toUpperCase())) {
@@ -41,12 +42,10 @@ export const loginRFC = async (rfc: string) => {
     },
   });
 
-  const token = signToken({
-    id: empleado.id,
-    rol: "EMPLEADO",
-    rfc: empleado.rfc,
-    nombre: empleado.nombreCompleto,
-  });
+  const token = signToken(
+    { id: empleado.id, rol: "EMPLEADO", rfc: empleado.rfc, nombre: empleado.nombreCompleto },
+    EMPLEADO_JWT_EXPIRES_IN,
+  );
 
   return {
     token,
