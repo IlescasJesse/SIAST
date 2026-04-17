@@ -1,16 +1,54 @@
 import { createTheme } from "@mui/material";
 
-// Paleta institucional Secretaría de Finanzas Oaxaca
-// Primario: #9d2449 (guinda/granate)
-// Secundario: #6c6e6d (gris institucional)
+// ── Color primario institucional ──────────────────────────────────────────────
+// Cambiar SOLO este valor para actualizar toda la paleta derivada del sistema.
+// hsl(342, 62%, 38%) ≈ #9d2449 — guinda/granate Secretaría de Finanzas Oaxaca
+export const PRIMARY_H = 342;   // Hue
+export const PRIMARY_S = 62;    // Saturation %
+export const PRIMARY_L = 38;    // Lightness %
+
+/** Genera una cadena hsl() variando los tres parámetros del primario */
+export function primaryVariant(dH = 0, dS = 0, dL = 0, alpha = 1) {
+  const h = ((PRIMARY_H + dH) % 360 + 360) % 360;
+  const s = Math.max(0, Math.min(100, PRIMARY_S + dS));
+  const l = Math.max(0, Math.min(100, PRIMARY_L + dL));
+  return alpha < 1
+    ? `hsla(${h}, ${s}%, ${l}%, ${alpha})`
+    : `hsl(${h}, ${s}%, ${l}%)`;
+}
+
+// Color primario main — coincide con #9d2449
+export const PRIMARY_MAIN = primaryVariant();
+// Derivados para uso directo en componentes que no tienen acceso al tema MUI
+export const PRIMARY_LIGHT = primaryVariant(0, -10, +26);   // ≈ #c44e71
+export const PRIMARY_DARK  = primaryVariant(0,  +4, -10);   // ≈ #6e1832
+export const PRIMARY_ALPHA = (a) => primaryVariant(0, 0, 0, a);
+
+// ── Paleta de áreas — 12 variantes derivadas del primario ────────────────────
+// Todas son variaciones de tono/saturación/luminosidad alrededor del guinda.
+// Cambiando PRIMARY_H/S/L arriba cambian todos los colores de áreas.
+export const AREA_PALETTE_DERIVED = [
+  primaryVariant(  0,   0,   0),    // guinda base
+  primaryVariant(-20, -15, +18),    // rosa tenue
+  primaryVariant(+20, +10, -10),    // ciruela oscura
+  primaryVariant(-40, -20, +28),    // rosado claro
+  primaryVariant(+15,  -5, +12),    // magenta medio
+  primaryVariant(-60,  -8, +20),    // lavanda rosada
+  primaryVariant(+30, +15,  -8),    // morado violáceo
+  primaryVariant(  0, +18, +22),    // coral rosado
+  primaryVariant(-80, -15, +30),    // malva pálido
+  primaryVariant(+40,  -5,  -5),    // vino rojizo
+  primaryVariant(-10,  -8, +38),    // rosa muy claro
+  primaryVariant(+25, +20,  +8),    // magenta vivo
+];
 
 export const theme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#9d2449",
-      light: "#c44e71",
-      dark: "#6e1832",
+      main: PRIMARY_MAIN,
+      light: PRIMARY_LIGHT,
+      dark: PRIMARY_DARK,
       contrastText: "#ffffff",
     },
     secondary: {
@@ -44,8 +82,8 @@ export const theme = createTheme({
       styleOverrides: {
         root: { borderRadius: 8, textTransform: "none", fontWeight: 600 },
         containedPrimary: {
-          backgroundColor: "#9d2449",
-          "&:hover": { backgroundColor: "#6e1832" },
+          backgroundColor: PRIMARY_MAIN,
+          "&:hover": { backgroundColor: PRIMARY_DARK },
         },
       },
     },
@@ -71,7 +109,7 @@ export const theme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: "#9d2449",
+          backgroundColor: PRIMARY_MAIN,
           color: "#ffffff",
           borderBottom: "none",
         },
@@ -81,7 +119,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           "& .MuiTableCell-head": {
-            backgroundColor: "#9d2449",
+            backgroundColor: PRIMARY_MAIN,
             color: "#ffffff",
             fontWeight: 700,
           },
@@ -92,7 +130,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           "&:hover": {
-            backgroundColor: "rgba(157,36,73,0.04)",
+            backgroundColor: PRIMARY_ALPHA(0.04),
           },
         },
       },
@@ -100,7 +138,7 @@ export const theme = createTheme({
     MuiInputLabel: {
       styleOverrides: {
         root: {
-          "&.Mui-focused": { color: "#9d2449" },
+          "&.Mui-focused": { color: PRIMARY_MAIN },
         },
       },
     },
@@ -108,7 +146,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-            borderColor: "#9d2449",
+            borderColor: PRIMARY_MAIN,
           },
         },
       },
@@ -117,10 +155,10 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           "&.Mui-selected": {
-            backgroundColor: "rgba(157,36,73,0.08)",
-            color: "#9d2449",
-            "& .MuiListItemIcon-root": { color: "#9d2449" },
-            "&:hover": { backgroundColor: "rgba(157,36,73,0.12)" },
+            backgroundColor: PRIMARY_ALPHA(0.08),
+            color: PRIMARY_MAIN,
+            "& .MuiListItemIcon-root": { color: PRIMARY_MAIN },
+            "&:hover": { backgroundColor: PRIMARY_ALPHA(0.12) },
           },
         },
       },
@@ -155,3 +193,9 @@ export const TICKET_PRIORIDAD_COLOR = {
   ALTA: "#e65100",
   URGENTE: "#c62828",
 };
+
+// ── Helpers para consumir el primario fuera de MUI ──────────────────────────
+// Importar PRIMARY_MAIN / PRIMARY_DARK / PRIMARY_LIGHT / PRIMARY_ALPHA / primaryVariant
+// desde "@/theme" (o ruta relativa) en cualquier componente que necesite el color
+// sin acceso al tema MUI (SVGs, canvas, iframes, estilos inline, etc.).
+

@@ -167,6 +167,17 @@ interface SirhEmpleado {
   ADSCRIPCION?: string;
   NOMCATE?: string;
   EMAIL?: string;
+  CURP?: string;
+  NUMEMP?: number;
+  NUMPLA?: number;
+  NIVEL?: string;
+  FECHA_INGRESO?: string;
+  SANGRE?: string;
+  SEXO?: string;
+  VACACIONES?: {
+    PERIODO?: number;
+    FECHA_VACACIONES?: string;
+  };
   status?: number;
 }
 
@@ -209,46 +220,44 @@ async function main() {
     const apellidos = [apePat, apeMat].filter(Boolean).join(" ");
     const nombreCompleto = [nombre, apellidos].filter(Boolean).join(" ");
     const departamento = (emp.DEPARTAMENTO ?? "").trim() || undefined;
+    const adscripcion = (emp.ADSCRIPCION ?? "").trim() || undefined;
     const puesto = (emp.NOMCATE ?? "").trim() || undefined;
     const email = emp.EMAIL ? emp.EMAIL.trim() || undefined : undefined;
+    const sirhId = emp._id ? String(emp._id).trim() || undefined : undefined;
+    const curp = emp.CURP ? emp.CURP.trim() || undefined : undefined;
+    const numEmpleado = emp.NUMEMP != null ? parseInt(String(emp.NUMEMP), 10) || undefined : undefined;
+    const numPlaza = emp.NUMPLA != null ? parseInt(String(emp.NUMPLA), 10) || undefined : undefined;
+    const nivel = emp.NIVEL ? emp.NIVEL.trim() || undefined : undefined;
+    const fechaIngreso = emp.FECHA_INGRESO ? new Date(emp.FECHA_INGRESO) : undefined;
+    const grupoSangre = emp.SANGRE ? emp.SANGRE.trim() || undefined : undefined;
+    const sexo = emp.SEXO ? emp.SEXO.trim() || undefined : undefined;
+    const vacacionesPeriodo = emp.VACACIONES?.PERIODO != null
+      ? parseInt(String(emp.VACACIONES.PERIODO), 10) || undefined
+      : undefined;
+    const vacacionesFecha = emp.VACACIONES?.FECHA_VACACIONES
+      ? emp.VACACIONES.FECHA_VACACIONES.trim() || undefined
+      : undefined;
 
     const { areaId, piso } = mapearArea(emp.DEPARTAMENTO);
+
+    const payload = {
+      nombre, apellidos, nombreCompleto,
+      departamento, adscripcion, puesto, email,
+      areaId, piso,
+      sirhId, curp, numEmpleado, numPlaza, nivel,
+      fechaIngreso, grupoSangre, sexo,
+      vacacionesPeriodo, vacacionesFecha,
+      sincronizadoSIRH: true,
+      activo: true,
+    };
 
     try {
       const existe = await prisma.empleado.findUnique({ where: { rfc } });
       if (existe) {
-        await prisma.empleado.update({
-          where: { rfc },
-          data: {
-            nombre,
-            apellidos,
-            nombreCompleto,
-            departamento,
-            puesto,
-            email,
-            areaId,
-            piso,
-            sincronizadoSIRH: true,
-            activo: true,
-          },
-        });
+        await prisma.empleado.update({ where: { rfc }, data: payload });
         actualizados++;
       } else {
-        await prisma.empleado.create({
-          data: {
-            rfc,
-            nombre,
-            apellidos,
-            nombreCompleto,
-            departamento,
-            puesto,
-            email,
-            areaId,
-            piso,
-            sincronizadoSIRH: true,
-            activo: true,
-          },
-        });
+        await prisma.empleado.create({ data: { rfc, ...payload } });
         creados++;
       }
     } catch (err) {

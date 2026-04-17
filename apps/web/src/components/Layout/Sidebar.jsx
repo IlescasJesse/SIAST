@@ -8,17 +8,21 @@ import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import PeopleIcon from "@mui/icons-material/People";
 import PersonIcon from "@mui/icons-material/Person";
+import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
+import Inventory2Icon from "@mui/icons-material/Inventory2";
 import { useAuthStore } from "../../store/auth.js";
 
 const DRAWER_W = 220;
 
 const menuItems = (rol) => {
   const items = [
-    { label: "Dashboard", icon: <DashboardIcon />, to: "/dashboard", roles: ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA"] },
-    { label: "Tickets", icon: <ConfirmationNumberIcon />, to: "/tickets", roles: ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA"] },
+    { label: "Dashboard", icon: <DashboardIcon />, to: "/dashboard", roles: ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"] },
+    { label: "Tickets", icon: <ConfirmationNumberIcon />, to: "/tickets", roles: ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"] },
     { label: "Nuevo Ticket", icon: <AddCircleOutlineIcon />, to: "/tickets/nuevo", roles: ["ADMIN", "MESA_AYUDA", "EMPLEADO"] },
     { label: "Usuarios", icon: <PeopleIcon />, to: "/usuarios", roles: ["ADMIN"] },
-    { label: "Perfil", icon: <PersonIcon />, to: "/perfil", roles: ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA", "EMPLEADO"] },
+    { label: "Mapa de Áreas", icon: <EditLocationAltIcon />, to: "/admin/areas", roles: ["ADMIN"] },
+    { label: "Recursos", icon: <Inventory2Icon />, to: "/recursos", roles: ["ADMIN", "GESTOR_RECURSOS_MATERIALES"] },
+    { label: "Perfil", icon: <PersonIcon />, to: "/perfil", roles: ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "EMPLEADO"] },
   ];
   return items.filter((i) => i.roles.includes(rol));
 };

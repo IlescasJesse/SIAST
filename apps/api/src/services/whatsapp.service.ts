@@ -29,10 +29,15 @@ interface WWebClient {
 
 // ── Estado del cliente ────────────────────────────────────────────────────────
 
-type ClientState = "initializing" | "ready" | "failed";
+export type ClientState = "initializing" | "ready" | "failed";
 
 let client: WWebClient | null = null;
 let clientState: ClientState = "initializing";
+let waFailReason = "";
+
+export function getWaStatus(): { state: ClientState; reason: string } {
+  return { state: clientState, reason: waFailReason };
+}
 
 // ── Inicialización (se llama desde index.ts al arrancar) ──────────────────────
 
@@ -53,25 +58,55 @@ export function initWhatsApp(): void {
     qrcodeTerminal = null;
   }
 
-  const authPath = path.resolve(__dirname, "../../../../.wwebjs_auth");
+  // WA_SESSION_ID en .env → cambiar su valor fuerza una sesión nueva
+  const sessionId = process.env.WA_SESSION_ID ?? "siast-v1";
+  const authPath  = path.resolve(__dirname, "../../../../.wwebjs_auth");
+  console.log(`[WhatsApp] Usando sesión: "${sessionId}" en ${authPath}`);
 
   // Rutas comunes de Chrome en Windows — usa el que encuentre primero
   const chromePaths = [
+    process.env.CHROME_PATH ?? "",
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    process.env.CHROME_PATH ?? "",
+    "C:\\Program Files\\Chromium\\Application\\chromium.exe",
   ].filter(Boolean);
 
   const executablePath = chromePaths.find((p) => {
     try { return require("fs").existsSync(p); } catch { return false; }
   });
 
+  if (executablePath) {
+    console.log(`[WhatsApp] Chrome encontrado en: ${executablePath}`);
+  } else {
+    console.warn("[WhatsApp] Chrome no encontrado en rutas estándar — Puppeteer usará el bundled");
+  }
+
   const wClient: WWebClient = new wweb.Client({
-    authStrategy: new wweb.LocalAuth({ dataPath: authPath }),
+    authStrategy: new wweb.LocalAuth({ clientId: sessionId, dataPath: authPath }),
     puppeteer: {
       headless: true,
       executablePath: executablePath || undefined,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-default-apps",
+        "--disable-sync",
+        "--disable-translate",
+        "--hide-scrollbars",
+        "--metrics-recording-only",
+        "--mute-audio",
+        "--safebrowsing-disable-auto-update",
+        "--ignore-certificate-errors",
+        "--ignore-ssl-errors",
+        "--ignore-certificate-errors-spki-list",
+      ],
     },
   });
 
@@ -93,11 +128,13 @@ export function initWhatsApp(): void {
 
   wClient.on("auth_failure", (msg: string) => {
     clientState = "failed";
+    waFailReason = `auth_failure: ${msg}`;
     console.error("[WhatsApp] Fallo de autenticación:", msg);
   });
 
   wClient.on("disconnected", (reason: string) => {
     clientState = "failed";
+    waFailReason = `disconnected: ${reason}`;
     console.warn("[WhatsApp] Desconectado:", reason);
   });
 
@@ -109,13 +146,14 @@ export function initWhatsApp(): void {
     console.error("[WhatsApp] Error al inicializar:", err.message);
   });
 
-  // Si en 30s no está listo → marcar como fallido (el servidor ya arrancó)
+  // Si en 60s no está listo → marcar como fallido (el servidor ya arrancó)
   setTimeout(() => {
     if (clientState === "initializing") {
       clientState = "failed";
-      console.warn("[WhatsApp] Timeout 30s — modo CONSOLA activo para OTP");
+      waFailReason = "timeout 60s sin conectar";
+      console.warn("[WhatsApp] Timeout 60s — modo CONSOLA activo para OTP");
     }
-  }, 30_000);
+  }, 60_000);
 }
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
@@ -205,7 +243,15 @@ export async function enviarNotifTicketAsignado(params: {
 
 /**
  * Envía un código OTP por WhatsApp.
- * Si el cliente no está listo cae a modo consola (útil en dev).
+ *
+ * Estrategia de resiliencia:
+ *   1. WhatsApp conectado y número válido → envía por WA.
+ *   2. WhatsApp conectado pero número no encontrado → cae a consola (no lanza error).
+ *   3. WhatsApp no conectado → modo consola.
+ *
+ * En cualquiera de los casos de fallback devuelve `devCodigo` para que el admin
+ * pueda ver el código en consola y en el panel. En producción sin WA el empleado
+ * deberá contactar al admin para obtener el código.
  */
 export async function enviarOtp(
   telefono: string,
@@ -220,23 +266,30 @@ export async function enviarOtp(
 
   // ── Modo WhatsApp conectado ───────────────────────────────────────────────
   if (clientState === "ready" && client) {
-    const numberId = await (client as any).getNumberId(`52${telefono}`);
-    if (!numberId) {
-      throw Object.assign(
-        new Error("El número de celular no tiene WhatsApp activo. Verifica el número e intenta de nuevo."),
-        { status: 422 },
-      );
+    try {
+      const numberId = await (client as any).getNumberId(`52${telefono}`);
+      if (numberId) {
+        await client.sendMessage(numberId._serialized, mensaje);
+        console.log(`[WhatsApp] OTP enviado a ******${telefono.slice(-4)}`);
+        return { ok: true };
+      }
+      // Número no encontrado en WA → advertencia + modo consola
+      console.warn(`[WhatsApp] getNumberId nulo para ******${telefono.slice(-4)} — cayendo a modo consola`);
+    } catch (err: any) {
+      // Error al enviar (p.ej. sesión expiró en medio) → modo consola
+      console.error(`[WhatsApp] Error al enviar OTP: ${err.message} — cayendo a modo consola`);
+      clientState = "failed";
+      waFailReason = `send error: ${err.message}`;
     }
-    await client.sendMessage(numberId._serialized, mensaje);
-    return { ok: true };
   }
 
-  // ── Modo consola (fallback dev) ───────────────────────────────────────────
-  console.log("\n┌─────────────────────────────────────────┐");
-  console.log(`│  OTP CONSOLA → ******${telefono.slice(-4)}             │`);
-  console.log(`│  Código: ${codigo}                           │`);
-  console.log("└─────────────────────────────────────────┘\n");
+  // ── Modo consola (fallback) ───────────────────────────────────────────────
+  console.log("\n┌──────────────────────────────────────────────┐");
+  console.log(`│  OTP CONSOLA → ******${telefono.slice(-4)}                  │`);
+  console.log(`│  RFC/Nombre: ${nombre.slice(0, 25).padEnd(25)}   │`);
+  console.log(`│  Código: ${codigo}  (WhatsApp no disponible)  │`);
+  console.log("└──────────────────────────────────────────────┘\n");
 
-  const isDev = process.env.NODE_ENV !== "production";
-  return { ok: true, devCodigo: isDev ? codigo : undefined };
+  // Siempre devolver devCodigo en fallback para que aparezca en el UI
+  return { ok: true, devCodigo: codigo };
 }

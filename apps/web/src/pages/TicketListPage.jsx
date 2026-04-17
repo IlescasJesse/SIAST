@@ -52,6 +52,7 @@ export const TicketListPage = () => {
     return (
       t.asunto?.toLowerCase().includes(q) ||
       String(t.id).includes(q) ||
+      t.folio?.toLowerCase().includes(q) ||
       t.empleadoRfc?.toLowerCase().includes(q) ||
       t.empleado?.nombreCompleto?.toLowerCase().includes(q)
     );
@@ -112,6 +113,7 @@ export const TicketListPage = () => {
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell>Folio</TableCell>
                 <TableCell>#</TableCell>
                 <TableCell>Asunto</TableCell>
                 <TableCell>Categoría</TableCell>
@@ -126,12 +128,21 @@ export const TicketListPage = () => {
             <TableBody>
               {filtrados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 4, color: "text.secondary" }}>
                     No hay tickets que coincidan
                   </TableCell>
                 </TableRow>
               ) : filtrados.map((ticket) => (
                 <TableRow key={ticket.id} hover sx={{ cursor: "pointer" }} onClick={() => navigate(`/tickets/${ticket.id}`)}>
+                  <TableCell>
+                    <Chip
+                      label={ticket.folio ?? "—"}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                      sx={{ fontFamily: "monospace", fontWeight: 700, fontSize: 11 }}
+                    />
+                  </TableCell>
                   <TableCell sx={{ color: "text.secondary", fontFamily: "monospace" }}>#{ticket.id}</TableCell>
                   <TableCell sx={{ maxWidth: 220 }}>
                     <Typography variant="body2" noWrap>{ticket.asunto}</Typography>

@@ -4,7 +4,7 @@ import { signToken } from "../config/jwt.js";
 import { LABEL_PISO } from "@stf/shared";
 import { fetchEmpleadoByRfc } from "./sirh.service.js";
 
-const RFC_REGEX = /^[A-Z]{4}\d{6}[A-Z0-9]{3}$/;
+const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i;
 const EMPLEADO_JWT_EXPIRES_IN = process.env.EMPLEADO_JWT_EXPIRES_IN ?? "30d";
 
 export const loginRFC = async (rfc: string) => {

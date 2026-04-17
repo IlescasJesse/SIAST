@@ -4,9 +4,24 @@ import bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Iniciando seed SIAST...");
+  console.log("Iniciando seed SIAST...");
 
-  // 1. ÁREAS DEL EDIFICIO (desde planos arquitectónicos)
+  // ──────────────────────────────────────────────────────────────
+  // 1. LIMPIAR DATOS TRANSACCIONALES
+  // ──────────────────────────────────────────────────────────────
+  console.log("Eliminando datos existentes...");
+
+  await prisma.notificacion.deleteMany({});
+  await prisma.comentario.deleteMany({});
+  await prisma.historialTicket.deleteMany({});
+  await prisma.ticket.deleteMany({});
+  await prisma.usuario.deleteMany({});
+
+  console.log("Tablas limpiadas: notificaciones, comentarios, historial_tickets, tickets, usuarios");
+
+  // ──────────────────────────────────────────────────────────────
+  // 2. AREAS DEL EDIFICIO (upsert — no se eliminan)
+  // ──────────────────────────────────────────────────────────────
   const areas = [
     // === PLANTA BAJA ===
     {
@@ -244,148 +259,27 @@ async function main() {
       create: area,
     });
   }
-  console.log(`✅ ${areas.length} áreas del edificio creadas`);
+  console.log(`${areas.length} areas del edificio sincronizadas`);
 
-  // 2. USUARIOS DEL SISTEMA
-  const usuariosData = [
-    {
+  // ──────────────────────────────────────────────────────────────
+  // 3. USUARIO ADMIN (único)
+  // ──────────────────────────────────────────────────────────────
+  const hashedPassword = await bcrypt.hash("Admin2026!", 10);
+
+  const admin = await prisma.usuario.create({
+    data: {
       nombre: "Administrador",
       apellidos: "SIAST",
       usuario: "admin",
-      password: "Admin2025!",
+      password: hashedPassword,
       rol: Rol.ADMIN,
-      email: "admin@finanzas.oaxaca.gob.mx",
+      activo: true,
+      esEmpleadoEstructura: false,
     },
-    {
-      nombre: "Juan Carlos",
-      apellidos: "Técnico Sistemas",
-      usuario: "jc.tecnico",
-      password: "Tech2025!",
-      rol: Rol.TECNICO_INFORMATICO,
-      email: "jc.tecnico@finanzas.oaxaca.gob.mx",
-    },
-    {
-      nombre: "Pedro",
-      apellidos: "Técnico Servicios",
-      usuario: "p.servicios",
-      password: "Serv2025!",
-      rol: Rol.TECNICO_SERVICIOS,
-      email: "p.servicios@finanzas.oaxaca.gob.mx",
-    },
-    {
-      nombre: "María Elena",
-      apellidos: "Mesa de Ayuda",
-      usuario: "me.mesa",
-      password: "Mesa2025!",
-      rol: Rol.MESA_AYUDA,
-      email: "me.mesa@finanzas.oaxaca.gob.mx",
-    },
-  ];
+  });
 
-  for (const u of usuariosData) {
-    const hashedPassword = await bcrypt.hash(u.password, 10);
-    await prisma.usuario.upsert({
-      where: { usuario: u.usuario },
-      update: {},
-      create: { ...u, password: hashedPassword },
-    });
-  }
-  console.log(`✅ ${usuariosData.length} usuarios del sistema creados`);
-
-  // 3. EMPLEADOS DE PRUEBA (mientras SIRH está pendiente)
-  const empleadosData = [
-    {
-      rfc: "PELJ850312HDF",
-      nombre: "Juan",
-      apellidos: "Pérez López",
-      nombreCompleto: "Juan Pérez López",
-      areaId: "n2_informatica",
-      piso: PisoEdificio.NIVEL_2,
-      departamento: "Informática",
-    },
-    {
-      rfc: "GOMM920518MOC",
-      nombre: "María",
-      apellidos: "Gómez Martínez",
-      nombreCompleto: "María Gómez Martínez",
-      areaId: "pb_ingresos",
-      piso: PisoEdificio.PB,
-      departamento: "Ingresos",
-    },
-    {
-      rfc: "RAMC780901OAX",
-      nombre: "Carlos",
-      apellidos: "Ramírez Méndez",
-      nombreCompleto: "Carlos Ramírez Méndez",
-      areaId: "n1_juridico",
-      piso: PisoEdificio.NIVEL_1,
-      departamento: "Jurídico",
-    },
-    {
-      rfc: "HERF951220OAX",
-      nombre: "Fernanda",
-      apellidos: "Hernández Ruiz",
-      nombreCompleto: "Fernanda Hernández Ruiz",
-      areaId: "n2_recaudacion",
-      piso: PisoEdificio.NIVEL_2,
-      departamento: "Recaudación",
-    },
-    {
-      rfc: "LOPG880714MOC",
-      nombre: "Gabriela",
-      apellidos: "López Pérez",
-      nombreCompleto: "Gabriela López Pérez",
-      areaId: "n1_secretaria",
-      piso: PisoEdificio.NIVEL_1,
-      departamento: "Secretaría",
-    },
-  ];
-
-  for (const emp of empleadosData) {
-    await prisma.empleado.upsert({
-      where: { rfc: emp.rfc },
-      update: {},
-      create: emp,
-    });
-  }
-  console.log(`✅ ${empleadosData.length} empleados de prueba creados`);
-
-  // 4. TICKETS DE EJEMPLO
-  const tecnico = await prisma.usuario.findUnique({ where: { usuario: "jc.tecnico" } });
-
-  const ticketsEjemplo = [
-    {
-      asunto: "PC no enciende en Informática",
-      descripcion: "El equipo de escritorio no responde al botón de encendido desde esta mañana",
-      categoria: "TECNOLOGIAS" as const,
-      subcategoria: "SOPORTE_TECNICO" as const,
-      estado: "ABIERTO" as const,
-      prioridad: "ALTA" as const,
-      empleadoRfc: "PELJ850312HDF",
-      areaId: "n2_informatica",
-      piso: PisoEdificio.NIVEL_2,
-    },
-    {
-      asunto: "Fuga de agua en baños planta baja",
-      descripcion: "Hay una fuga visible en el lavabo del baño de hombres cerca del acceso principal",
-      categoria: "SERVICIOS" as const,
-      subcategoria: "SANITARIOS" as const,
-      estado: "ASIGNADO" as const,
-      prioridad: "URGENTE" as const,
-      empleadoRfc: "GOMM920518MOC",
-      areaId: "pb_acceso_principal",
-      piso: PisoEdificio.PB,
-      tecnicoId: tecnico?.id,
-      fechaAsignacion: new Date(),
-    },
-  ];
-
-  for (const ticket of ticketsEjemplo) {
-    await prisma.ticket.create({ data: ticket });
-  }
-  console.log(`✅ ${ticketsEjemplo.length} tickets de ejemplo creados`);
-
-  console.log("🎉 Seed completado exitosamente");
+  console.log(`Usuario ADMIN creado: ${admin.usuario} (id=${admin.id})`);
+  console.log("Seed completado exitosamente");
 }
 
 main()

@@ -8,7 +8,7 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { getTicket, cambiarEstado, asignarTicket, agregarComentario } from "../api/tickets.js";
-import { getTecnicos } from "../api/catalogos.js";
+import { getTecnicos, getDisponibilidadTecnico } from "../api/catalogos.js";
 import { StatusChip } from "../components/common/StatusChip.jsx";
 import { PriorityChip } from "../components/common/PriorityChip.jsx";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
@@ -42,12 +42,16 @@ export const TicketDetailPage = () => {
   const [dialogTecnico, setDialogTecnico] = useState(false);
   const [tecnicoSel, setTecnicoSel] = useState("");
   const [saving, setSaving] = useState(false);
+  const [disponibilidad, setDisponibilidad] = useState(null); // null | { disponible, motivo }
+  const [disponibilidadLoading, setDisponibilidadLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [t, tec] = await Promise.all([getTicket(id), getTecnicos()]);
+      const t = await getTicket(id);
       setTicket(t);
+      // Cargar técnicos filtrados por la categoría del ticket
+      const tec = await getTecnicos(t.categoria);
       setTecnicos(tec.data ?? []);
     } catch { setError("Error al cargar el ticket"); }
     finally { setLoading(false); }
@@ -71,8 +75,25 @@ export const TicketDetailPage = () => {
     try {
       await asignarTicket(id, tecnicoSel);
       setDialogTecnico(false);
+      setDisponibilidad(null);
       load();
     } finally { setSaving(false); }
+  };
+
+  const handleSeleccionarTecnico = async (tecnicoId) => {
+    setTecnicoSel(tecnicoId);
+    setDisponibilidad(null);
+    const tecnico = tecnicos.find((t) => t.id === tecnicoId);
+    if (!tecnico?.esEmpleadoEstructura || !tecnico?.empleadoId) return;
+    setDisponibilidadLoading(true);
+    try {
+      const res = await getDisponibilidadTecnico(tecnico.empleadoId);
+      setDisponibilidad(res);
+    } catch {
+      // Si falla la consulta de disponibilidad, no bloquear
+    } finally {
+      setDisponibilidadLoading(false);
+    }
   };
 
   const handleComentario = async (e) => {
@@ -90,7 +111,7 @@ export const TicketDetailPage = () => {
   if (error) return <Alert severity="error">{error}</Alert>;
   if (!ticket) return null;
 
-  const canActuar = ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS"].includes(user?.rol);
+  const canActuar = ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "GESTOR_RECURSOS_MATERIALES"].includes(user?.rol);
   const transiciones = TRANSICIONES[ticket.estado] ?? [];
 
   return (
@@ -107,7 +128,12 @@ export const TicketDetailPage = () => {
               {/* Header */}
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">TICKET #{ticket.id}</Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                    <Typography variant="h6" color="primary" fontWeight={700} sx={{ fontFamily: "monospace" }}>
+                      {ticket.folio ?? `#${ticket.id}`}
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled">/ #{ticket.id}</Typography>
+                  </Box>
                   <Typography variant="h6" fontWeight={700}>{ticket.asunto}</Typography>
                 </Box>
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -257,20 +283,56 @@ export const TicketDetailPage = () => {
       </Dialog>
 
       {/* Dialog asignar técnico */}
-      <Dialog open={dialogTecnico} onClose={() => setDialogTecnico(false)}>
+      <Dialog
+        open={dialogTecnico}
+        onClose={() => { setDialogTecnico(false); setDisponibilidad(null); setTecnicoSel(""); }}
+      >
         <DialogTitle>Asignar técnico</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ minWidth: 360 }}>
+          {ticket?.categoria && (
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+              Mostrando{" "}
+              {ticket.categoria === "TECNOLOGIAS"
+                ? "técnicos informáticos"
+                : ticket.categoria === "SERVICIOS"
+                  ? "técnicos de servicios"
+                  : "gestores de recursos materiales"}{" "}
+              para tickets de{" "}
+              {ticket.categoria === "TECNOLOGIAS"
+                ? "Tecnologías"
+                : ticket.categoria === "SERVICIOS"
+                  ? "Servicios"
+                  : "Recursos Materiales"}.
+            </Typography>
+          )}
           <FormControl fullWidth sx={{ mt: 1 }}>
             <InputLabel>Técnico</InputLabel>
-            <Select value={tecnicoSel} label="Técnico" onChange={(e) => setTecnicoSel(e.target.value)}>
+            <Select
+              value={tecnicoSel}
+              label="Técnico"
+              onChange={(e) => handleSeleccionarTecnico(e.target.value)}
+            >
               {tecnicos.map((t) => (
                 <MenuItem key={t.id} value={t.id}>{t.nombre} {t.apellidos} ({t.rol})</MenuItem>
               ))}
             </Select>
           </FormControl>
+          {disponibilidadLoading && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
+              <CircularProgress size={16} />
+              <Typography variant="caption" color="text.secondary">Verificando disponibilidad...</Typography>
+            </Box>
+          )}
+          {!disponibilidadLoading && disponibilidad && !disponibilidad.disponible && (
+            <Alert severity="warning" sx={{ mt: 1.5 }}>
+              {disponibilidad.motivo}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogTecnico(false)}>Cancelar</Button>
+          <Button onClick={() => { setDialogTecnico(false); setDisponibilidad(null); setTecnicoSel(""); }}>
+            Cancelar
+          </Button>
           <Button variant="contained" onClick={handleAsignar} disabled={!tecnicoSel || saving}>
             {saving ? <CircularProgress size={18} /> : "Asignar"}
           </Button>

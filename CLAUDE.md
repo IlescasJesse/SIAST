@@ -50,8 +50,8 @@ Desde la raíz del monorepo:
 ```bash
 npm install          # instalar dependencias
 npm run dev          # corre api + web en paralelo
-npm run dev:api      # solo la API Express (puerto 3001)
-npm run dev:web      # solo el frontend Next.js (puerto 3008)
+npm run dev:api      # solo la API Express (puerto 5101)
+npm run dev:web      # solo el frontend Vite (puerto 5173)
 npm run build        # build de todos los workspaces
 npm run lint         # lint de todos los workspaces
 npm run format       # prettier en todo el repo
@@ -82,8 +82,8 @@ Monorepo con **npm workspaces**:
 
 ```
 apps/
-  api/          # Express 5 + TypeScript + Prisma + Socket.IO (puerto 3001)
-  web/          # Next.js App Router (puerto 3008)
+  api/          # Express 5 + TypeScript + Prisma + Socket.IO (puerto 5101)
+  web/          # Vite + React (puerto 5173)
 packages/
   shared/       # tipos Zod SIAST: Ticket, Empleado, Rol, etc.
   ui/           # componentes base: Button, Card, Input, Table, Badge
@@ -94,9 +94,8 @@ packages/
 
 | Servicio | Puerto |
 |----------|--------|
-| API Backend | 3001 |
-| Frontend Next.js | 3008 |
-| Frontend Vite (alternativo) | 5173 |
+| API Backend | 5101 |
+| Frontend Vite | 5173 |
 | Visor 3D | 5174 |
 | Prisma Studio | 5555 |
 | SIRH (externo, pendiente) | 3000 |

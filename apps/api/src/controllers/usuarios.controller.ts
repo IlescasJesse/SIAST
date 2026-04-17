@@ -14,6 +14,9 @@ const userSelect = {
   telefono: true,
   rol: true,
   activo: true,
+  esEmpleadoEstructura: true,
+  empleadoId: true,
+  rfc: true,
   createdAt: true,
 };
 
@@ -28,13 +31,22 @@ export const listar = async (_req: Request, res: Response, next: NextFunction) =
 
 export const crear = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, ...rest } = req.body as {
+    const { password, esEmpleadoEstructura, empleadoId, rfc, ...rest } = req.body as {
       nombre: string; apellidos: string; usuario: string;
       password: string; rol: string; email?: string; telefono?: string;
+      esEmpleadoEstructura?: boolean; empleadoId?: string; rfc?: string;
     };
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const usuario = await prisma.usuario.create({
-      data: { ...rest, rol: rest.rol as never, password: hashedPassword },
+      data: {
+        ...rest,
+        rol: rest.rol as never,
+        password: hashedPassword,
+        esEmpleadoEstructura: esEmpleadoEstructura ?? false,
+        empleadoId: esEmpleadoEstructura ? (empleadoId ?? null) : null,
+        rfc: esEmpleadoEstructura ? (rfc ?? null) : null,
+      },
       select: userSelect,
     });
     res.status(201).json(usuario);
@@ -58,9 +70,16 @@ export const obtener = async (req: Request, res: Response, next: NextFunction) =
 
 export const actualizar = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, ...rest } = req.body;
+    const { password, esEmpleadoEstructura, empleadoId, rfc, ...rest } = req.body;
+
     const data: Record<string, unknown> = { ...rest };
     if (password) data.password = await bcrypt.hash(password, 10);
+
+    if (esEmpleadoEstructura !== undefined) {
+      data.esEmpleadoEstructura = esEmpleadoEstructura;
+      data.empleadoId = esEmpleadoEstructura ? (empleadoId ?? null) : null;
+      data.rfc = esEmpleadoEstructura ? (rfc ?? null) : null;
+    }
 
     const usuario = await prisma.usuario.update({
       where: { id: parseId(req.params.id) },

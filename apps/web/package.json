@@ -11,6 +11,7 @@
   "dependencies": {
     "@emotion/react": "^11.13.5",
     "@emotion/styled": "^11.13.5",
+    "@zxing/browser": "^0.1.6",
     "@hookform/resolvers": "^3.9.1",
     "@mui/icons-material": "^6.3.0",
     "@mui/lab": "^6.0.0-beta.22",

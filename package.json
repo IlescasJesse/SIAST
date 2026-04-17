@@ -8,7 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:api\" \"npm run dev:3d\" \"npm run dev:web\"",
+    "dev": "npm run kill-ports && concurrently --kill-others --kill-others-on-fail -n api,3d,web -c cyan,magenta,yellow \"npm run dev:api\" \"npm run dev:3d\" \"npm run dev:web\"",
+    "kill-ports": "node scripts/kill-ports.js",
+    "db:reset": "npm run db:deploy -w ./packages/database && npm run db:seed -w ./packages/database",
     "dev:api": "npm run dev -w ./apps/api",
     "dev:3d": "npm run dev -w ./apps/modelado-3d",
     "dev:web": "npm run dev -w ./apps/web",

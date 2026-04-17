@@ -9,20 +9,26 @@ export const RolSchema = z.enum([
   "TECNICO_INFORMATICO",
   "TECNICO_SERVICIOS",
   "MESA_AYUDA",
+  "GESTOR_RECURSOS_MATERIALES",
   "EMPLEADO",
 ]);
 
-export const CategoriaTicketSchema = z.enum(["TECNOLOGIAS", "SERVICIOS"]);
+export const CategoriaTicketSchema = z.enum(["TECNOLOGIAS", "SERVICIOS", "RECURSOS_MATERIALES"]);
 
 export const SubcategoriaTicketSchema = z.enum([
   "SISTEMAS",
   "SOPORTE_TECNICO",
-  "REDES",
-  "INTERNET",
-  "IMPRESORAS_OTROS",
+  "IMPRESORAS",
+  "REDES_INTERNET",
+  "CONFIGURACION_CORREO_OUTLOOK",
   "SANITARIOS",
   "ILUMINACION",
   "MOVILIDAD",
+  "SALA_JUNTAS",
+  "EQUIPO_AUDIOVISUAL",
+  "PRESTAMO_EQUIPO",
+  "MOBILIARIO",
+  "PAPELERIA",
 ]);
 
 export const EstadoTicketSchema = z.enum([
@@ -112,6 +118,7 @@ export const ComentarioSchema = z.object({
 
 export const TicketSchema = z.object({
   id: z.number().int(),
+  folio: z.string(),
   asunto: z.string(),
   descripcion: z.string(),
   categoria: CategoriaTicketSchema,
@@ -211,19 +218,25 @@ export type Notificacion = z.infer<typeof NotificacionSchema>;
 // ============================================================
 
 export const SUBCATEGORIAS_POR_CATEGORIA: Record<CategoriaTicket, SubcategoriaTicket[]> = {
-  TECNOLOGIAS: ["SISTEMAS", "SOPORTE_TECNICO", "REDES", "INTERNET", "IMPRESORAS_OTROS"],
+  TECNOLOGIAS: ["SISTEMAS", "SOPORTE_TECNICO", "IMPRESORAS", "REDES_INTERNET", "CONFIGURACION_CORREO_OUTLOOK"],
   SERVICIOS: ["SANITARIOS", "ILUMINACION", "MOVILIDAD"],
+  RECURSOS_MATERIALES: ["SALA_JUNTAS", "EQUIPO_AUDIOVISUAL", "PRESTAMO_EQUIPO", "MOBILIARIO", "PAPELERIA"],
 };
 
 export const LABEL_SUBCATEGORIA: Record<SubcategoriaTicket, string> = {
   SISTEMAS: "Sistemas",
   SOPORTE_TECNICO: "Soporte Técnico",
-  REDES: "Redes",
-  INTERNET: "Internet",
-  IMPRESORAS_OTROS: "Impresoras u Otros",
+  IMPRESORAS: "Impresoras",
+  REDES_INTERNET: "Redes / Internet",
+  CONFIGURACION_CORREO_OUTLOOK: "Configuración Correo Outlook",
   SANITARIOS: "Sanitarios",
   ILUMINACION: "Iluminación",
   MOVILIDAD: "Movilidad",
+  SALA_JUNTAS: "Sala de Juntas",
+  EQUIPO_AUDIOVISUAL: "Equipo Audiovisual",
+  PRESTAMO_EQUIPO: "Préstamo de Equipo",
+  MOBILIARIO: "Mobiliario",
+  PAPELERIA: "Papelería y Suministros",
 };
 
 export const LABEL_ESTADO: Record<EstadoTicket, string> = {
@@ -246,4 +259,87 @@ export const LABEL_PISO: Record<PisoEdificio, string> = {
   NIVEL_1: "Nivel 1",
   NIVEL_2: "Nivel 2",
   NIVEL_3: "Nivel 3",
+};
+
+// ============================================================
+// RECURSOS MATERIALES
+// ============================================================
+
+export const TipoRecursoSchema = z.enum(["TECNOLOGICO", "INMOBILIARIO"]);
+export const EstadoAsignacionSchema = z.enum(["PENDIENTE", "APROBADA", "RECHAZADA", "DEVUELTA"]);
+
+export const RecursoSchema = z.object({
+  id: z.number().int(),
+  nombre: z.string(),
+  descripcion: z.string().nullable().optional(),
+  tipo: TipoRecursoSchema,
+  numSerie: z.string().nullable().optional(),
+  marca: z.string().nullable().optional(),
+  capacidad: z.number().int().nullable().optional(),
+  piso: PisoEdificioSchema.nullable().optional(),
+  areaId: z.string().nullable().optional(),
+  disponible: z.boolean(),
+  activo: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const RecursoCreateSchema = z.object({
+  nombre: z.string().min(2).max(150),
+  descripcion: z.string().optional(),
+  tipo: TipoRecursoSchema,
+  numSerie: z.string().optional(),
+  marca: z.string().optional(),
+  capacidad: z.number().int().positive().optional(),
+  piso: PisoEdificioSchema.optional(),
+  areaId: z.string().optional(),
+  disponible: z.boolean().optional().default(true),
+});
+
+export const AsignacionRecursoCreateSchema = z.object({
+  recursoId: z.number().int(),
+  ticketId: z.number().int().optional(),
+  empleadoRfc: z.string().optional(),
+  fechaInicio: z.string().optional(),
+  fechaFin: z.string().optional(),
+  saleDEdificio: z.boolean().optional().default(false),
+  propositoSalida: z.string().optional(),
+  comentario: z.string().optional(),
+});
+
+export type TipoRecurso = z.infer<typeof TipoRecursoSchema>;
+export type EstadoAsignacion = z.infer<typeof EstadoAsignacionSchema>;
+export type Recurso = z.infer<typeof RecursoSchema>;
+export type RecursoCreateInput = z.infer<typeof RecursoCreateSchema>;
+
+export const LABEL_TIPO_RECURSO: Record<TipoRecurso, string> = {
+  TECNOLOGICO: "Tecnológico",
+  INMOBILIARIO: "Inmobiliario",
+};
+
+export const LABEL_ESTADO_ASIGNACION: Record<EstadoAsignacion, string> = {
+  PENDIENTE: "Pendiente",
+  APROBADA: "Aprobada",
+  RECHAZADA: "Rechazada",
+  DEVUELTA: "Devuelta",
+};
+
+// ============================================================
+// CONSTANTES — FOLIO DE TICKETS
+// ============================================================
+
+export const FOLIO_PREFIX: Record<string, string> = {
+  "TECNOLOGIAS-SISTEMAS": "TEC-SIS",
+  "TECNOLOGIAS-SOPORTE_TECNICO": "TEC-SOP",
+  "TECNOLOGIAS-IMPRESORAS": "TEC-IMP",
+  "TECNOLOGIAS-REDES_INTERNET": "TEC-RED",
+  "TECNOLOGIAS-CONFIGURACION_CORREO_OUTLOOK": "TEC-COR",
+  "SERVICIOS-SANITARIOS": "SER-SAN",
+  "SERVICIOS-ILUMINACION": "SER-ILU",
+  "SERVICIOS-MOVILIDAD": "SER-MOV",
+  "RECURSOS_MATERIALES-SALA_JUNTAS": "REC-SAL",
+  "RECURSOS_MATERIALES-EQUIPO_AUDIOVISUAL": "REC-AUD",
+  "RECURSOS_MATERIALES-PRESTAMO_EQUIPO": "REC-PRE",
+  "RECURSOS_MATERIALES-MOBILIARIO": "REC-MOB",
+  "RECURSOS_MATERIALES-PAPELERIA": "REC-PAP",
 };

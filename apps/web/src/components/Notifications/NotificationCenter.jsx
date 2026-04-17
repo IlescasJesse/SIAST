@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { PRIMARY_ALPHA } from "../../theme/index.js";
 import {
   Badge, IconButton, Drawer, Box, Typography, List, ListItem,
   ListItemText, Chip, Button, Divider, Tooltip, Alert,
@@ -98,9 +99,9 @@ export const NotificationCenter = () => {
                   sx={{
                     borderRadius: 2,
                     mb: 0.5,
-                    bgcolor: n.leida ? "transparent" : "rgba(157,36,73,0.07)",
+                    bgcolor: n.leida ? "transparent" : PRIMARY_ALPHA(0.07),
                     cursor: (n.data?.ticketId ?? n.data?.id) ? "pointer" : "default",
-                    "&:hover": { bgcolor: "rgba(157,36,73,0.04)" },
+                    "&:hover": { bgcolor: PRIMARY_ALPHA(0.04) },
                   }}
                 >
                   <ListItemText

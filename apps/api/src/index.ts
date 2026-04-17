@@ -11,6 +11,8 @@ import ticketsRoutes from "./routes/tickets.routes.js";
 import usuariosRoutes from "./routes/usuarios.routes.js";
 import empleadosRoutes from "./routes/empleados.routes.js";
 import catalogosRoutes from "./routes/catalogos.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
+import recursosRoutes from "./routes/recursos.routes.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { configurarSockets } from "./sockets/tickets.socket.js";
 import { setIo } from "./services/notificaciones.service.js";
@@ -62,6 +64,8 @@ app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/empleados", empleadosRoutes);
 app.use("/api/employee", empleadosRoutes); // alias para módulo 3D
 app.use("/api/catalogos", catalogosRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/recursos", recursosRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV });
@@ -86,4 +90,28 @@ httpServer.listen(port, "0.0.0.0", () => {
   syncEmpleados().catch((err) => {
     console.error("[SIRH] Error inesperado en syncEmpleados:", err);
   });
+
+  // Sincronización periódica automática cada 12 horas
+  const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
+  setInterval(() => {
+    console.log("[SIRH] Ejecutando sync periódico automático...");
+    syncEmpleados().catch((err) => {
+      console.error("[SIRH] Error en sync periódico:", err);
+    });
+  }, SYNC_INTERVAL_MS).unref(); // .unref() para no bloquear el cierre del proceso
 });
+
+// ============================================================
+// Cierre limpio — libera el puerto al terminar el proceso
+// En Windows tsx no cierra sockets de Socket.IO automáticamente,
+// por eso forzamos process.exit después de 1 s si httpServer.close
+// no termina solo (conexiones WebSocket activas).
+// ============================================================
+const shutdown = () => {
+  io.close();                              // cerrar todas las conexiones Socket.IO
+  httpServer.close(() => process.exit(0)); // esperar que el servidor deje de escuchar
+  setTimeout(() => process.exit(0), 1000).unref(); // forzar salida en 1 s si sigue abierto
+};
+process.on("SIGINT",  shutdown);
+process.on("SIGTERM", shutdown);
+process.on("SIGHUP",  shutdown);

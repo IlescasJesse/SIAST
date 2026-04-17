@@ -21,6 +21,30 @@ const SIRH_ENABLED = process.env.SIRH_ENABLED === "true";
 const SIRH_EMPLOYEES_PATH = "/api/personal/getEmployees";
 
 // ============================================================
+// Estado de la última sincronización (en memoria)
+// ============================================================
+
+export interface SyncStatus {
+  ultimaSync: Date | null;
+  enProgreso: boolean;
+  creados: number;
+  actualizados: number;
+  errores: number;
+  totalRecibidos: number;
+  totalValidos: number;
+}
+
+export const syncStatus: SyncStatus = {
+  ultimaSync: null,
+  enProgreso: false,
+  creados: 0,
+  actualizados: 0,
+  errores: 0,
+  totalRecibidos: 0,
+  totalValidos: 0,
+};
+
+// ============================================================
 // Tipos del payload SIRH
 // ============================================================
 
@@ -34,6 +58,17 @@ interface SirhEmpleado {
   ADSCRIPCION?: string;
   NOMCATE?: string;
   EMAIL?: string;
+  CURP?: string;
+  NUMEMP?: number;
+  NUMPLA?: number;
+  NIVEL?: string;
+  FECHA_INGRESO?: string;
+  SANGRE?: string;
+  SEXO?: string;
+  VACACIONES?: {
+    PERIODO?: number;
+    FECHA_VACACIONES?: string;
+  };
   status?: number;
 }
 
@@ -193,8 +228,29 @@ function buildEmpleadoData(emp: SirhEmpleado) {
   const { areaId, piso } = mapearArea(emp.DEPARTAMENTO);
 
   const adscripcion = (emp.ADSCRIPCION ?? "").trim() || undefined;
+  const sirhId = emp._id ? String(emp._id).trim() || undefined : undefined;
+  const curp = emp.CURP ? emp.CURP.trim() || undefined : undefined;
+  const numEmpleado = emp.NUMEMP != null ? parseInt(String(emp.NUMEMP), 10) || undefined : undefined;
+  const numPlaza = emp.NUMPLA != null ? parseInt(String(emp.NUMPLA), 10) || undefined : undefined;
+  const nivel = emp.NIVEL ? emp.NIVEL.trim() || undefined : undefined;
+  const fechaIngreso = emp.FECHA_INGRESO ? new Date(emp.FECHA_INGRESO) : undefined;
+  const grupoSangre = emp.SANGRE ? emp.SANGRE.trim() || undefined : undefined;
+  const sexo = emp.SEXO ? emp.SEXO.trim() || undefined : undefined;
+  const vacacionesPeriodo = emp.VACACIONES?.PERIODO != null
+    ? parseInt(String(emp.VACACIONES.PERIODO), 10) || undefined
+    : undefined;
+  const vacacionesFecha = emp.VACACIONES?.FECHA_VACACIONES
+    ? emp.VACACIONES.FECHA_VACACIONES.trim() || undefined
+    : undefined;
 
-  return { rfc, nombre, apellidos, nombreCompleto, departamento, adscripcion, puesto, email, areaId, piso };
+  return {
+    rfc, nombre, apellidos, nombreCompleto,
+    departamento, adscripcion, puesto, email,
+    areaId, piso,
+    sirhId, curp, numEmpleado, numPlaza, nivel,
+    fechaIngreso, grupoSangre, sexo,
+    vacacionesPeriodo, vacacionesFecha,
+  };
 }
 
 async function upsertEmpleado(data: ReturnType<typeof buildEmpleadoData>): Promise<"created" | "updated"> {
@@ -230,7 +286,12 @@ export async function fetchAllEmployees(): Promise<SirhEmpleado[]> {
 
 export async function syncEmpleados(): Promise<void> {
   if (!SIRH_ENABLED) return;
+  if (syncStatus.enProgreso) {
+    console.log("[SIRH] Sync ya en progreso — omitida");
+    return;
+  }
 
+  syncStatus.enProgreso = true;
   console.log("[SIRH] Iniciando sincronizacion de empleados...");
   console.log(`[SIRH] URL: ${process.env.SIRH_BASE_URL ?? "http://localhost:3000"}${SIRH_EMPLOYEES_PATH}`);
 
@@ -239,6 +300,7 @@ export async function syncEmpleados(): Promise<void> {
     todos = await fetchAllEmployees();
   } catch (err) {
     console.error("[SIRH] No se pudo conectar con SIRH — sync omitida:", (err as Error).message);
+    syncStatus.enProgreso = false;
     return;
   }
 
@@ -251,16 +313,32 @@ export async function syncEmpleados(): Promise<void> {
   let actualizados = 0;
   let errores = 0;
 
-  for (const emp of validos) {
-    try {
-      const result = await upsertEmpleado(buildEmpleadoData(emp));
-      if (result === "created") creados++;
-      else actualizados++;
-    } catch (err) {
-      errores++;
-      console.error(`[SIRH] Error con RFC ${emp.RFC}:`, (err as Error).message);
+  // Procesar en lotes paralelos de 10 para acelerar la sync (~10x más rápido)
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < validos.length; i += BATCH_SIZE) {
+    const lote = validos.slice(i, i + BATCH_SIZE);
+    const resultados = await Promise.allSettled(
+      lote.map((emp) => upsertEmpleado(buildEmpleadoData(emp))),
+    );
+    for (let j = 0; j < resultados.length; j++) {
+      const r = resultados[j];
+      if (r.status === "fulfilled") {
+        if (r.value === "created") creados++;
+        else actualizados++;
+      } else {
+        errores++;
+        console.error(`[SIRH] Error con RFC ${lote[j].RFC}:`, r.reason?.message);
+      }
     }
   }
+
+  syncStatus.ultimaSync = new Date();
+  syncStatus.enProgreso = false;
+  syncStatus.creados = creados;
+  syncStatus.actualizados = actualizados;
+  syncStatus.errores = errores;
+  syncStatus.totalRecibidos = todos.length;
+  syncStatus.totalValidos = validos.length;
 
   console.log(
     `[SIRH] Sync completada — creados: ${creados}, actualizados: ${actualizados}, errores: ${errores}`,
@@ -269,21 +347,37 @@ export async function syncEmpleados(): Promise<void> {
 
 // ============================================================
 // Búsqueda individual por RFC — llamada en login-rfc
+// Usa el endpoint específico para no descargar toda la plantilla
 // ============================================================
 
 export async function fetchEmpleadoByRfc(rfc: string): Promise<boolean> {
   if (!SIRH_ENABLED) return false;
 
-  let todos: SirhEmpleado[];
+  const rfcUp = rfc.toUpperCase().trim();
+
+  let emp: SirhEmpleado | null = null;
   try {
-    todos = await fetchAllEmployees();
+    const resp = await sirhFetch(`/api/personal/getemployee/${encodeURIComponent(rfcUp)}`);
+    if (resp.ok) {
+      const data = (await resp.json()) as SirhEmpleado;
+      if (data?._id && data?.RFC) emp = data;
+    } else if (resp.status !== 404) {
+      console.warn(`[SIRH] Error ${resp.status} buscando RFC ${rfcUp} — intentando con plantilla completa`);
+    }
   } catch (err) {
-    console.warn(`[SIRH] No se pudo consultar SIRH para RFC ${rfc}:`, (err as Error).message);
-    return false;
+    console.warn(`[SIRH] Error al buscar RFC ${rfcUp} por endpoint individual:`, (err as Error).message);
   }
 
-  const rfcUp = rfc.toUpperCase().trim();
-  const emp = todos.find((e) => e.RFC?.toUpperCase().trim() === rfcUp && e.status === 1);
+  // Fallback: buscar en la plantilla completa si el endpoint individual falló
+  if (!emp) {
+    try {
+      const todos = await fetchAllEmployees();
+      emp = todos.find((e) => e.RFC?.toUpperCase().trim() === rfcUp && e.status === 1) ?? null;
+    } catch (err) {
+      console.warn(`[SIRH] No se pudo consultar SIRH para RFC ${rfcUp}:`, (err as Error).message);
+      return false;
+    }
+  }
 
   if (!emp) {
     console.log(`[SIRH] RFC ${rfcUp} no encontrado en SIRH`);
@@ -296,6 +390,40 @@ export async function fetchEmpleadoByRfc(rfc: string): Promise<boolean> {
     return true;
   } catch (err) {
     console.error(`[SIRH] Error al guardar RFC ${rfcUp}:`, (err as Error).message);
+    return false;
+  }
+}
+
+// ============================================================
+// Actualizar TEL_PERSONAL en SIRH — se llama cuando el empleado
+// confirma o cambia su teléfono en el primer acceso
+// ============================================================
+
+export async function updateTelefonoEnSirh(
+  sirhId: string,
+  telefono: string,
+): Promise<boolean> {
+  if (!SIRH_ENABLED) return false;
+
+  try {
+    const resp = await sirhFetch("/api/personal/updateEmployee", {
+      method: "POST",
+      body: JSON.stringify({
+        _id: sirhId,
+        TEL_PERSONAL: telefono,
+      }),
+    });
+
+    if (resp.ok) {
+      console.log(`[SIRH] TEL_PERSONAL actualizado para sirhId ${sirhId} → ${telefono}`);
+      return true;
+    }
+
+    const body = await resp.text().catch(() => "");
+    console.warn(`[SIRH] updateEmployee respondió ${resp.status}: ${body}`);
+    return false;
+  } catch (err) {
+    console.warn(`[SIRH] No se pudo actualizar TEL_PERSONAL en SIRH:`, (err as Error).message);
     return false;
   }
 }

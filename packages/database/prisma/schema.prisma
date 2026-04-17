@@ -18,25 +18,33 @@ enum Rol {
   TECNICO_INFORMATICO
   TECNICO_SERVICIOS
   MESA_AYUDA
+  GESTOR_RECURSOS_MATERIALES
   EMPLEADO
 }
 
 enum CategoriaTicket {
   TECNOLOGIAS
   SERVICIOS
+  RECURSOS_MATERIALES
 }
 
 enum SubcategoriaTicket {
   // Categoría: TECNOLOGIAS
   SISTEMAS
   SOPORTE_TECNICO
-  REDES
-  INTERNET
-  IMPRESORAS_OTROS
+  IMPRESORAS
+  REDES_INTERNET
+  CONFIGURACION_CORREO_OUTLOOK
   // Categoría: SERVICIOS
   SANITARIOS
   ILUMINACION
   MOVILIDAD
+  // Categoría: RECURSOS_MATERIALES
+  SALA_JUNTAS
+  EQUIPO_AUDIOVISUAL
+  PRESTAMO_EQUIPO
+  MOBILIARIO
+  PAPELERIA
 }
 
 enum EstadoTicket {
@@ -70,6 +78,18 @@ enum TipoNotificacion {
   TICKET_URGENTE
 }
 
+enum TipoRecurso {
+  TECNOLOGICO
+  INMOBILIARIO
+}
+
+enum EstadoAsignacion {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  DEVUELTA
+}
+
 // ============================================================
 // USUARIOS DEL SISTEMA (Staff: Admin, Técnicos, Mesa de Ayuda)
 // ============================================================
@@ -84,15 +104,22 @@ model Usuario {
   telefono  String?  @db.VarChar(20)
   rol       Rol
   activo    Boolean  @default(true)
+
+  // Vinculación con empleado de estructura (SIRH)
+  esEmpleadoEstructura Boolean @default(false)
+  empleadoId           String? @unique @db.VarChar(24) // _id de MongoDB en SIRH
+  rfc                  String? @unique @db.VarChar(13) // RFC del empleado en SIRH
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  ticketsAsignados  Ticket[]          @relation("TecnicoAsignado")
-  ticketsCreados    Ticket[]          @relation("UsuarioCreador")
-  comentarios       Comentario[]
-  historialAcciones HistorialTicket[]
-  notificaciones    Notificacion[]
+  ticketsAsignados   Ticket[]            @relation("TecnicoAsignado")
+  ticketsCreados     Ticket[]            @relation("UsuarioCreador")
+  comentarios        Comentario[]
+  historialAcciones  HistorialTicket[]
+  notificaciones     Notificacion[]
+  asignacionesGestor AsignacionRecurso[] @relation("GestorAsignaciones")
 
   @@index([rol])
   @@index([activo])
@@ -116,6 +143,21 @@ model Empleado {
   adscripcion    String?      @db.VarChar(200) // ej: "SECRETARÍA DE FINANZAS Y ADMINISTRACIÓN"
 
   telefono       String?      @db.VarChar(20) // celular para OTP (se registra en primer acceso)
+  primerAcceso   Boolean      @default(true)  // true hasta que el empleado confirma su teléfono
+  fechaUltimoAcceso DateTime?                 // última vez que inició sesión
+
+  // Datos extendidos del SIRH
+  sirhId         String?      @unique @db.VarChar(24) // _id de MongoDB en SIRH
+  curp           String?      @db.VarChar(18)
+  numEmpleado    Int?                                  // NUMEMP
+  numPlaza       Int?                                  // NUMPLA
+  nivel          String?      @db.VarChar(10)          // ej: "03A"
+  fechaIngreso   DateTime?                             // FECHA_INGRESO
+  grupoSangre    String?      @db.VarChar(10)          // ej: "ORH+"
+  sexo           String?      @db.VarChar(1)           // "H" o "M"
+  // Vacaciones (resumen del periodo activo)
+  vacacionesPeriodo Int?                               // VACACIONES.PERIODO
+  vacacionesFecha   String?   @db.VarChar(20)          // VACACIONES.FECHA_VACACIONES
 
   // Ubicación física en el edificio
   areaId         String       @db.VarChar(100) // ej: "n2_informatica"
@@ -126,9 +168,10 @@ model Empleado {
   updatedAt      DateTime     @updatedAt
 
   // Relaciones
-  area           AreaEdificio   @relation(fields: [areaId], references: [id])
-  tickets        Ticket[]
-  notificaciones Notificacion[]
+  area                AreaEdificio        @relation(fields: [areaId], references: [id])
+  tickets             Ticket[]
+  notificaciones      Notificacion[]
+  asignacionesRecurso AsignacionRecurso[]
 
   @@index([rfc])
   @@index([areaId])
@@ -168,6 +211,10 @@ model AreaEdificio {
   gridX2 Int? // columna fin
   gridY2 Int? // fila fin
 
+  // Vinculación con adscripción SIRH (opcional, asignada desde el editor)
+  adscripcionNombre String? @db.VarChar(200)
+  adscripcionNivel  Int?
+
   activo Boolean @default(true)
 
   // Relaciones
@@ -185,6 +232,7 @@ model AreaEdificio {
 
 model Ticket {
   id           Int                @id @default(autoincrement())
+  folio        String             @unique @db.VarChar(20)
   asunto       String             @db.VarChar(100)
   descripcion  String             @db.Text
   categoria    CategoriaTicket
@@ -214,15 +262,20 @@ model Ticket {
   fechaInicio     DateTime? // cuando técnico marca "en progreso"
   fechaResolucion DateTime?
 
+  // Recursos adicionales solicitados al crear el ticket (JSON serializado)
+  // Ej: sala preferida, equipo audiovisual requerido, equipo para préstamo
+  recursosAdicionales String? @db.Text
+
   // Control
   activo    Boolean  @default(true) // false = eliminado (soft delete)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  historial      HistorialTicket[]
-  comentarios    Comentario[]
-  notificaciones Notificacion[]
+  historial           HistorialTicket[]
+  comentarios         Comentario[]
+  notificaciones      Notificacion[]
+  asignacionesRecurso AsignacionRecurso[]
 
   @@index([estado])
   @@index([empleadoRfc])
@@ -308,4 +361,93 @@ model Notificacion {
   @@index([empleadoRfc, leida])
   @@index([ticketId])
   @@map("notificaciones")
+}
+
+// ============================================================
+// RECURSOS MATERIALES (salas, equipo tecnológico, mobiliario)
+// ============================================================
+
+// ── Catálogo de recursos (tipo/familia) ───────────────────────
+model CatalogoRecurso {
+  id          Int           @id @default(autoincrement())
+  nombre      String        @db.VarChar(150)
+  descripcion String?       @db.Text
+  tipo        TipoRecurso
+  marca       String?       @db.VarChar(100)
+  capacidad   Int?          // Para inmobiliario/salas: aforo
+
+  // SICIPO — pendiente integración con sistema de inventario gubernamental
+  // codigoSicipo String?  @db.VarChar(50)
+
+  activo      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  unidades    RecursoUnidad[]
+
+  @@index([tipo])
+  @@map("catalogo_recursos")
+}
+
+// ── Unidad física individual ───────────────────────────────────
+model RecursoUnidad {
+  id          Int              @id @default(autoincrement())
+  catalogoId  Int
+  catalogo    CatalogoRecurso  @relation(fields: [catalogoId], references: [id])
+
+  numSerie    String?          @db.VarChar(100)
+
+  // SICIPO — número de inventario codificado en código de barras — pendiente
+  // codigoInventario String? @db.VarChar(100)
+
+  piso        PisoEdificio?
+  areaId      String?          @db.VarChar(100)
+
+  disponible  Boolean          @default(true)
+  activo      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  asignaciones AsignacionRecurso[]
+
+  @@index([catalogoId])
+  @@index([disponible, activo])
+  @@map("unidades_recurso")
+}
+
+model AsignacionRecurso {
+  id          Int              @id @default(autoincrement())
+
+  unidadId    Int
+  unidad      RecursoUnidad    @relation(fields: [unidadId], references: [id])
+
+  ticketId    Int?
+  ticket      Ticket?          @relation(fields: [ticketId], references: [id])
+
+  empleadoRfc String?          @db.VarChar(13)
+  empleado    Empleado?        @relation(fields: [empleadoRfc], references: [rfc])
+
+  // Gestor que aprueba/asigna
+  gestorId    Int?
+  gestor      Usuario?         @relation("GestorAsignaciones", fields: [gestorId], references: [id])
+
+  fechaInicio DateTime?
+  fechaFin    DateTime?
+
+  // Préstamo con salida del edificio
+  saleDEdificio    Boolean  @default(false)
+  propositoSalida  String?  @db.VarChar(300)
+  ordenSalidaFolio String?  @db.VarChar(50)
+
+  estado     EstadoAsignacion @default(PENDIENTE)
+  comentario String?          @db.Text
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([unidadId])
+  @@index([ticketId])
+  @@index([empleadoRfc])
+  @@index([estado])
+  @@map("asignaciones_recursos")
 }

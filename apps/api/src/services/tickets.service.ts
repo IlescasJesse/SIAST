@@ -2,6 +2,17 @@ import { prisma } from "../config/database.js";
 import type { JwtPayload } from "../types/index.js";
 import * as notif from "./notificaciones.service.js";
 import { enviarNotifTicketCreado } from "./whatsapp.service.js";
+import { FOLIO_PREFIX } from "@stf/shared";
+
+async function generarFolio(categoria: string, subcategoria: string): Promise<string> {
+  const key = `${categoria}-${subcategoria}`;
+  const prefix = FOLIO_PREFIX[key] ?? "TIC";
+  const count = await prisma.ticket.count({
+    where: { folio: { startsWith: prefix } },
+  });
+  const num = String(count + 1).padStart(4, "0");
+  return `${prefix}-${num}`;
+}
 
 const TRANSICIONES: Record<string, string[]> = {
   ABIERTO: ["ASIGNADO", "CANCELADO"],
@@ -44,6 +55,10 @@ export const listarTickets = async (
     where.empleadoRfc = user.rfc;
   } else if (user.rol === "TECNICO_INFORMATICO" || user.rol === "TECNICO_SERVICIOS") {
     where.tecnicoId = user.id;
+  } else if (user.rol === "GESTOR_RECURSOS_MATERIALES") {
+    // El gestor ve todos los tickets de su categoría (RECURSOS_MATERIALES),
+    // incluyendo los nuevos sin asignar
+    where.categoria = "RECURSOS_MATERIALES";
   }
 
   if (query.estado) where.estado = query.estado;
@@ -77,9 +92,18 @@ export const crearTicket = async (
     areaId?: string; // alias alternativo
     piso?: string; // opcional — se deriva del área
     rfcSolicitante?: string;
+    recursosAdicionales?: string; // JSON string con equipamiento/materiales extra
   },
 ) => {
-  const empleadoRfc = user.rol === "MESA_AYUDA" ? body.rfcSolicitante! : user.rfc!;
+  // EMPLEADO crea por sí mismo; todo el staff debe enviar rfcSolicitante
+  const empleadoRfc = user.rol === "EMPLEADO" ? user.rfc! : body.rfcSolicitante;
+
+  if (!empleadoRfc) {
+    throw Object.assign(
+      new Error("El RFC del solicitante es obligatorio"),
+      { status: 400 },
+    );
+  }
 
   if (user.rol === "EMPLEADO") {
     const activos = await prisma.ticket.count({
@@ -111,8 +135,11 @@ export const crearTicket = async (
   // El piso se deriva siempre del área para evitar inconsistencias
   const pisoResuelto = area.piso;
 
+  const folio = await generarFolio(body.categoria, body.subcategoria);
+
   const ticket = await prisma.ticket.create({
     data: {
+      folio,
       asunto: body.asunto,
       descripcion: body.descripcion,
       categoria: body.categoria as never,
@@ -122,6 +149,7 @@ export const crearTicket = async (
       areaId: areaIdResuelto,
       piso: pisoResuelto,
       creadoPorId: user.rol !== "EMPLEADO" ? user.id : undefined,
+      recursosAdicionales: body.recursosAdicionales ?? null,
     },
     include: ticketInclude,
   });
@@ -180,6 +208,12 @@ export const obtenerTicket = async (id: number, user: JwtPayload) => {
   return ticket;
 };
 
+const CATEGORIA_ROL_MAP: Record<string, string[]> = {
+  TECNOLOGIAS: ["TECNICO_INFORMATICO"],
+  SERVICIOS: ["TECNICO_SERVICIOS"],
+  RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES"],
+};
+
 export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayload) => {
   const ticket = await prisma.ticket.findFirst({ where: { id, activo: true } });
   if (!ticket) throw Object.assign(new Error("Ticket no encontrado"), { status: 404 });
@@ -188,6 +222,18 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
     where: { id: tecnicoId, activo: true },
   });
   if (!tecnico) throw Object.assign(new Error("Técnico no encontrado"), { status: 404 });
+
+  // Validar que el rol del técnico corresponde a la categoría del ticket
+  const rolesPermitidos = CATEGORIA_ROL_MAP[ticket.categoria] ?? [];
+  if (rolesPermitidos.length > 0 && !rolesPermitidos.includes(tecnico.rol)) {
+    throw Object.assign(
+      new Error(
+        `El usuario seleccionado no tiene el rol adecuado para tickets de ${ticket.categoria}. ` +
+          `Se requiere: ${rolesPermitidos.join(", ")}`,
+      ),
+      { status: 400 },
+    );
+  }
 
   const updated = await prisma.ticket.update({
     where: { id },

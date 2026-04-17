@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
   Box, Card, CardContent, Typography, TextField, Button,
   Alert, CircularProgress, Avatar, Divider, Grid,
@@ -39,6 +40,13 @@ export const PerfilPage = () => {
 
   const isEmpleado = user?.rol === "EMPLEADO";
 
+  // Hay cambios si el usuario comenzó a escribir en el formulario de contraseña
+  const isDirty =
+    passwordForm.actual.length > 0 ||
+    passwordForm.nueva.length > 0 ||
+    passwordForm.confirmar.length > 0;
+  const { ConfirmDialog } = useUnsavedChanges(isDirty && !isEmpleado);
+
   return (
     <Box sx={{ maxWidth: 600 }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>Mi Perfil</Typography>
@@ -54,7 +62,16 @@ export const PerfilPage = () => {
               <Typography variant="h6" fontWeight={700}>
                 {user?.nombreCompleto ?? `${user?.nombre ?? ""} ${user?.apellidos ?? ""}`.trim()}
               </Typography>
-              <Typography variant="body2" color="text.secondary">{user?.rol?.replace("_", " ")}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {({
+                  ADMIN: "Administrador",
+                  TECNICO_INFORMATICO: "Técnico en Informática",
+                  TECNICO_SERVICIOS: "Técnico en Servicios",
+                  MESA_AYUDA: "Mesa de Ayuda",
+                  GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",
+                  EMPLEADO: "Empleado",
+                })[user?.rol] ?? user?.rol?.replace(/_/g, " ")}
+              </Typography>
             </Box>
           </Box>
 
@@ -135,6 +152,9 @@ export const PerfilPage = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Confirmación de cambios sin guardar */}
+      <ConfirmDialog />
     </Box>
   );
 };
