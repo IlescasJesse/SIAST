@@ -14,6 +14,7 @@ const userSelect = {
   telefono: true,
   rol: true,
   activo: true,
+  permisos: true,
   esEmpleadoEstructura: true,
   empleadoId: true,
   rfc: true,
@@ -31,10 +32,11 @@ export const listar = async (_req: Request, res: Response, next: NextFunction) =
 
 export const crear = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, esEmpleadoEstructura, empleadoId, rfc, ...rest } = req.body as {
+    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body as {
       nombre: string; apellidos: string; usuario: string;
       password: string; rol: string; email?: string; telefono?: string;
       esEmpleadoEstructura?: boolean; empleadoId?: string; rfc?: string;
+      permisos?: string[];
     };
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -46,6 +48,7 @@ export const crear = async (req: Request, res: Response, next: NextFunction) => 
         esEmpleadoEstructura: esEmpleadoEstructura ?? false,
         empleadoId: esEmpleadoEstructura ? (empleadoId ?? null) : null,
         rfc: esEmpleadoEstructura ? (rfc ?? null) : null,
+        ...(permisos !== undefined && { permisos: permisos ?? [] }),
       },
       select: userSelect,
     });
@@ -70,10 +73,11 @@ export const obtener = async (req: Request, res: Response, next: NextFunction) =
 
 export const actualizar = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, esEmpleadoEstructura, empleadoId, rfc, ...rest } = req.body;
+    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body;
 
     const data: Record<string, unknown> = { ...rest };
     if (password) data.password = await bcrypt.hash(password, 10);
+    if (permisos !== undefined) data.permisos = permisos;
 
     if (esEmpleadoEstructura !== undefined) {
       data.esEmpleadoEstructura = esEmpleadoEstructura;

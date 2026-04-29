@@ -22,19 +22,19 @@ router.post(
 );
 
 router.patch(
-  "/asignaciones/:id(\\d+)",
+  "/asignaciones/:id",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.actualizarAsignacion,
 );
 
 router.get(
-  "/asignaciones/:id(\\d+)/orden-salida",
+  "/asignaciones/:id/orden-salida",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.ordenSalida,
 );
 
 // ── Unidades — operaciones directas (antes de /:id numérico) ─────────────────
-// IMPORTANTE: /unidades/by-serie/:serie debe ir ANTES de /unidades/:id(\\d+)
+// IMPORTANTE: /unidades/by-serie/:serie debe ir ANTES de /unidades/:id
 router.get(
   "/unidades/by-serie/:serie",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
@@ -42,13 +42,13 @@ router.get(
 );
 
 router.patch(
-  "/unidades/:id(\\d+)",
+  "/unidades/:id",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.actualizarUnidad,
 );
 
 router.delete(
-  "/unidades/:id(\\d+)",
+  "/unidades/:id",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.eliminarUnidad,
 );
@@ -67,32 +67,32 @@ router.post(
 );
 
 router.get(
-  "/:id(\\d+)",
+  "/:id",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.obtenerCatalogo,
 );
 
 router.patch(
-  "/:id(\\d+)",
+  "/:id",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.actualizarCatalogo,
 );
 
 router.delete(
-  "/:id(\\d+)",
+  "/:id",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.eliminarCatalogo,
 );
 
 // ── Unidades por catálogo ─────────────────────────────────────────────────────
 router.get(
-  "/:catalogoId(\\d+)/unidades",
+  "/:catalogoId/unidades",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.listarUnidades,
 );
 
 router.post(
-  "/:catalogoId(\\d+)/unidades",
+  "/:catalogoId/unidades",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.crearUnidad,
 );

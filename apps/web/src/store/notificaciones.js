@@ -95,6 +95,22 @@ export const useNotifStore = create((set, get) => ({
     socket.on("ticket:estado_cambiado", (d) =>
       add({ tipo: "TICKET_ACTUALIZADO", titulo: d.mensaje, mensaje: "", data: d }),
     );
+    socket.on("ticket:paso_asignado", (d) =>
+      add({
+        tipo: "TICKET_ASIGNADO",
+        titulo: `Paso ${d.pasoOrden} asignado — Solicitud #${d.ticketId}`,
+        mensaje: d.pasoNombre,
+        data: { ticketId: d.ticketId },
+      }),
+    );
+    socket.on("ticket:paso_listo", (d) =>
+      add({
+        tipo: "TICKET_ACTUALIZADO",
+        titulo: `Solicitud #${d.ticketId} — Paso ${d.pasoOrden} listo para asignar`,
+        mensaje: `${d.pasoNombre} · Requiere: ${d.rolLabel}`,
+        data: { ticketId: d.ticketId },
+      }),
+    );
 
     set({ socket });
   },

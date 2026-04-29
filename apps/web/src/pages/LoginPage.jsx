@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Box, Tabs, Tab, TextField, Button, Typography,
-  Alert, InputAdornment, IconButton, CircularProgress, Chip,
+  Alert, InputAdornment, IconButton, CircularProgress, Chip, Divider,
 } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
@@ -11,7 +11,9 @@ import PhoneAndroidIcon from "@mui/icons-material/PhoneAndroid";
 import LockIcon from "@mui/icons-material/Lock";
 import { useAuthStore } from "../store/auth.js";
 import { useNotifStore } from "../store/notificaciones.js";
-import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
+import backgroundImg from "../img/background-img.jpg";
+import logoOaxaca from "../img/logo-oaxaca.png";
+import siastLogo from "../img/siast-logo.png";
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/i;
 
@@ -253,7 +255,7 @@ export const LoginPage = () => {
     try {
       const data = await verificarOtp(rfc.toUpperCase(), cod ?? codigo);
       conectar(data.user);
-      navigate(redirectTo ?? "/tickets/nuevo");
+      navigate(redirectTo ?? "/solicitudes/nueva");
     } catch (err) {
       setError(err.response?.data?.error ?? "Código incorrecto o expirado");
       setCodigo("");
@@ -294,242 +296,348 @@ export const LoginPage = () => {
     }
   };
 
-  return (
-    <Box sx={{ display: "flex", height: "100vh", bgcolor: "background.default" }}>
-      {/* Panel izquierdo — 3D viewer */}
-      <Box sx={{ flex: "0 0 60%", display: { xs: "none", md: "block" }, position: "relative" }}>
-        <BuildingViewer loginMode={true} sx={{ height: "100%", borderRadius: 0 }} />
-        <Box sx={{
-          position: "absolute", bottom: 24, left: 0, right: 0, textAlign: "center",
-          pointerEvents: "none",
-        }}>
-          <Typography variant="caption" color="rgba(255,255,255,0.3)" letterSpacing={3} sx={{ textTransform: "uppercase" }}>
-            Edificio Saúl Martínez · Secretaría de Finanzas
+  // ── Bloque de formulario (tabs + pasos) — reutilizado en ambos diseños ──────
+  const FormularioLogin = (
+    <Box sx={{ width: "100%", maxWidth: 400 }}>
+      {/* Logo / Header */}
+      <Box sx={{ mb: 4, width: "100%" }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1.5, mb: 1 }}>
+          <Box
+            component="img"
+            src={siastLogo}
+            alt="SIAST"
+            sx={{ height: 44, width: "auto", objectFit: "contain", flexShrink: 0 }}
+          />
+          <Typography
+            sx={{
+              fontFamily: "'Oswald', sans-serif",
+              fontWeight: 700,
+              fontSize: "44px",
+              color: "#9D2449",
+              letterSpacing: 4,
+              lineHeight: "44px",
+            }}
+          >
+            SIAST
           </Typography>
         </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 400, mt: 0.5, textAlign: "center", textTransform: "uppercase", letterSpacing: 1, fontSize: 11 }}>
+          Sistema de Atención y Soporte Técnico
+        </Typography>
+        <Divider sx={{ mt: 2, borderColor: "#9D244933" }} />
       </Box>
 
-      {/* Panel derecho — formulario */}
-      <Box sx={{
-        flex: { xs: "0 0 100%", md: "0 0 40%" },
-        display: "flex", alignItems: "center", justifyContent: "center",
-        p: 4, bgcolor: "background.paper",
-      }}>
-        <Box sx={{ width: "100%", maxWidth: 380 }}>
-          {/* Logo / Header */}
-          <Box sx={{ mb: 4, textAlign: "center" }}>
-            <Box sx={{
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              width: 56, height: 56, borderRadius: "50%",
-              bgcolor: "primary.dark", mb: 2,
-            }}>
-              <BadgeIcon sx={{ fontSize: 28, color: "primary.light" }} />
-            </Box>
-            <Typography variant="h5" fontWeight={700} gutterBottom>SIAST</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Sistema Integral de Atención y Soporte Técnico
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block">
-              Secretaría de Finanzas — Oaxaca
-            </Typography>
-          </Box>
+      <Tabs
+        value={tab}
+        onChange={(_, v) => { setTab(v); setError(""); }}
+        variant="fullWidth"
+        sx={{ mb: 3 }}
+      >
+        <Tab label="ACCESO EMPLEADOS" sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }} />
+        <Tab label="ACCESO STAFF" sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }} />
+      </Tabs>
 
-          <Tabs
-            value={tab}
-            onChange={(_, v) => { setTab(v); setError(""); }}
-            variant="fullWidth"
-            sx={{ mb: 3 }}
-          >
-            <Tab label="ACCESO EMPLEADOS" sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }} />
-            <Tab label="ACCESO STAFF" sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }} />
-          </Tabs>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-          {/* ══════════════════════════════ EMPLEADOS ══════════════════════════════ */}
-          {tab === 0 && (
-            <>
-              {/* Paso 1: RFC */}
-              {paso === PASO_RFC && (
-                <Box component="form" onSubmit={handleSolicitarOtp} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <TextField
-                    label="RFC"
-                    value={rfc}
-                    onChange={(e) => setRfc(e.target.value.toUpperCase())}
-                    fullWidth
-                    autoFocus
-                    inputProps={{ maxLength: 13, style: { letterSpacing: 3 } }}
-                    helperText="Ej: PELJ850312HDF"
-                    InputProps={{ startAdornment: <InputAdornment position="start"><BadgeIcon fontSize="small" /></InputAdornment> }}
-                  />
-                  <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || rfc.length < 12}>
-                    {loading ? <CircularProgress size={22} color="inherit" /> : "Continuar"}
-                  </Button>
-                  <Typography variant="caption" color="text.secondary" textAlign="center">
-                    Te enviaremos un código de verificación por WhatsApp
-                  </Typography>
-                </Box>
-              )}
-
-              {/* Paso 1.5a: Confirmar teléfono (primer acceso con teléfono en DB) */}
-              {paso === PASO_CONFIRMAR_TEL && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <Alert severity="info" icon={<PhoneAndroidIcon />}>
-                    <strong>Primer acceso.</strong> Tenemos registrado el número{" "}
-                    <strong>{telefonoCensurado}</strong>. ¿Es correcto?
-                  </Alert>
-
-                  <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    onClick={handleConfirmarTelefono}
-                    disabled={loading}
-                  >
-                    {loading ? <CircularProgress size={22} color="inherit" /> : `Sí, enviar código a ${telefonoCensurado}`}
-                  </Button>
-
-                  <Typography variant="caption" color="text.secondary" textAlign="center">
-                    ¿No es tu número?
-                  </Typography>
-
-                  <Box component="form" onSubmit={handleCambiarTelefono} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                    <TextField
-                      label="Mi número correcto"
-                      value={telefono}
-                      onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      fullWidth
-                      inputProps={{ maxLength: 10, inputMode: "numeric" }}
-                      helperText="10 dígitos — Ej: 9512345678"
-                      InputProps={{ startAdornment: <InputAdornment position="start"><PhoneAndroidIcon fontSize="small" /></InputAdornment> }}
-                    />
-                    <Button
-                      type="submit"
-                      variant="outlined"
-                      fullWidth
-                      disabled={loading || telefono.replace(/\D/g, "").length !== 10}
-                    >
-                      Usar este número y enviar código
-                    </Button>
-                  </Box>
-
-                  <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
-                    ← Volver
-                  </Button>
-                </Box>
-              )}
-
-              {/* Paso 1.5b: Registrar teléfono (primer acceso sin teléfono) */}
-              {paso === PASO_TELEFONO && (
-                <Box component="form" onSubmit={handleRegistrarTelefono} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <Alert severity="info" icon={<PhoneAndroidIcon />}>
-                    Es tu primer acceso. Registra tu número de celular para recibir códigos de verificación.
-                  </Alert>
-                  <TextField
-                    label="Número de celular"
-                    value={telefono}
-                    onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    fullWidth
-                    autoFocus
-                    inputProps={{ maxLength: 10, inputMode: "numeric" }}
-                    helperText="10 dígitos sin código de país — Ej: 9512345678"
-                    InputProps={{ startAdornment: <InputAdornment position="start"><PhoneAndroidIcon fontSize="small" /></InputAdornment> }}
-                  />
-                  <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || telefono.replace(/\D/g, "").length !== 10}>
-                    {loading ? <CircularProgress size={22} color="inherit" /> : "Registrar y enviar código"}
-                  </Button>
-                  <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
-                    ← Volver
-                  </Button>
-                </Box>
-              )}
-
-              {/* Paso 2: OTP con cajas individuales */}
-              {paso === PASO_OTP && (
-                <Box component="form" onSubmit={handleVerificarOtp} sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
-                  <Alert severity="success" icon={<PhoneAndroidIcon />}>
-                    Código enviado a <strong>{hint}</strong>. Revisa WhatsApp.
-                  </Alert>
-                  {devCodigo && (
-                    <Chip
-                      icon={<LockIcon />}
-                      label={`DEV — código: ${devCodigo}`}
-                      color="warning"
-                      variant="outlined"
-                      size="small"
-                      sx={{ fontFamily: "monospace", letterSpacing: 2 }}
-                    />
-                  )}
-
-                  <Box>
-                    <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mb={1}>
-                      Ingresa el código de 6 dígitos
-                    </Typography>
-                    <OtpInput
-                      length={6}
-                      value={codigo}
-                      onChange={setCodigo}
-                      onComplete={doVerificar}
-                      disabled={loading}
-                    />
-                  </Box>
-
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    disabled={loading || codigo.length !== 6}
-                  >
-                    {loading ? <CircularProgress size={22} color="inherit" /> : "Verificar y entrar"}
-                  </Button>
-
-                  <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                    <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
-                      ← Volver
-                    </Button>
-                    <Button variant="text" size="small" onClick={handleReenviar} disabled={loading}>
-                      Reenviar código
-                    </Button>
-                  </Box>
-                </Box>
-              )}
-            </>
-          )}
-
-          {/* ══════════════════════════════ STAFF ══════════════════════════════ */}
-          {tab === 1 && (
-            <Box component="form" onSubmit={handleLoginStaff} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {/* ══════════════════════════════ EMPLEADOS ══════════════════════════════ */}
+      {tab === 0 && (
+        <>
+          {/* Paso 1: RFC */}
+          {paso === PASO_RFC && (
+            <Box component="form" onSubmit={handleSolicitarOtp} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <TextField
-                label="Usuario"
-                value={usuario}
-                onChange={(e) => setUsuario(e.target.value)}
+                label="RFC"
+                value={rfc}
+                onChange={(e) => setRfc(e.target.value.toUpperCase())}
                 fullWidth
                 autoFocus
-                autoComplete="username"
+                inputProps={{ maxLength: 13, style: { letterSpacing: 3 } }}
+                helperText="Ej: PELJ850312HDF"
+                InputProps={{ startAdornment: <InputAdornment position="start"><BadgeIcon fontSize="small" /></InputAdornment> }}
               />
-              <TextField
-                label="Contraseña"
-                type={showPass ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+              <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || rfc.length < 12}>
+                {loading ? <CircularProgress size={22} color="inherit" /> : "Continuar"}
+              </Button>
+              <Typography variant="caption" color="text.secondary" textAlign="center">
+                Te enviaremos un codigo de verificacion por WhatsApp
+              </Typography>
+            </Box>
+          )}
+
+          {/* Paso 1.5a: Confirmar teléfono (primer acceso con teléfono en DB) */}
+          {paso === PASO_CONFIRMAR_TEL && (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <Alert severity="info" icon={<PhoneAndroidIcon />}>
+                <strong>Primer acceso.</strong> Tenemos registrado el numero{" "}
+                <strong>{telefonoCensurado}</strong>. ¿Es correcto?
+              </Alert>
+
+              <Button
+                variant="contained"
                 fullWidth
-                autoComplete="current-password"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton onClick={() => setShowPass(!showPass)} edge="end">
-                        {showPass ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || !usuario || !password}>
-                {loading ? <CircularProgress size={22} color="inherit" /> : "Iniciar Sesión"}
+                size="large"
+                onClick={handleConfirmarTelefono}
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={22} color="inherit" /> : `Si, enviar codigo a ${telefonoCensurado}`}
+              </Button>
+
+              <Typography variant="caption" color="text.secondary" textAlign="center">
+                ¿No es tu numero?
+              </Typography>
+
+              <Box component="form" onSubmit={handleCambiarTelefono} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                <TextField
+                  label="Mi numero correcto"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  fullWidth
+                  inputProps={{ maxLength: 10, inputMode: "numeric" }}
+                  helperText="10 digitos — Ej: 9512345678"
+                  InputProps={{ startAdornment: <InputAdornment position="start"><PhoneAndroidIcon fontSize="small" /></InputAdornment> }}
+                />
+                <Button
+                  type="submit"
+                  variant="outlined"
+                  fullWidth
+                  disabled={loading || telefono.replace(/\D/g, "").length !== 10}
+                >
+                  Usar este numero y enviar codigo
+                </Button>
+              </Box>
+
+              <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
+                Volver
               </Button>
             </Box>
           )}
+
+          {/* Paso 1.5b: Registrar teléfono (primer acceso sin teléfono) */}
+          {paso === PASO_TELEFONO && (
+            <Box component="form" onSubmit={handleRegistrarTelefono} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <Alert severity="info" icon={<PhoneAndroidIcon />}>
+                Es tu primer acceso. Registra tu numero de celular para recibir codigos de verificacion.
+              </Alert>
+              <TextField
+                label="Numero de celular"
+                value={telefono}
+                onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                fullWidth
+                autoFocus
+                inputProps={{ maxLength: 10, inputMode: "numeric" }}
+                helperText="10 digitos sin codigo de pais — Ej: 9512345678"
+                InputProps={{ startAdornment: <InputAdornment position="start"><PhoneAndroidIcon fontSize="small" /></InputAdornment> }}
+              />
+              <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || telefono.replace(/\D/g, "").length !== 10}>
+                {loading ? <CircularProgress size={22} color="inherit" /> : "Registrar y enviar codigo"}
+              </Button>
+              <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
+                Volver
+              </Button>
+            </Box>
+          )}
+
+          {/* Paso 2: OTP con cajas individuales */}
+          {paso === PASO_OTP && (
+            <Box component="form" onSubmit={handleVerificarOtp} sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+              <Alert severity="success" icon={<PhoneAndroidIcon />}>
+                Codigo enviado a <strong>{hint}</strong>. Revisa WhatsApp.
+              </Alert>
+              {devCodigo && (
+                <Chip
+                  icon={<LockIcon />}
+                  label={`DEV — codigo: ${devCodigo}`}
+                  color="warning"
+                  variant="outlined"
+                  size="small"
+                  sx={{ fontFamily: "monospace", letterSpacing: 2 }}
+                />
+              )}
+
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mb={1}>
+                  Ingresa el codigo de 6 digitos
+                </Typography>
+                <OtpInput
+                  length={6}
+                  value={codigo}
+                  onChange={setCodigo}
+                  onComplete={doVerificar}
+                  disabled={loading}
+                />
+              </Box>
+
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading || codigo.length !== 6}
+              >
+                {loading ? <CircularProgress size={22} color="inherit" /> : "Verificar y entrar"}
+              </Button>
+
+              <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
+                  Volver
+                </Button>
+                <Button variant="text" size="small" onClick={handleReenviar} disabled={loading}>
+                  Reenviar codigo
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </>
+      )}
+
+      {/* ══════════════════════════════ STAFF ══════════════════════════════ */}
+      {tab === 1 && (
+        <Box component="form" onSubmit={handleLoginStaff} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <TextField
+            label="Usuario"
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
+            fullWidth
+            autoFocus
+            autoComplete="username"
+          />
+          <TextField
+            label="Contrasena"
+            type={showPass ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            fullWidth
+            autoComplete="current-password"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton onClick={() => setShowPass(!showPass)} edge="end">
+                    {showPass ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+          <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || !usuario || !password}>
+            {loading ? <CircularProgress size={22} color="inherit" /> : "Iniciar Sesion"}
+          </Button>
+        </Box>
+      )}
+    </Box>
+  );
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundImage: `url(${backgroundImg})`,
+        backgroundSize: "auto",
+        backgroundRepeat: "repeat",
+        p: { xs: 2, sm: 3 },
+      }}
+    >
+      {/* Card central */}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "row",
+          borderRadius: "6px",
+          overflow: "hidden",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.35)",
+          maxWidth: 920,
+          width: "100%",
+          minHeight: 540,
+        }}
+      >
+        {/* ── Panel izquierdo — identidad institucional ── */}
+        <Box
+          sx={{
+            display: { xs: "none", md: "flex" },
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            flex: "0 0 42%",
+            bgcolor: "#9D2449",
+            px: 4,
+            py: 5,
+            gap: 4,
+          }}
+        >
+          {/* Logo Oaxaca centrado */}
+          <Box
+            component="img"
+            src={logoOaxaca}
+            alt="Gobierno del Estado de Oaxaca"
+            sx={{
+              width: "80%",
+              maxWidth: 200,
+              height: "auto",
+              objectFit: "contain",
+              display: "block",
+            }}
+          />
+
+          {/* Datos de la dependencia */}
+          <Box sx={{ textAlign: "center" }}>
+            <Typography
+              sx={{
+                color: "rgba(255,255,255,0.9)",
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: 2.5,
+                textTransform: "uppercase",
+                display: "block",
+                mb: 1.5,
+              }}
+            >
+              Secretaría de Finanzas
+            </Typography>
+            <Typography
+              sx={{
+                color: "rgba(255,255,255,0.5)",
+                fontSize: 9,
+                letterSpacing: 0.3,
+                lineHeight: 1.8,
+                display: "block",
+              }}
+            >
+              Centro Administrativo del Poder<br />
+              Ejecutivo y Judicial
+            </Typography>
+            <Typography
+              sx={{
+                color: "rgba(255,255,255,0.3)",
+                fontSize: 8,
+                letterSpacing: 0.2,
+                lineHeight: 1.7,
+                display: "block",
+                mt: 1,
+                fontStyle: "italic",
+              }}
+            >
+              "General Porfirio Díaz. Soldado de la Patria"<br />
+              Edificio "D" Saúl Martínez
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* ── Panel derecho — formulario ── */}
+        <Box
+          sx={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            px: { xs: 3, sm: 6 },
+            py: 5,
+            bgcolor: "#ffffff",
+          }}
+        >
+          {FormularioLogin}
         </Box>
       </Box>
     </Box>

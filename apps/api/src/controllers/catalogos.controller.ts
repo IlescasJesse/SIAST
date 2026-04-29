@@ -15,7 +15,7 @@ export const categorias = (_req: Request, res: Response) => {
 
 // Mapeo categoría → roles habilitados para esa categoría
 const CATEGORIA_ROLES: Record<string, string[]> = {
-  TECNOLOGIAS: ["TECNICO_INFORMATICO"],
+  TECNOLOGIAS: ["TECNICO_TI", "TECNICO_REDES"],
   SERVICIOS: ["TECNICO_SERVICIOS"],
   RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES"],
 };
@@ -29,7 +29,12 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
     const rolesPermitidos =
       categoria && CATEGORIA_ROLES[categoria]
         ? (CATEGORIA_ROLES[categoria] as import("@prisma/client").Rol[])
-        : (["TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "GESTOR_RECURSOS_MATERIALES"] as import("@prisma/client").Rol[]);
+        : ([
+            "TECNICO_TI",
+            "TECNICO_REDES",
+            "TECNICO_SERVICIOS",
+            "GESTOR_RECURSOS_MATERIALES",
+          ] as import("@prisma/client").Rol[]);
 
     const data = await prisma.usuario.findMany({
       where: {
@@ -159,6 +164,7 @@ const CreateAreaSchema = z.object({
   gridY1: z.number().int().min(0).optional(),
   gridX2: z.number().int().min(0).optional(),
   gridY2: z.number().int().min(0).optional(),
+  esSalaJuntas: z.boolean().optional(),
 });
 
 const UpdateAreaSchema = z.object({
@@ -168,6 +174,7 @@ const UpdateAreaSchema = z.object({
   gridY1: z.number().int().min(0).optional(),
   gridX2: z.number().int().min(0).optional(),
   gridY2: z.number().int().min(0).optional(),
+  esSalaJuntas: z.boolean().optional(),
 });
 
 /**
@@ -182,7 +189,7 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    const { id, label, piso, floor, gridX1, gridY1, gridX2, gridY2 } = parse.data;
+    const { id, label, piso, floor, gridX1, gridY1, gridX2, gridY2, esSalaJuntas } = parse.data;
 
     const existente = await prisma.areaEdificio.findUnique({ where: { id } });
     if (existente) {
@@ -200,6 +207,7 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
         gridY1: gridY1 ?? null,
         gridX2: gridX2 ?? null,
         gridY2: gridY2 ?? null,
+        esSalaJuntas: esSalaJuntas ?? false,
         activo: true,
       },
     });
@@ -230,7 +238,7 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    const { label, gridX1, gridY1, gridX2, gridY2 } = parse.data;
+    const { label, gridX1, gridY1, gridX2, gridY2, esSalaJuntas } = parse.data;
 
     const area = await prisma.areaEdificio.update({
       where: { id },
@@ -240,6 +248,7 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
         ...(gridY1 !== undefined && { gridY1 }),
         ...(gridX2 !== undefined && { gridX2 }),
         ...(gridY2 !== undefined && { gridY2 }),
+        ...(esSalaJuntas !== undefined && { esSalaJuntas }),
       },
     });
 

@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { syncEmpleados, syncStatus } from "../services/sirh.service.js";
 import { getWaStatus } from "../services/whatsapp.service.js";
 import { prisma } from "../config/database.js";
+import { getIo } from "../services/notificaciones.service.js";
 
 /**
  * GET /api/admin/sirh/status
@@ -36,8 +37,76 @@ export const sirhSyncNow = async (_req: Request, res: Response) => {
     return;
   }
 
-  // Lanzar en background — no await para no bloquear la respuesta
-  syncEmpleados().catch((e) => console.error("[SIRH] Error en sync manual:", e.message));
+  const io = getIo();
+  io?.to("admins").emit("sirh:sync_iniciada");
+
+  syncEmpleados()
+    .then(() => {
+      io?.to("admins").emit("sirh:sync_completada", { ...syncStatus });
+    })
+    .catch((e) => {
+      console.error("[SIRH] Error en sync manual:", e.message);
+      io?.to("admins").emit("sirh:sync_error", { error: e.message });
+    });
 
   res.json({ ok: true, mensaje: "Sincronización iniciada en background" });
+};
+
+/**
+ * GET /api/admin/sirh/empleados
+ * Lista empleados sincronizados desde SIRH con filtros y paginación.
+ */
+export const sirhEmpleados = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { page = "1", limit = "50", search = "", activo } = req.query as Record<string, string>;
+    const pageNum  = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const skip     = (pageNum - 1) * limitNum;
+
+    const where: { sincronizadoSIRH: boolean; activo?: boolean; OR?: object[] } = {
+      sincronizadoSIRH: true,
+    };
+    if (activo === "true")  where.activo = true;
+    if (activo === "false") where.activo = false;
+    if (search) {
+      const term = search.trim();
+      where.OR = [
+        { rfc:            { contains: term } },
+        { nombreCompleto: { contains: term } },
+        { departamento:   { contains: term } },
+        { puesto:         { contains: term } },
+        { email:          { contains: term } },
+      ];
+    }
+
+    const [total, empleados] = await Promise.all([
+      prisma.empleado.count({ where }),
+      prisma.empleado.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy: { nombreCompleto: "asc" },
+        select: {
+          id:            true,
+          rfc:           true,
+          nombreCompleto:true,
+          departamento:  true,
+          puesto:        true,
+          email:         true,
+          telefono:      true,
+          activo:        true,
+          piso:          true,
+          numEmpleado:   true,
+          updatedAt:     true,
+        },
+      }),
+    ]);
+
+    res.json({
+      data: empleados,
+      meta: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
+    });
+  } catch (err) {
+    next(err);
+  }
 };

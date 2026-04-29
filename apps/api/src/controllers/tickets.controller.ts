@@ -22,7 +22,7 @@ export const listar = async (req: AuthRequest, res: Response, next: NextFunction
 export const crear = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const ticket = await ticketsService.crearTicket(req.user!, req.body);
-    res.status(201).json({ ticket, mensaje: "Ticket creado exitosamente" });
+    res.status(201).json({ ticket, mensaje: "Solicitud creada exitosamente" });
   } catch (err) {
     next(err);
   }
@@ -80,6 +80,43 @@ export const eliminar = async (req: AuthRequest, res: Response, next: NextFuncti
   try {
     const result = await ticketsService.eliminarTicket(parseId(req.params.id), req.user!);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const completarPaso = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const ticket = await ticketsService.completarPaso(
+      parseId(req.params.id),
+      parseId(req.params.pasoId),
+      req.body,
+      req.user!,
+    );
+    res.json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const asignarPaso = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const ticket = await ticketsService.asignarPaso(
+      parseId(req.params.id),
+      parseId(req.params.pasoId),
+      req.body.tecnicoId,
+      req.user!,
+    );
+    res.json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const misPasos = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const pasos = await ticketsService.obtenerMisPasos(req.user!);
+    res.json(pasos);
   } catch (err) {
     next(err);
   }

@@ -71,7 +71,7 @@ import {
   updateAsignacion,
   getOrdenSalida,
 } from "../api/recursos.js";
-import { getTickets } from "../api/tickets.js";
+import { getSolicitudes } from "../api/solicitudes.js";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarcodeScanner } from "../components/BarcodeScanner.jsx";
@@ -266,7 +266,7 @@ export const RecursosPage = () => {
   const [tab, setTab] = useState(0);
 
   // ── Solicitudes (Tab 0) ───────────────────────────────────────────────────
-  const [tickets, setTickets] = useState([]);
+  const [solicitudes, setSolicitudes] = useState([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [errorTickets, setErrorTickets] = useState("");
 
@@ -301,6 +301,7 @@ export const RecursosPage = () => {
     marca: "",
     descripcion: "",
     capacidad: "",
+    requiereHorario: false,
   });
   const [savingCatalogo, setSavingCatalogo] = useState(false);
   const [errorCatalogoForm, setErrorCatalogoForm] = useState("");
@@ -346,8 +347,8 @@ export const RecursosPage = () => {
     setLoadingTickets(true);
     setErrorTickets("");
     try {
-      const res = await getTickets({ categoria: "RECURSOS_MATERIALES" });
-      setTickets(res.tickets ?? []);
+      const res = await getSolicitudes({ categoria: "RECURSOS_MATERIALES" });
+      setSolicitudes(res.tickets ?? []);
     } catch {
       setErrorTickets("Error al cargar solicitudes");
     } finally {
@@ -380,6 +381,7 @@ export const RecursosPage = () => {
         descripcion: formCatalogo.descripcion || undefined,
         marca: formCatalogo.marca || undefined,
         capacidad: formCatalogo.capacidad ? Number(formCatalogo.capacidad) : undefined,
+        requiereHorario: formCatalogo.requiereHorario,
       };
 
       if (dialogCatalogo === "nuevo") {
@@ -757,7 +759,7 @@ export const RecursosPage = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {tickets.length === 0 ? (
+                  {solicitudes.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={puedeGestionar ? 7 : 6} align="center" sx={{ py: 4 }}>
                         <Typography variant="body2" color="text.secondary">
@@ -766,12 +768,12 @@ export const RecursosPage = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    tickets.map((t) => (
+                    solicitudes.map((t) => (
                       <TableRow
                         key={t.id}
                         hover
                         sx={{ cursor: "pointer" }}
-                        onClick={() => navigate(`/tickets/${t.id}`)}
+                        onClick={() => navigate(`/solicitudes/${t.id}`)}
                       >
                         <TableCell>
                           <Typography
@@ -937,6 +939,7 @@ export const RecursosPage = () => {
                         marca: cat.marca ?? "",
                         descripcion: cat.descripcion ?? "",
                         capacidad: cat.capacidad ?? "",
+                        requiereHorario: cat.requiereHorario ?? false,
                       });
                       setErrorCatalogoForm("");
                       setDialogCatalogo(cat);
@@ -1038,6 +1041,24 @@ export const RecursosPage = () => {
               size="small"
               multiline
               rows={2}
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formCatalogo.requiereHorario}
+                  onChange={(e) => setFormCatalogo((f) => ({ ...f, requiereHorario: e.target.checked }))}
+                  size="small"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" fontWeight={500}>Requiere fecha y hora de uso</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Al solicitar este recurso se pedirá fecha y horario de reservación
+                  </Typography>
+                </Box>
+              }
             />
           </Box>
         </DialogContent>

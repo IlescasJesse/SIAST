@@ -36,13 +36,14 @@ import { iniciarRenovacionProactiva } from "./api/client.js";
 import { AppShell } from "./components/Layout/AppShell.jsx";
 import { LoginPage } from "./pages/LoginPage.jsx";
 import { DashboardPage } from "./pages/DashboardPage.jsx";
-import { TicketListPage } from "./pages/TicketListPage.jsx";
-import { TicketNewPage } from "./pages/TicketNewPage.jsx";
-import { TicketDetailPage } from "./pages/TicketDetailPage.jsx";
+import { SolicitudListPage } from "./pages/SolicitudListPage.jsx";
+import { SolicitudNewPage } from "./pages/SolicitudNewPage.jsx";
+import { SolicitudDetailPage } from "./pages/SolicitudDetailPage.jsx";
 import { UsuariosPage } from "./pages/UsuariosPage.jsx";
 import { PerfilPage } from "./pages/PerfilPage.jsx";
 import { AreasPage } from "./pages/AreasPage.jsx";
 import { RecursosPage } from "./pages/RecursosPage.jsx";
+import { AdminPage } from "./pages/AdminPage.jsx";
 
 // Ruta protegida: redirige a /login preservando la ruta actual como ?redirect=
 const ProtectedRoute = ({ roles }) => {
@@ -52,7 +53,7 @@ const ProtectedRoute = ({ roles }) => {
     const redirectParam = location.pathname !== "/" ? `?redirect=${encodeURIComponent(location.pathname)}` : "";
     return <Navigate to={`/login${redirectParam}`} replace />;
   }
-  if (roles && !roles.includes(user.rol)) return <Navigate to="/tickets" replace />;
+  if (roles && !roles.includes(user.rol)) return <Navigate to="/solicitudes" replace />;
   return <Outlet />;
 };
 
@@ -81,19 +82,21 @@ export const App = () => {
               </Route>
 
               {/* Dashboard — solo admin y técnicos */}
-              <Route element={<ProtectedRoute roles={["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"]} />}>
+              <Route element={<ProtectedRoute roles={["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"]} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
               </Route>
 
-              {/* Tickets */}
-              <Route path="/tickets" element={<TicketListPage />} />
-              <Route path="/tickets/nuevo" element={<TicketNewPage />} />
-              <Route path="/tickets/:id" element={<TicketDetailPage />} />
+              {/* Solicitudes */}
+              <Route path="/solicitudes" element={<SolicitudListPage />} />
+              <Route path="/solicitudes/nueva" element={<SolicitudNewPage />} />
+              <Route path="/solicitudes/:id" element={<SolicitudDetailPage />} />
 
-              {/* Usuarios — solo admin */}
+              {/* Usuarios — mantener ruta legacy para compatibilidad */}
               <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
                 <Route path="/usuarios" element={<UsuariosPage />} />
                 <Route path="/admin/areas" element={<PageErrorBoundary><AreasPage /></PageErrorBoundary>} />
+                {/* Módulo de Administración */}
+                <Route path="/admin" element={<PageErrorBoundary><AdminPage /></PageErrorBoundary>} />
               </Route>
 
               {/* Perfil */}
@@ -113,7 +116,7 @@ export const App = () => {
 const RootRedirect = () => {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
-  if (user.rol === "EMPLEADO") return <Navigate to="/tickets/nuevo" replace />;
+  if (user.rol === "EMPLEADO") return <Navigate to="/solicitudes/nueva" replace />;
   if (user.rol === "GESTOR_RECURSOS_MATERIALES") return <Navigate to="/recursos" replace />;
   return <Navigate to="/dashboard" replace />;
 };

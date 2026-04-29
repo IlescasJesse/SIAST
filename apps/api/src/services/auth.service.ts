@@ -3,11 +3,29 @@ import { prisma } from "../config/database.js";
 import { signToken } from "../config/jwt.js";
 import { LABEL_PISO } from "@stf/shared";
 import { fetchEmpleadoByRfc } from "./sirh.service.js";
+import { crearSesion, registrarAcceso } from "./sesiones.service.js";
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i;
 const EMPLEADO_JWT_EXPIRES_IN = process.env.EMPLEADO_JWT_EXPIRES_IN ?? "30d";
+const STAFF_JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "8h";
 
-export const loginRFC = async (rfc: string) => {
+function msFromExpiry(expiry: string): number {
+  const match = expiry.match(/^(\d+)([hdm])$/);
+  if (!match) return 8 * 60 * 60 * 1000;
+  const n = parseInt(match[1], 10);
+  const unit = match[2];
+  if (unit === "h") return n * 60 * 60 * 1000;
+  if (unit === "d") return n * 24 * 60 * 60 * 1000;
+  if (unit === "m") return n * 60 * 1000;
+  return 8 * 60 * 60 * 1000;
+}
+
+interface RequestMeta {
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export const loginRFC = async (rfc: string, meta: RequestMeta = {}) => {
   if (!RFC_REGEX.test(rfc.toUpperCase())) {
     throw Object.assign(new Error("Formato de RFC inválido"), { status: 400 });
   }
@@ -19,7 +37,6 @@ export const loginRFC = async (rfc: string) => {
     include: { area: true },
   });
 
-  // Si no existe en DB local, intentar obtenerlo de SIRH antes de rechazar
   if (!empleado) {
     const importado = await fetchEmpleadoByRfc(rfcUp);
     if (importado) {
@@ -31,21 +48,23 @@ export const loginRFC = async (rfc: string) => {
   }
 
   if (!empleado) {
+    await registrarAcceso({ tipo: "EMPLEADO", identifier: rfcUp, resultado: "FAIL_NOT_FOUND", ...meta });
     throw Object.assign(new Error("RFC no encontrado en el sistema"), { status: 404 });
   }
 
   const ticketsActivos = await prisma.ticket.count({
-    where: {
-      empleadoRfc: empleado.rfc,
-      activo: true,
-      estado: { notIn: ["RESUELTO", "CANCELADO"] },
-    },
+    where: { empleadoRfc: empleado.rfc, activo: true, estado: { notIn: ["RESUELTO", "CANCELADO"] } },
   });
 
+  const expiresInMs = msFromExpiry(EMPLEADO_JWT_EXPIRES_IN);
+  const jti = await crearSesion({ empleadoRfc: rfcUp, expiresInMs, ...meta });
+
   const token = signToken(
-    { id: empleado.id, rol: "EMPLEADO", rfc: empleado.rfc, nombre: empleado.nombreCompleto },
+    { id: empleado.id, rol: "EMPLEADO", rfc: empleado.rfc, nombre: empleado.nombreCompleto, jti },
     EMPLEADO_JWT_EXPIRES_IN,
   );
+
+  await registrarAcceso({ tipo: "EMPLEADO", identifier: rfcUp, resultado: "OK", empleadoRfc: rfcUp, ...meta });
 
   return {
     token,
@@ -69,26 +88,37 @@ export const loginRFC = async (rfc: string) => {
   };
 };
 
-export const loginStaff = async (usuario: string, password: string) => {
-  const user = await prisma.usuario.findUnique({
-    where: { usuario, activo: true },
-  });
+export const loginStaff = async (usuario: string, password: string, meta: RequestMeta = {}) => {
+  const user = await prisma.usuario.findUnique({ where: { usuario } });
 
   if (!user) {
+    await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "FAIL_NOT_FOUND", ...meta });
+    throw Object.assign(new Error("Credenciales incorrectas"), { status: 401 });
+  }
+
+  if (!user.activo) {
+    await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "FAIL_INACTIVE", usuarioId: user.id, ...meta });
     throw Object.assign(new Error("Credenciales incorrectas"), { status: 401 });
   }
 
   const passwordOk = await bcrypt.compare(password, user.password);
   if (!passwordOk) {
+    await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "FAIL_PASSWORD", usuarioId: user.id, ...meta });
     throw Object.assign(new Error("Credenciales incorrectas"), { status: 401 });
   }
+
+  const expiresInMs = msFromExpiry(STAFF_JWT_EXPIRES_IN);
+  const jti = await crearSesion({ usuarioId: user.id, expiresInMs, ...meta });
 
   const token = signToken({
     id: user.id,
     rol: user.rol,
     usuario: user.usuario,
     nombre: `${user.nombre} ${user.apellidos}`,
+    jti,
   });
+
+  await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "OK", usuarioId: user.id, ...meta });
 
   return {
     token,

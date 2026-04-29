@@ -1,0 +1,1 @@
+ALTER TABLE catalogo_recursos ADD COLUMN IF NOT EXISTS requiereHorario BOOLEAN NOT NULL DEFAULT false;

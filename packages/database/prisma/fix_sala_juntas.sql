@@ -1,0 +1,1 @@
+ALTER TABLE `areas_edificio` ADD COLUMN IF NOT EXISTS `esSalaJuntas` BOOLEAN NOT NULL DEFAULT false;

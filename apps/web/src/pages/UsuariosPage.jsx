@@ -23,11 +23,11 @@ import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario } from "../api/usuarios.js";
 import { getSirhEmpleado, getSirhSyncStatus, postSirhSyncNow } from "../api/catalogos.js";
 
-const ROLES_STAFF = ["ADMIN", "TECNICO_INFORMATICO", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"];
+const ROLES_STAFF = ["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"];
 
 const ROL_COLOR = {
   ADMIN: "error",
-  TECNICO_INFORMATICO: "primary",
+  TECNICO_TI: "primary",
   TECNICO_SERVICIOS: "info",
   MESA_AYUDA: "success",
   GESTOR_RECURSOS_MATERIALES: "warning",

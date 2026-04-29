@@ -13,6 +13,7 @@ const CatalogoCreateSchema = z.object({
   tipo: z.enum(["TECNOLOGICO", "INMOBILIARIO"]),
   marca: z.string().optional(),
   capacidad: z.number().int().positive().optional(),
+  requiereHorario: z.boolean().optional().default(false),
 });
 
 const CatalogoUpdateSchema = CatalogoCreateSchema.partial();
@@ -144,6 +145,7 @@ export const crearCatalogo = async (req: AuthRequest, res: Response, next: NextF
         tipo: data.tipo as never,
         marca: data.marca ?? null,
         capacidad: data.capacidad ?? null,
+        requiereHorario: data.requiereHorario ?? false,
       },
     });
 
@@ -186,6 +188,7 @@ export const actualizarCatalogo = async (req: AuthRequest, res: Response, next: 
         ...(data.tipo !== undefined && { tipo: data.tipo as never }),
         ...(data.marca !== undefined && { marca: data.marca }),
         ...(data.capacidad !== undefined && { capacidad: data.capacidad }),
+        ...(data.requiereHorario !== undefined && { requiereHorario: data.requiereHorario }),
       },
     });
 
@@ -423,8 +426,8 @@ export const listarAsignaciones = async (req: AuthRequest, res: Response, next: 
       orderBy: { createdAt: "desc" },
       include: {
         unidad: {
-          select: { id: true, numSerie: true, piso: true, areaId: true },
-          include: {
+          select: {
+            id: true, numSerie: true, piso: true, areaId: true,
             catalogo: { select: { nombre: true, tipo: true, marca: true } },
           },
         },
@@ -484,8 +487,10 @@ export const crearAsignacion = async (req: AuthRequest, res: Response, next: Nex
       },
       include: {
         unidad: {
-          select: { id: true, numSerie: true, piso: true, areaId: true },
-          include: { catalogo: { select: { nombre: true, tipo: true, marca: true } } },
+          select: {
+            id: true, numSerie: true, piso: true, areaId: true,
+            catalogo: { select: { nombre: true, tipo: true, marca: true } },
+          },
         },
         empleado: { select: { nombreCompleto: true, rfc: true, puesto: true } },
         gestor: { select: { nombre: true, apellidos: true, usuario: true } },
@@ -558,8 +563,10 @@ export const actualizarAsignacion = async (req: AuthRequest, res: Response, next
       },
       include: {
         unidad: {
-          select: { id: true, numSerie: true, piso: true, areaId: true },
-          include: { catalogo: { select: { nombre: true, tipo: true, marca: true } } },
+          select: {
+            id: true, numSerie: true, piso: true, areaId: true,
+            catalogo: { select: { nombre: true, tipo: true, marca: true } },
+          },
         },
         empleado: {
           select: { nombreCompleto: true, rfc: true, puesto: true, departamento: true },
@@ -617,8 +624,8 @@ export const ordenSalida = async (req: AuthRequest, res: Response, next: NextFun
       where: { id },
       include: {
         unidad: {
-          select: { numSerie: true, piso: true, areaId: true },
-          include: {
+          select: {
+            numSerie: true, piso: true, areaId: true,
             catalogo: { select: { nombre: true, marca: true, tipo: true } },
           },
         },

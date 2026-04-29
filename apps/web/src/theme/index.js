@@ -76,11 +76,11 @@ export const theme = createTheme({
     h5: { fontWeight: 700 },
     h6: { fontWeight: 600 },
   },
-  shape: { borderRadius: 10 },
+  shape: { borderRadius: 4 },
   components: {
     MuiButton: {
       styleOverrides: {
-        root: { borderRadius: 8, textTransform: "none", fontWeight: 600 },
+        root: { borderRadius: 4, textTransform: "none", fontWeight: 600 },
         containedPrimary: {
           backgroundColor: PRIMARY_MAIN,
           "&:hover": { backgroundColor: PRIMARY_DARK },
@@ -90,7 +90,7 @@ export const theme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
+          borderRadius: 4,
           border: "1px solid rgba(0,0,0,0.08)",
           backgroundImage: "none",
           boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
@@ -180,18 +180,24 @@ export const theme = createTheme({
 });
 
 export const TICKET_ESTADO_COLOR = {
-  ABIERTO: "#1565c0",
-  ASIGNADO: "#e65100",
-  EN_PROGRESO: "#6a1b9a",
-  RESUELTO: "#2e7d32",
-  CANCELADO: "#616161",
+  ABIERTO:     "#16a34a",  // verde   — nueva, esperando
+  ASIGNADO:    "#ca8a04",  // amarillo — asignada, pendiente inicio
+  EN_PROGRESO: "#ea580c",  // naranja  — en atención activa
+  RESUELTO:    "#9e9e9e",  // gris     — cerrada satisfactoriamente
+  CANCELADO:   "#bdbdbd",  // gris claro — descartada
 };
 
 export const TICKET_PRIORIDAD_COLOR = {
-  BAJA: "#546e7a",
-  MEDIA: "#0277bd",
-  ALTA: "#e65100",
-  URGENTE: "#c62828",
+  BAJA:    "#16a34a",  // verde   — sin urgencia
+  MEDIA:   "#ca8a04",  // amarillo — atención pronto
+  ALTA:    "#ea580c",  // naranja  — requiere atención hoy
+  URGENTE: "#dc2626",  // rojo     — atención inmediata
+};
+
+export const CATEGORIA_AREA_COLOR = {
+  TECNOLOGIAS:        "#1565c0",
+  SERVICIOS:          "#2e7d32",
+  RECURSOS_MATERIALES:"#e65100",
 };
 
 // ── Helpers para consumir el primario fuera de MUI ──────────────────────────

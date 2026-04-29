@@ -62,6 +62,9 @@ const colorForIndex = (idx) => palette[idx % palette.length];
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+// Fila donde empieza el conector en el eje Y (parte posterior del edificio)
+const CONNECTOR_ROW_START = 14;
+
 export function AreaGridEditor({
   areas = [],
   selectedId,
@@ -71,10 +74,14 @@ export function AreaGridEditor({
   floorLabel,
   colStart = 0,
   colCount = 16,
+  flipY = false,
+  zoneKey = null,
 }) {
   const svgRef   = useRef(null);
   const dragRef  = useRef(null);
   const didDragRef = useRef(false);
+  const flipYRef = useRef(flipY);
+  flipYRef.current = flipY;
 
   const colOffset = colStart;
   const SVG_W     = colCount * CELL;
@@ -120,11 +127,101 @@ export function AreaGridEditor({
     );
   }) : [];
 
-  // ── Sombreado de zona conector (fondo diferenciado cuando es zona estrecha) ─
-  const connectorBg = colCount < 14 ? (
-    <rect x={0} y={0} width={SVG_W} height={SVG_H}
-      fill="rgba(176,190,197,0.12)" stroke="none" />
-  ) : null;
+  // ── Indicadores de orientación y conexión por zona ──────────────────────
+  const orientationOverlays = (() => {
+    const shadeY = CONNECTOR_ROW_START * CELL;           // svgY donde empieza el conector
+    const midShadeY = shadeY / 2;                        // centro de la zona solo-alas
+    const midActiveY = shadeY + (SVG_H - shadeY) / 2;   // centro de la zona conector
+
+    // Labels FRENTE/POSTERIOR comunes
+    const labelFrente = (
+      <text key="frente" x={SVG_W / 2} y={-14} fontSize={7} textAnchor="middle"
+        dominantBaseline="auto" fill="rgba(120,120,160,0.65)" fontWeight={700}
+        letterSpacing={1} style={{ userSelect: "none" }}>
+        ▲ FRENTE
+      </text>
+    );
+    const labelPosterior = (
+      <text key="posterior" x={SVG_W / 2} y={SVG_H + 22} fontSize={7} textAnchor="middle"
+        dominantBaseline="auto" fill="rgba(120,120,160,0.65)" fontWeight={700}
+        letterSpacing={1} style={{ userSelect: "none" }}>
+        ▼ POSTERIOR
+      </text>
+    );
+
+    if (zoneKey === "conector") {
+      return (
+        <g style={{ pointerEvents: "none" }}>
+          {/* Sombreado filas 0-13: solo existen las alas aquí */}
+          <rect x={0} y={0} width={SVG_W} height={shadeY}
+            fill="rgba(160,160,200,0.20)" />
+          <text x={SVG_W / 2} y={midShadeY} fontSize={7.5} textAnchor="middle"
+            dominantBaseline="middle" fill="rgba(90,90,140,0.45)" fontWeight={700}
+            letterSpacing={2} style={{ userSelect: "none" }}
+            transform={`rotate(-90 ${SVG_W / 2} ${midShadeY})`}>
+            SOLO ALAS
+          </text>
+
+          {/* Línea divisoria zona conector */}
+          <line x1={0} y1={shadeY} x2={SVG_W} y2={shadeY}
+            stroke="rgba(80,80,160,0.50)" strokeWidth={1.5} strokeDasharray="5,3" />
+          <text x={SVG_W / 2} y={shadeY - 2} fontSize={6} textAnchor="middle"
+            dominantBaseline="auto" fill="rgba(80,80,160,0.60)" fontWeight={700}
+            style={{ userSelect: "none" }}>
+            ── INICIO DEL CONECTOR ──
+          </text>
+
+          {/* Etiquetas laterales: alas izquierda y derecha */}
+          <text x={3} y={midActiveY} fontSize={7} textAnchor="middle"
+            dominantBaseline="middle" fill="rgba(60,80,160,0.75)" fontWeight={700}
+            style={{ userSelect: "none" }}
+            transform={`rotate(-90 3 ${midActiveY})`}>
+            ← ALA IZQUIERDA
+          </text>
+          <text x={SVG_W - 3} y={midActiveY} fontSize={7} textAnchor="middle"
+            dominantBaseline="middle" fill="rgba(60,80,160,0.75)" fontWeight={700}
+            style={{ userSelect: "none" }}
+            transform={`rotate(90 ${SVG_W - 3} ${midActiveY})`}>
+            ALA DERECHA →
+          </text>
+
+          {labelFrente}
+          {labelPosterior}
+        </g>
+      );
+    }
+
+    if (zoneKey === "izq" || zoneKey === "der") {
+      const isIzq = zoneKey === "izq";
+      const connX = isIzq ? SVG_W - 3 : 3;
+      const rot = isIzq ? 90 : -90;
+      const connLabel = isIzq ? "CONECTOR →" : "← CONECTOR";
+      const midConY = shadeY + (SVG_H - shadeY) / 2;
+
+      return (
+        <g style={{ pointerEvents: "none" }}>
+          {/* Sutil tinte en filas 14-26 (posterior donde llega el conector) */}
+          <rect x={0} y={shadeY} width={SVG_W} height={SVG_H - shadeY}
+            fill="rgba(130,180,130,0.07)" />
+          <line x1={0} y1={shadeY} x2={SVG_W} y2={shadeY}
+            stroke="rgba(60,130,60,0.28)" strokeWidth={1} strokeDasharray="4,3" />
+
+          {/* Etiqueta conector en el borde de conexión */}
+          <text x={connX} y={midConY} fontSize={6.5} textAnchor="middle"
+            dominantBaseline="middle" fill="rgba(40,110,40,0.65)" fontWeight={700}
+            style={{ userSelect: "none" }}
+            transform={`rotate(${rot} ${connX} ${midConY})`}>
+            {connLabel}
+          </text>
+
+          {labelFrente}
+          {labelPosterior}
+        </g>
+      );
+    }
+
+    return null;
+  })();
 
   // ── Etiquetas de ejes ────────────────────────────────────────────────────
   const colLabels = [];
@@ -139,7 +236,8 @@ export function AreaGridEditor({
   const rowLabels = [];
   for (let r = 0; r < ROWS; r += 4) {
     rowLabels.push(
-      <text key={`rl${r}`} x={-4} y={(ROWS - 1 - r) * CELL + CELL / 2 + 3}
+      <text key={`rl${r}`} x={-4}
+        y={flipY ? r * CELL + CELL / 2 + 3 : (ROWS - 1 - r) * CELL + CELL / 2 + 3}
         fontSize={8} textAnchor="end" fill="#9e9e9e">
         {r}
       </text>,
@@ -155,7 +253,9 @@ export function AreaGridEditor({
     const relX1 = (area.gridX1 ?? 0) - colOffset;
     const relX2 = (area.gridX2 ?? 0) - colOffset;
     const x = relX1 * CELL;
-    const y = (ROWS - 1 - (area.gridY2 ?? 0)) * CELL;
+    const y = flipY
+      ? (area.gridY1 ?? 0) * CELL
+      : (ROWS - 1 - (area.gridY2 ?? 0)) * CELL;
     const w = Math.max(CELL, (relX2 - relX1) * CELL);
     const h = Math.max(CELL, ((area.gridY2 ?? 0) - (area.gridY1 ?? 0)) * CELL);
     const color    = colorMap[area.id];
@@ -236,7 +336,9 @@ export function AreaGridEditor({
 
   function svgToCellAbs(svgX, svgY) {
     const col = Math.floor(svgX / CELL) + colOffset;
-    const row = ROWS - 1 - Math.floor(svgY / CELL);
+    const row = flipYRef.current
+      ? Math.floor(svgY / CELL)
+      : ROWS - 1 - Math.floor(svgY / CELL);
     return {
       col: Math.max(colOffset, Math.min(colOffset + colCount - 1, col)),
       row: Math.max(0, Math.min(ROWS - 1, row)),
@@ -286,11 +388,20 @@ export function AreaGridEditor({
 
     if (type === "resize") {
       let { gridX1, gridY1, gridX2, gridY2 } = startGrid;
-      switch (corner) {
-        case "tl": gridX1 = Math.min(col, gridX2 - 1); gridY2 = Math.max(row, gridY1 + 1); break;
-        case "tr": gridX2 = Math.max(col, gridX1 + 1); gridY2 = Math.max(row, gridY1 + 1); break;
-        case "bl": gridX1 = Math.min(col, gridX2 - 1); gridY1 = Math.min(row, gridY2 - 1); break;
-        case "br": gridX2 = Math.max(col, gridX1 + 1); gridY1 = Math.min(row, gridY2 - 1); break;
+      if (flipYRef.current) {
+        switch (corner) {
+          case "tl": gridX1 = Math.min(col, gridX2 - 1); gridY1 = Math.min(row, gridY2 - 1); break;
+          case "tr": gridX2 = Math.max(col, gridX1 + 1); gridY1 = Math.min(row, gridY2 - 1); break;
+          case "bl": gridX1 = Math.min(col, gridX2 - 1); gridY2 = Math.max(row, gridY1 + 1); break;
+          case "br": gridX2 = Math.max(col, gridX1 + 1); gridY2 = Math.max(row, gridY1 + 1); break;
+        }
+      } else {
+        switch (corner) {
+          case "tl": gridX1 = Math.min(col, gridX2 - 1); gridY2 = Math.max(row, gridY1 + 1); break;
+          case "tr": gridX2 = Math.max(col, gridX1 + 1); gridY2 = Math.max(row, gridY1 + 1); break;
+          case "bl": gridX1 = Math.min(col, gridX2 - 1); gridY1 = Math.min(row, gridY2 - 1); break;
+          case "br": gridX2 = Math.max(col, gridX1 + 1); gridY1 = Math.min(row, gridY2 - 1); break;
+        }
       }
       onResize(areaId, { gridX1, gridY1, gridX2, gridY2 });
     } else if (type === "move") {
@@ -335,17 +446,15 @@ export function AreaGridEditor({
         <svg
           ref={svgRef}
           width={SVG_W + 30}
-          height={SVG_H + 24}
-          viewBox={`-20 -4 ${SVG_W + 30} ${SVG_H + 24}`}
+          height={SVG_H + 46}
+          viewBox={`-20 -20 ${SVG_W + 30} ${SVG_H + 46}`}
           style={{ display: "block", fontFamily: "Inter, Roboto, sans-serif", background: "#ffffff", touchAction: "none" }}
         >
-          <rect x={-20} y={-4} width={SVG_W + 30} height={SVG_H + 24} fill="#ffffff" />
-
-          {/* Fondo diferenciado para la zona conector */}
-          {connectorBg}
+          <rect x={-20} y={-20} width={SVG_W + 30} height={SVG_H + 46} fill="#ffffff" />
 
           {gridLines}
           {corridorStripes}
+          {orientationOverlays}
           {colLabels}
           {rowLabels}
           {areaRects}

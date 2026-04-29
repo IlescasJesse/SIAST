@@ -10,6 +10,7 @@ import { useAuthStore } from "../../store/auth.js";
 import { useNotifStore } from "../../store/notificaciones.js";
 import { Sidebar } from "./Sidebar.jsx";
 import { NotificationCenter } from "../Notifications/NotificationCenter.jsx";
+import backgroundImg from "../../img/background-img.jpg";
 
 const DRAWER_W = 220;
 
@@ -24,6 +25,7 @@ export const AppShell = () => {
   }, [user?.id]);
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
 
   const handleLogout = () => {
@@ -33,31 +35,38 @@ export const AppShell = () => {
   };
 
   return (
-    <Box sx={{ display: "flex", height: "100vh", bgcolor: "background.default" }}>
+    <Box
+      sx={{
+        display: "flex",
+        height: "100vh",
+        backgroundImage: `url(${backgroundImg})`,
+        backgroundSize: "auto",
+        backgroundRepeat: "repeat",
+      }}
+    >
       {/* Sidebar */}
       {isMobile ? (
         <Sidebar open={mobileOpen} onClose={() => setMobileOpen(false)} variant="temporary" />
       ) : (
-        <Sidebar />
+        <Sidebar desktopOpen={sidebarOpen} />
       )}
 
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* AppBar */}
-        <AppBar position="static" elevation={1}>
-          <Toolbar variant="dense">
-            {isMobile && (
-              <IconButton edge="start" color="inherit" onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
-                <MenuIcon />
-              </IconButton>
-            )}
-            <Typography variant="subtitle1" fontWeight={700} color="inherit" sx={{ flex: 1 }}>
-              {user?.rol === "EMPLEADO" ? "Mesa de Ayuda — SIAST" : "SIAST Admin"}
-            </Typography>
-
+        <AppBar position="static" elevation={0} sx={{ bgcolor: "#6C6E6D", flexShrink: 0, boxShadow: "none" }}>
+          <Toolbar variant="dense" sx={{ minHeight: 52, px: 2 }}>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={() => isMobile ? setMobileOpen(true) : setSidebarOpen(v => !v)}
+              sx={{ mr: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+            <Box sx={{ flex: 1 }} />
             <NotificationCenter />
-
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small" sx={{ ml: 1 }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: "primary.dark", color: "#ffffff", fontSize: 14 }}>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: "#9D2449", color: "#ffffff", fontSize: 14 }}>
                 {(user?.nombre?.[0] ?? "U").toUpperCase()}
               </Avatar>
             </IconButton>
@@ -78,7 +87,7 @@ export const AppShell = () => {
           </Toolbar>
         </AppBar>
 
-        {/* Contenido */}
+        {/* Contenido — fondo semi-transparente para legibilidad */}
         <Box sx={{ flex: 1, overflow: "auto", p: { xs: 2, md: 3 } }}>
           <Outlet />
         </Box>

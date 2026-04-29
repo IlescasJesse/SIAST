@@ -197,10 +197,10 @@ export async function enviarNotifTicketCreado(params: {
   const mensaje =
     `*SIAST* — Secretaría de Finanzas Oaxaca\n\n` +
     `Hola ${params.nombre.split(" ")[0]}, tu solicitud de soporte fue registrada.\n\n` +
-    `${emoji} *Ticket #${params.ticketId}*\n` +
+    `${emoji} *Solicitud #${params.ticketId}*\n` +
     `${params.asunto}\n` +
     `Prioridad: *${params.prioridad}*\n\n` +
-    `Sigue el estado de tu ticket aquí:\n` +
+    `Sigue el estado de tu solicitud aquí:\n` +
     `${params.url}\n\n` +
     `_Ingresa con tu RFC para ver los detalles._`;
 
@@ -229,13 +229,13 @@ export async function enviarNotifTicketAsignado(params: {
   const emoji = PRIORIDAD_EMOJI[params.prioridad] ?? "📋";
   const mensaje =
     `*SIAST* — Secretaría de Finanzas Oaxaca\n\n` +
-    `Hola ${params.nombreTecnico.split(" ")[0]}, se te asignó un ticket.\n\n` +
-    `${emoji} *Ticket #${params.ticketId}*\n` +
+    `Hola ${params.nombreTecnico.split(" ")[0]}, se te asignó una solicitud.\n\n` +
+    `${emoji} *Solicitud #${params.ticketId}*\n` +
     `${params.asunto}\n` +
     `Prioridad: *${params.prioridad}*\n` +
     `Solicitante: ${params.empleadoNombre}\n` +
     `Ubicación: ${params.areaLabel}\n\n` +
-    `Ver y atender el ticket:\n` +
+    `Ver y atender la solicitud:\n` +
     `${params.url}`;
 
   await enviarMensaje(params.telefono, mensaje);

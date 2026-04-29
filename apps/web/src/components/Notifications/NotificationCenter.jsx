@@ -8,17 +8,24 @@ import {
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import NotificationsOffIcon from "@mui/icons-material/NotificationsOff";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
+import SyncIcon from "@mui/icons-material/Sync";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useNotifStore } from "../../store/notificaciones.js";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
 const TIPO_ICON = {
-  TICKET_CREADO: "🎫",
-  TICKET_ASIGNADO: "👤",
-  TICKET_ACTUALIZADO: "🔄",
-  TICKET_RESUELTO: "✅",
-  TICKET_CANCELADO: "❌",
-  TICKET_URGENTE: "🚨",
+  TICKET_CREADO:      <AddCircleOutlineIcon sx={{ fontSize: 18, color: "primary.main" }} />,
+  TICKET_ASIGNADO:    <AssignmentIndIcon sx={{ fontSize: 18, color: "info.main" }} />,
+  TICKET_ACTUALIZADO: <SyncIcon sx={{ fontSize: 18, color: "text.secondary" }} />,
+  TICKET_RESUELTO:    <CheckCircleOutlineIcon sx={{ fontSize: 18, color: "success.main" }} />,
+  TICKET_CANCELADO:   <CancelOutlinedIcon sx={{ fontSize: 18, color: "error.main" }} />,
+  TICKET_URGENTE:     <PriorityHighIcon sx={{ fontSize: 18, color: "error.main" }} />,
 };
 
 export const NotificationCenter = () => {
@@ -32,7 +39,7 @@ export const NotificationCenter = () => {
     const ticketId = n.data?.ticketId ?? n.data?.id;
     if (ticketId) {
       setOpen(false);
-      navigate(`/tickets/${ticketId}`);
+      navigate(`/solicitudes/${ticketId}`);
     }
   };
 
@@ -107,7 +114,7 @@ export const NotificationCenter = () => {
                   <ListItemText
                     primary={
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <span>{TIPO_ICON[n.tipo] ?? "📌"}</span>
+                        {TIPO_ICON[n.tipo] ?? <HelpOutlineIcon sx={{ fontSize: 18, color: "text.disabled" }} />}
                         <Typography variant="body2" fontWeight={n.leida ? 400 : 600} sx={{ flex: 1 }}>
                           {n.titulo}
                         </Typography>

@@ -3,15 +3,21 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import * as authService from "../services/auth.service.js";
 import * as otpService from "../services/otp.service.js";
+import { cerrarSesion } from "../services/sesiones.service.js";
 import type { AuthRequest } from "../types/index.js";
 import { prisma } from "../config/database.js";
 import { signToken } from "../config/jwt.js";
 import type { JwtPayload } from "../types/index.js";
 
+const getMeta = (req: Request) => ({
+  ipAddress: (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? undefined,
+  userAgent: req.headers["user-agent"]?.slice(0, 300) ?? undefined,
+});
+
 export const loginRFC = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { rfc } = req.body as { rfc: string };
-    const result = await authService.loginRFC(rfc);
+    const result = await authService.loginRFC(rfc, getMeta(req));
     res.json(result);
   } catch (err) {
     next(err);
@@ -40,7 +46,7 @@ export const verificarOtp = async (req: Request, res: Response, next: NextFuncti
     await otpService.verificarOtp(rfc.toUpperCase(), codigo);
 
     // OTP válido → emitir sesión JWT (reutiliza la lógica existente de loginRFC)
-    const result = await authService.loginRFC(rfc.toUpperCase());
+    const result = await authService.loginRFC(rfc.toUpperCase(), getMeta(req));
     res.json(result);
   } catch (err) {
     next(err);
@@ -50,8 +56,17 @@ export const verificarOtp = async (req: Request, res: Response, next: NextFuncti
 export const loginStaff = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { usuario, password } = req.body as { usuario: string; password: string };
-    const result = await authService.loginStaff(usuario, password);
+    const result = await authService.loginStaff(usuario, password, getMeta(req));
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const logout = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.jti) await cerrarSesion(req.user.jti);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

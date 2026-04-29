@@ -7,6 +7,7 @@ export interface JwtPayload {
   usuario?: string; // staff
   rfc?: string; // empleado
   nombre: string;
+  jti?: string; // ID único de sesión (UUID)
   iat?: number;
   exp?: number;
 }

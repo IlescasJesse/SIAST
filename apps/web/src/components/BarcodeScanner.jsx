@@ -18,27 +18,41 @@ import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
 export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear código" }) {
-  const videoRef = useRef(null);
-  const readerRef = useRef(null);
+  const videoRef    = useRef(null);
+  const readerRef   = useRef(null);
+  const controlsRef = useRef(null);
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState("");
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
 
-  // Enumerar cámaras al abrir el dialog
+  const stopScanner = () => {
+    try { controlsRef.current?.stop(); } catch {}
+    controlsRef.current = null;
+    readerRef.current = null;
+    try {
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+        videoRef.current.srcObject = null;
+      }
+    } catch {}
+    setScanning(false);
+  };
+
   useEffect(() => {
     if (!open) return;
     setError("");
     BrowserMultiFormatReader.listVideoInputDevices()
       .then((devs) => {
         setDevices(devs);
-        if (devs.length > 0) setSelectedDevice(devs[devs.length - 1].deviceId);
+        // preferir cámara trasera si existe
+        const back = devs.find((d) => /back|rear|environment/i.test(d.label));
+        setSelectedDevice((back ?? devs[devs.length - 1])?.deviceId ?? "");
       })
-      .catch(() => setError("No se pudo acceder a la cámara. Verifica los permisos."));
+      .catch(() => setError("No se pudo acceder a la cámara. Verifica los permisos del navegador."));
     return () => stopScanner();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Iniciar escáner cuando hay dispositivo seleccionado y el dialog está abierto
   useEffect(() => {
     if (open && selectedDevice) startScanner();
     return () => stopScanner();
@@ -46,37 +60,31 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
 
   const startScanner = async () => {
     if (!videoRef.current || !selectedDevice) return;
-    setScanning(true);
+    stopScanner();
+    setScanning(false);
     setError("");
     try {
-      readerRef.current = new BrowserMultiFormatReader();
-      await readerRef.current.decodeFromVideoDevice(
+      const reader = new BrowserMultiFormatReader();
+      readerRef.current = reader;
+      const controls = await reader.decodeFromVideoDevice(
         selectedDevice,
         videoRef.current,
         (result, err) => {
           if (result) {
+            const text = result.getText();
             stopScanner();
-            onScanned(result.getText());
+            onScanned(text);
             onClose();
           }
+          // err cuando no hay código en el frame es normal — ignorar
         },
       );
+      controlsRef.current = controls;
+      setScanning(true);
     } catch (e) {
-      setError("Error al iniciar el escáner: " + e.message);
+      setError("Error al iniciar el escáner: " + (e?.message ?? String(e)));
       setScanning(false);
     }
-  };
-
-  const stopScanner = () => {
-    if (readerRef.current) {
-      try {
-        BrowserMultiFormatReader.releaseAllStreams();
-      } catch {
-        // ignorar errores al liberar streams
-      }
-      readerRef.current = null;
-    }
-    setScanning(false);
   };
 
   const handleClose = () => {
@@ -127,47 +135,59 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
               ref={videoRef}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
               muted
+              playsInline
             />
+
             {!scanning && !error && (
-              <Box
-                sx={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+              <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <CircularProgress color="inherit" sx={{ color: "white" }} />
               </Box>
             )}
+
             {/* Guía visual de escaneo */}
             {scanning && (
-              <Box
-                sx={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  pointerEvents: "none",
-                }}
-              >
-                <Box
-                  sx={{
-                    width: "60%",
-                    height: "30%",
-                    border: "2px solid rgba(255,255,255,0.8)",
-                    borderRadius: 1,
-                    boxShadow: "0 0 0 9999px rgba(0,0,0,0.4)",
-                  }}
-                />
+              <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                {/* Esquinas del recuadro */}
+                <Box sx={{ position: "relative", width: "65%", height: "40%" }}>
+                  {["tl", "tr", "bl", "br"].map((corner) => (
+                    <Box
+                      key={corner}
+                      sx={{
+                        position: "absolute",
+                        width: 20, height: 20,
+                        borderColor: "rgba(255,255,255,0.95)",
+                        borderStyle: "solid",
+                        borderWidth: 0,
+                        ...(corner === "tl" && { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 3 }),
+                        ...(corner === "tr" && { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 3 }),
+                        ...(corner === "bl" && { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 3 }),
+                        ...(corner === "br" && { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 3 }),
+                      }}
+                    />
+                  ))}
+                  {/* Línea de escaneo animada */}
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      left: 0, right: 0,
+                      height: 2,
+                      bgcolor: "rgba(66, 165, 245, 0.9)",
+                      boxShadow: "0 0 6px rgba(66,165,245,0.8)",
+                      animation: "scan-line 1.8s ease-in-out infinite",
+                      "@keyframes scan-line": {
+                        "0%":   { top: "5%" },
+                        "50%":  { top: "90%" },
+                        "100%": { top: "5%" },
+                      },
+                    }}
+                  />
+                </Box>
               </Box>
             )}
           </Box>
 
           <Typography variant="caption" color="text.secondary" textAlign="center">
-            Apunta la cámara al código de barras o QR del equipo
+            Soporta QR, Code128, Code39, EAN-13, EAN-8, UPC, Data Matrix y más
           </Typography>
         </Box>
       </DialogContent>

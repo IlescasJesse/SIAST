@@ -15,7 +15,8 @@ datasource db {
 
 enum Rol {
   ADMIN
-  TECNICO_INFORMATICO
+  TECNICO_TI
+  TECNICO_REDES
   TECNICO_SERVICIOS
   MESA_AYUDA
   GESTOR_RECURSOS_MATERIALES
@@ -30,11 +31,11 @@ enum CategoriaTicket {
 
 enum SubcategoriaTicket {
   // Categoría: TECNOLOGIAS
-  SISTEMAS
-  SOPORTE_TECNICO
-  IMPRESORAS
-  REDES_INTERNET
-  CONFIGURACION_CORREO_OUTLOOK
+  SISTEMAS_INSTITUCIONALES
+  EQUIPOS_DISPOSITIVOS
+  RED_INTERNET
+  CUENTAS_DOMINIO
+  CORREO_OUTLOOK
   // Categoría: SERVICIOS
   SANITARIOS
   ILUMINACION
@@ -104,6 +105,7 @@ model Usuario {
   telefono  String?  @db.VarChar(20)
   rol       Rol
   activo    Boolean  @default(true)
+  permisos  Json?    // permisos adicionales u overrides sobre los defaults del rol
 
   // Vinculación con empleado de estructura (SIRH)
   esEmpleadoEstructura Boolean @default(false)
@@ -120,6 +122,9 @@ model Usuario {
   historialAcciones  HistorialTicket[]
   notificaciones     Notificacion[]
   asignacionesGestor AsignacionRecurso[] @relation("GestorAsignaciones")
+  pasosAsignados     PasoTicket[]        @relation("TecnicoPaso")
+  sesiones           Sesion[]
+  logsAcceso         LogAcceso[]
 
   @@index([rol])
   @@index([activo])
@@ -172,6 +177,8 @@ model Empleado {
   tickets             Ticket[]
   notificaciones      Notificacion[]
   asignacionesRecurso AsignacionRecurso[]
+  sesiones            Sesion[]
+  logsAcceso          LogAcceso[]
 
   @@index([rfc])
   @@index([areaId])
@@ -214,6 +221,8 @@ model AreaEdificio {
   // Vinculación con adscripción SIRH (opcional, asignada desde el editor)
   adscripcionNombre String? @db.VarChar(200)
   adscripcionNivel  Int?
+
+  esSalaJuntas Boolean @default(false)
 
   activo Boolean @default(true)
 
@@ -266,6 +275,9 @@ model Ticket {
   // Ej: sala preferida, equipo audiovisual requerido, equipo para préstamo
   recursosAdicionales String? @db.Text
 
+  // Subtipo dentro de EQUIPOS_DISPOSITIVOS (equipo nuevo, falla impresora, etc.)
+  subTipo String? @db.VarChar(50) @map("sub_tipo")
+
   // Control
   activo    Boolean  @default(true) // false = eliminado (soft delete)
   createdAt DateTime @default(now())
@@ -276,6 +288,7 @@ model Ticket {
   comentarios         Comentario[]
   notificaciones      Notificacion[]
   asignacionesRecurso AsignacionRecurso[]
+  pasos               PasoTicket[]
 
   @@index([estado])
   @@index([empleadoRfc])
@@ -374,7 +387,8 @@ model CatalogoRecurso {
   descripcion String?       @db.Text
   tipo        TipoRecurso
   marca       String?       @db.VarChar(100)
-  capacidad   Int?          // Para inmobiliario/salas: aforo
+  capacidad        Int?          // Para inmobiliario/salas: aforo
+  requiereHorario  Boolean       @default(false)
 
   // SICIPO — pendiente integración con sistema de inventario gubernamental
   // codigoSicipo String?  @db.VarChar(50)
@@ -450,4 +464,109 @@ model AsignacionRecurso {
   @@index([empleadoRfc])
   @@index([estado])
   @@map("asignaciones_recursos")
+}
+
+// ============================================================
+// SESIONES ACTIVAS (control de máx. 2 sesiones por usuario)
+// ============================================================
+
+model Sesion {
+  id          Int      @id @default(autoincrement())
+  jti         String   @unique @db.VarChar(36)   // UUID único por sesión
+  usuarioId   Int?     @map("usuario_id")
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empleadoRfc String?  @db.VarChar(13) @map("empleado_rfc")
+  empleado    Empleado? @relation(fields: [empleadoRfc], references: [rfc], onDelete: Cascade)
+  ipAddress   String?  @db.VarChar(45) @map("ip_address")
+  userAgent   String?  @db.VarChar(300) @map("user_agent")
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  expiresAt   DateTime @map("expires_at")
+
+  @@index([usuarioId])
+  @@index([empleadoRfc])
+  @@index([activa])
+  @@map("sesiones")
+}
+
+// ============================================================
+// LOGS DE ACCESO (intentos exitosos y fallidos)
+// ============================================================
+
+model LogAcceso {
+  id          Int      @id @default(autoincrement())
+  tipo        String   @db.VarChar(10)            // "STAFF" | "EMPLEADO"
+  identifier  String   @db.VarChar(50)            // usuario o RFC
+  resultado   String   @db.VarChar(30)            // "OK" | "FAIL_PASSWORD" | "FAIL_NOT_FOUND" | "FAIL_INACTIVE"
+  usuarioId   Int?     @map("usuario_id")
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id])
+  empleadoRfc String?  @db.VarChar(13) @map("empleado_rfc")
+  empleado    Empleado? @relation(fields: [empleadoRfc], references: [rfc])
+  ipAddress   String?  @db.VarChar(45) @map("ip_address")
+  userAgent   String?  @db.VarChar(300) @map("user_agent")
+  detalle     String?  @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([usuarioId])
+  @@index([resultado])
+  @@map("logs_acceso")
+}
+
+// ============================================================
+// PASOS DE FLUJO MULTI-TÉCNICO (tickets TI)
+// ============================================================
+
+model PasoTicket {
+  id           Int       @id @default(autoincrement())
+  ticketId     Int       @map("ticket_id")
+  ticket       Ticket    @relation(fields: [ticketId], references: [id])
+  orden        Int
+  nombre       String?   @db.VarChar(150)
+  rolRequerido String    @db.VarChar(50) @map("rol_requerido")
+  tecnicoId    Int?      @map("tecnico_id")
+  tecnico      Usuario?  @relation("TecnicoPaso", fields: [tecnicoId], references: [id])
+  estado       String    @default("PENDIENTE") @db.VarChar(20)
+  notas        String?   @db.Text
+  cantidadUnidades Int?  @map("cantidad_unidades")
+  labelUnidades String?  @db.VarChar(100) @map("label_unidades")
+  completadoAt DateTime? @map("completado_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([ticketId])
+  @@map("pasos_ticket")
+}
+
+// ============================================================
+// DEFINICIÓN DE PROCESOS (plantillas de flujo multi-paso)
+// ============================================================
+
+model ProcesoDefinicion {
+  id           Int                @id @default(autoincrement())
+  subcategoria SubcategoriaTicket
+  subTipo      String?            @db.VarChar(50) @map("sub_tipo")
+  tipoFlujo    String             @db.VarChar(20) @map("tipo_flujo") // "DIRECTO" | "SECUENCIAL" | "PENDIENTE"
+  nombre       String             @db.VarChar(150)
+  descripcion  String?            @db.VarChar(300)
+  activo       Boolean            @default(true)
+  createdAt    DateTime           @default(now()) @map("created_at")
+  pasos        PasoDefinicion[]
+
+  @@unique([subcategoria, subTipo])
+  @@map("procesos_definicion")
+}
+
+model PasoDefinicion {
+  id               Int               @id @default(autoincrement())
+  procesoId        Int               @map("proceso_id")
+  proceso          ProcesoDefinicion @relation(fields: [procesoId], references: [id])
+  orden            Int
+  rolRequerido     String            @db.VarChar(50) @map("rol_requerido") // "TECNICO_TI" | "TECNICO_REDES"
+  nombre           String            @db.VarChar(150)
+  descripcion      String?           @db.VarChar(300)
+  registraUnidades Boolean           @default(false) @map("registra_unidades") // true si el técnico registra una cantidad al completar
+  labelUnidades    String?           @db.VarChar(100) @map("label_unidades") // ej: "PCs con impresora instalada"
+
+  @@index([procesoId])
+  @@map("pasos_definicion")
 }

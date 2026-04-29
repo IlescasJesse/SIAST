@@ -3,7 +3,21 @@
     "allow": [
       "Bash(npx vite:*)",
       "Bash(npx prisma *)",
-      "Bash(cmd *)"
+      "Bash(cmd *)",
+      "Bash(npm show *)",
+      "Bash(npm install *)",
+      "Bash(xargs grep *)",
+      "Bash(curl *)",
+      "Bash(cp /c/Users/ilesm/Documents/SIAST/apps/web/src/pages/TicketListPage.jsx /c/Users/ilesm/Documents/SIAST/apps/web/src/pages/SolicitudListPage.jsx)",
+      "Bash(cp /c/Users/ilesm/Documents/SIAST/apps/web/src/pages/TicketDetailPage.jsx /c/Users/ilesm/Documents/SIAST/apps/web/src/pages/SolicitudDetailPage.jsx)",
+      "Bash(cp /c/Users/ilesm/Documents/SIAST/apps/web/src/pages/TicketNewPage.jsx /c/Users/ilesm/Documents/SIAST/apps/web/src/pages/SolicitudNewPage.jsx)",
+      "Bash(mysql *)",
+      "Bash(npx tsc *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\ilesm\\\\Documents\\\\SIAST\\\\packages\\\\database\\\\prisma\\\\migrations\" -Directory | Sort-Object Name | ForEach-Object { $_.Name })",
+      "Bash(npm run *)",
+      "Bash(node -e ' *)",
+      "Bash(dir *)"
     ]
-  }
+  },
+  "prefersReducedMotion": true
 }

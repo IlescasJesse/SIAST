@@ -1,5 +1,6 @@
 import { PrismaClient, PisoEdificio, Rol } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { seedProcesos } from "./seed_procesos.js";
 
 const prisma = new PrismaClient();
 
@@ -279,6 +280,12 @@ async function main() {
   });
 
   console.log(`Usuario ADMIN creado: ${admin.usuario} (id=${admin.id})`);
+
+  // ──────────────────────────────────────────────────────────────
+  // 4. PROCESOS DE FLUJO MULTI-PASO
+  // ──────────────────────────────────────────────────────────────
+  await seedProcesos(prisma);
+
   console.log("Seed completado exitosamente");
 }
 

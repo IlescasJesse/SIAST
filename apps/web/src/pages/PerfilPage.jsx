@@ -65,7 +65,7 @@ export const PerfilPage = () => {
               <Typography variant="body2" color="text.secondary">
                 {({
                   ADMIN: "Administrador",
-                  TECNICO_INFORMATICO: "Técnico en Informática",
+                  TECNICO_TI: "Técnico TI",
                   TECNICO_SERVICIOS: "Técnico en Servicios",
                   MESA_AYUDA: "Mesa de Ayuda",
                   GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",
@@ -93,7 +93,7 @@ export const PerfilPage = () => {
                   <Typography variant="body2">{user?.piso ?? "—"}</Typography>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">Tickets activos</Typography>
+                  <Typography variant="caption" color="text.secondary">Solicitudes activas</Typography>
                   <Typography variant="body2">{user?.ticketsActivos ?? 0} / 2</Typography>
                 </Grid>
               </>

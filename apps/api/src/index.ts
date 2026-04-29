@@ -7,12 +7,13 @@ import helmet from "helmet";
 import morgan from "morgan";
 
 import authRoutes from "./routes/auth.routes.js";
-import ticketsRoutes from "./routes/tickets.routes.js";
+import ticketsRoutes from "./routes/tickets.routes.js"; // expuesto como /api/solicitudes
 import usuariosRoutes from "./routes/usuarios.routes.js";
 import empleadosRoutes from "./routes/empleados.routes.js";
 import catalogosRoutes from "./routes/catalogos.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import recursosRoutes from "./routes/recursos.routes.js";
+import metricasRoutes from "./routes/metricas.routes.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { configurarSockets } from "./sockets/tickets.socket.js";
 import { setIo } from "./services/notificaciones.service.js";
@@ -59,13 +60,15 @@ app.use(express.json());
 // Rutas
 // ============================================================
 app.use("/api/auth", authRoutes);
-app.use("/api/tickets", ticketsRoutes);
+app.use("/api/solicitudes", ticketsRoutes);
+app.use("/api/tickets", ticketsRoutes); // alias de retrocompatibilidad
 app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/empleados", empleadosRoutes);
 app.use("/api/employee", empleadosRoutes); // alias para módulo 3D
 app.use("/api/catalogos", catalogosRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/recursos", recursosRoutes);
+app.use("/api/metricas", metricasRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV });

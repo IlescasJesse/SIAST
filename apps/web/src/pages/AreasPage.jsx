@@ -19,6 +19,7 @@ import {
   Divider,
   TextField,
   FormControl,
+  FormControlLabel,
   InputLabel,
   Select,
   MenuItem,
@@ -26,6 +27,7 @@ import {
   CircularProgress,
   Alert,
   IconButton,
+  Switch,
   Tooltip,
   Dialog,
   DialogTitle,
@@ -125,16 +127,9 @@ export const AreasPage = () => {
   // Área seleccionada en el grid (puede ser de cualquier piso)
   const [selectedId, setSelectedId] = useState(null);
 
-  // Panel lateral — formulario de edición
-  const [editForm, setEditForm] = useState(null); // null | { ...area, _dirty: bool }
-  const [saving, setSaving] = useState(false);
+  // Panel lateral — formulario de edición (incluye esSalaJuntas directamente)
+  const [editForm, setEditForm] = useState(null); // null | { ...area, esSalaJuntas, _dirty: bool }
   const [saveError, setSaveError] = useState("");
-
-  // Selects SIRH en cascada
-  const [sirhSub, setSirhSub] = useState(""); // nombre subsecretaría
-  const [sirhDir, setSirhDir] = useState(""); // nombre dirección
-  const [sirhCoor, setSirhCoor] = useState(""); // nombre coordinación
-  const [sirhDep, setSirhDep] = useState(""); // nombre departamento
 
   // Navegación: ala (0=IZQ, 1=DER) y piso (0-3)
   const [alaIdx, setAlaIdx] = useState(0);
@@ -143,6 +138,7 @@ export const AreasPage = () => {
   // Modal Nueva Área
   const [modalOpen, setModalOpen] = useState(false);
   const [nuevaForm, setNuevaForm] = useState(EMPTY_NUEVA);
+  const [nuevaAdscripcion, setNuevaAdscripcion] = useState(null);
   const [nuevaError, setNuevaError] = useState("");
   const [nuevaSaving, setNuevaSaving] = useState(false);
 
@@ -168,9 +164,31 @@ export const AreasPage = () => {
     try { localStorage.setItem("siast:areas:pending", JSON.stringify(next)); } catch {}
   };
 
+  // ── Auto-guardado en localStorage al instante ─────────────────────────────
+  // Cualquier cambio en el form (nombre, coords, sala de juntas) se persiste
+  // automáticamente sin que el usuario tenga que hacer clic en ningún botón.
+  useEffect(() => {
+    if (!editForm || !editForm._dirty) return;
+    setPendingChanges((prev) => {
+      const next = {
+        ...prev,
+        [editForm.id]: {
+          label: editForm.label,
+          gridX1: Number(editForm.gridX1),
+          gridY1: Number(editForm.gridY1),
+          gridX2: Number(editForm.gridX2),
+          gridY2: Number(editForm.gridY2),
+          floor: editForm.floor,
+          esSalaJuntas: editForm.esSalaJuntas ?? false,
+        },
+      };
+      try { localStorage.setItem("siast:areas:pending", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [editForm]);
+
   // Protección de cambios sin guardar
-  const isDirty = editForm?._dirty ?? false;
-  const { ConfirmDialog } = useUnsavedChanges(isDirty);
+  const { ConfirmDialog } = useUnsavedChanges(pendingCount > 0);
 
   // ── Carga inicial ──────────────────────────────────────────────────────────
 
@@ -211,16 +229,8 @@ export const AreasPage = () => {
 
   const handleSelect = useCallback((area) => {
     setSelectedId(area.id);
-    setEditForm({
-      ...area,
-      _dirty: false,
-    });
+    setEditForm({ ...area, esSalaJuntas: area.esSalaJuntas ?? false, _dirty: false });
     setSaveError("");
-    // Resetear selects SIRH
-    setSirhSub("");
-    setSirhDir("");
-    setSirhCoor("");
-    setSirhDep("");
   }, []);
 
   // ── Resize desde el grid ───────────────────────────────────────────────────
@@ -245,26 +255,6 @@ export const AreasPage = () => {
     );
   }, []);
 
-  // ── Agregar área al batch de cambios pendientes ───────────────────────────
-  // No llama a la API todavía — acumula en localStorage.
-
-  const handleGuardar = () => {
-    if (!editForm) return;
-    const next = {
-      ...pendingChanges,
-      [editForm.id]: {
-        label: editForm.label,
-        gridX1: Number(editForm.gridX1),
-        gridY1: Number(editForm.gridY1),
-        gridX2: Number(editForm.gridX2),
-        gridY2: Number(editForm.gridY2),
-        floor: editForm.floor,
-      },
-    };
-    persistPending(next);
-    setEditForm((prev) => (prev ? { ...prev, _dirty: false } : prev));
-    setSaveError("");
-  };
 
   // ── Guardar TODOS los cambios pendientes en la API ────────────────────────
 
@@ -282,6 +272,7 @@ export const AreasPage = () => {
           gridY1: ch.gridY1,
           gridX2: ch.gridX2,
           gridY2: ch.gridY2,
+          esSalaJuntas: ch.esSalaJuntas,
         });
       }
       persistPending({});
@@ -324,77 +315,19 @@ export const AreasPage = () => {
     }
   };
 
-  // ── SIRH — cálculo de listas en cascada ───────────────────────────────────
-
-  const subsecretarias = useMemo(
-    () => (sirh ? sirh.nivel2 ?? [] : []),
-    [sirh],
-  );
-
-  const findParent = useMemo(() => {
-    if (!sirh) return () => null;
-    return {
-      dir: inferirPadres(sirh.nivel3 ?? [], sirh.nivel2 ?? []),
-      coor: inferirPadres(sirh.nivel4 ?? [], sirh.nivel3 ?? []),
-      dep: inferirPadres(sirh.nivel5 ?? [], sirh.nivel4 ?? []),
-    };
+  // ── SIRH — lista plana de todas las adscripciones (para modal Nueva Área) ──
+  const todasAdscripciones = useMemo(() => {
+    if (!sirh) return [];
+    const niveles = [
+      { items: sirh.nivel2 ?? [], tipo: "Subsecretaría" },
+      { items: sirh.nivel3 ?? [], tipo: "Dirección" },
+      { items: sirh.nivel4 ?? [], tipo: "Coordinación" },
+      { items: sirh.nivel5 ?? [], tipo: "Departamento" },
+    ];
+    return niveles.flatMap(({ items, tipo }) =>
+      items.map((item) => ({ nombre: item.nombre, tipo, nivel: item.nivel ?? null }))
+    );
   }, [sirh]);
-
-  const direcciones = useMemo(() => {
-    if (!sirh || !sirhSub) return sirh?.nivel3 ?? [];
-    return (sirh.nivel3 ?? []).filter(
-      (d) => findParent.dir(d.nombre) === sirhSub,
-    );
-  }, [sirh, sirhSub, findParent]);
-
-  const coordinaciones = useMemo(() => {
-    if (!sirh || !sirhDir) return sirh?.nivel4 ?? [];
-    return (sirh.nivel4 ?? []).filter(
-      (c) => findParent.coor(c.nombre) === sirhDir,
-    );
-  }, [sirh, sirhDir, findParent]);
-
-  const departamentos = useMemo(() => {
-    if (!sirh || !sirhCoor) return sirh?.nivel5 ?? [];
-    return (sirh.nivel5 ?? []).filter(
-      (d) => findParent.dep(d.nombre) === sirhCoor,
-    );
-  }, [sirh, sirhCoor, findParent]);
-
-  // SIRH — cualquier nivel seleccionado actualiza el label del área
-  const handleSubChange = (nombre) => {
-    setSirhSub(nombre);
-    setSirhDir("");
-    setSirhCoor("");
-    setSirhDep("");
-    if (nombre && editForm) {
-      setEditForm((prev) => ({ ...prev, label: nombre, _dirty: true }));
-    }
-  };
-
-  const handleDirChange = (nombre) => {
-    setSirhDir(nombre);
-    setSirhCoor("");
-    setSirhDep("");
-    if (nombre && editForm) {
-      setEditForm((prev) => ({ ...prev, label: nombre, _dirty: true }));
-    }
-  };
-
-  const handleCoorChange = (nombre) => {
-    setSirhCoor(nombre);
-    setSirhDep("");
-    if (nombre && editForm) {
-      setEditForm((prev) => ({ ...prev, label: nombre, _dirty: true }));
-    }
-  };
-
-  const handleDepChange = (nombre) => {
-    setSirhDep(nombre);
-    if (nombre && editForm) {
-      setEditForm((prev) => ({ ...prev, label: nombre, _dirty: true }));
-    }
-  };
 
   // ── Modal Nueva Área ───────────────────────────────────────────────────────
 
@@ -423,9 +356,14 @@ export const AreasPage = () => {
         gridY1: y1,
         gridX2: x2,
         gridY2: y2,
+        ...(nuevaAdscripcion && {
+          adscripcionNombre: nuevaAdscripcion.nombre,
+          adscripcionNivel: nuevaAdscripcion.nivel ?? null,
+        }),
       });
       setModalOpen(false);
       setNuevaForm(EMPTY_NUEVA);
+      setNuevaAdscripcion(null);
       await loadAreas();
     } catch (err) {
       setNuevaError(err.response?.data?.error ?? "Error al crear el área");
@@ -672,6 +610,8 @@ export const AreasPage = () => {
                       floorLabel={`PISO ${pisoActivo.label} — ${zona.label}`}
                       colStart={zona.colStart}
                       colCount={zona.colCount}
+                      zoneKey={zona.key}
+                      flipY
                     />
                   </Box>
                 );
@@ -693,28 +633,18 @@ export const AreasPage = () => {
               {/* Panel de edición — solo cuando hay área seleccionada */}
               {editForm && (
                 <EditPanel
+                  key={editForm.id}
                   form={editForm}
                   setEdit={setEdit}
-                  saving={false}
                   saveError={saveError}
                   isPending={!!pendingChanges[editForm.id]}
-                  onGuardar={handleGuardar}
                   onCancelar={handleCancelar}
                   onEliminar={handleEliminar}
                   sirhLoading={sirhLoading}
                   sirhError={sirhError}
-                  subsecretarias={subsecretarias}
-                  direcciones={direcciones}
-                  coordinaciones={coordinaciones}
-                  departamentos={departamentos}
-                  sirhSub={sirhSub}
-                  sirhDir={sirhDir}
-                  sirhCoor={sirhCoor}
-                  sirhDep={sirhDep}
-                  setSirhSub={handleSubChange}
-                  setSirhDir={handleDirChange}
-                  setSirhCoor={handleCoorChange}
-                  setSirhDep={handleDepChange}
+                  todasAdscripciones={todasAdscripciones}
+                  esSalaJuntas={editForm.esSalaJuntas ?? false}
+                  setEsSalaJuntas={(val) => setEdit("esSalaJuntas", val)}
                 />
               )}
 
@@ -785,6 +715,33 @@ export const AreasPage = () => {
             </Select>
           </FormControl>
 
+          <Autocomplete
+            options={todasAdscripciones}
+            groupBy={(opt) => opt.tipo}
+            getOptionLabel={(opt) => opt.nombre}
+            value={nuevaAdscripcion}
+            onChange={(_, val) => setNuevaAdscripcion(val)}
+            loading={sirhLoading}
+            noOptionsText={sirhError || "Sin resultados"}
+            isOptionEqualToValue={(opt, val) => opt.nombre === val.nombre}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Adscripción SIRH (opcional)"
+                helperText="Busca subsecretaría, dirección, coordinación o departamento"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {sirhLoading ? <CircularProgress size={16} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
+
           <Typography variant="caption" color="text.secondary" fontWeight={600}>
             Coordenadas en la cuadrícula (0-based) — valores por defecto visibles en el grid
           </Typography>
@@ -821,27 +778,22 @@ export const AreasPage = () => {
 function EditPanel({
   form,
   setEdit,
-  saving,
   saveError,
   isPending,
-  onGuardar,
   onCancelar,
   onEliminar,
   sirhLoading,
   sirhError,
-  subsecretarias,
-  direcciones,
-  coordinaciones,
-  departamentos,
-  sirhSub,
-  sirhDir,
-  sirhCoor,
-  sirhDep,
-  setSirhSub,
-  setSirhDir,
-  setSirhCoor,
-  setSirhDep,
+  todasAdscripciones,
+  esSalaJuntas,
+  setEsSalaJuntas,
 }) {
+  const [adscripcion, setAdscripcion] = useState(null);
+
+  const handleAdscripcionChange = (_, val) => {
+    setAdscripcion(val);
+    if (val) setEdit("label", val.nombre);
+  };
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "auto" }}>
       {/* Header del panel */}
@@ -885,6 +837,21 @@ function EditPanel({
           required
         />
 
+        <FormControlLabel
+          control={
+            <Switch
+              checked={esSalaJuntas}
+              onChange={(e) => setEsSalaJuntas(e.target.checked)}
+              size="small"
+            />
+          }
+          label={
+            <Typography variant="body2" color="text.secondary">
+              Sala de juntas / Salon
+            </Typography>
+          }
+        />
+
         <Divider />
 
         {/* Asignar desde SIRH */}
@@ -893,61 +860,39 @@ function EditPanel({
         </Typography>
 
         {sirhError ? (
-          <Alert severity="warning" sx={{ fontSize: 11 }}>
-            {sirhError}
-          </Alert>
-        ) : sirhLoading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
-            <CircularProgress size={20} />
-          </Box>
+          <Alert severity="warning" sx={{ fontSize: 11 }}>{sirhError}</Alert>
         ) : (
           <>
             <Autocomplete
               size="small"
-              options={subsecretarias.map((s) => s.nombre)}
-              value={sirhSub || null}
-              onChange={(_, v) => setSirhSub(v ?? "")}
-              renderInput={(params) => <TextField {...params} label="Subsecretaría" />}
+              options={todasAdscripciones}
+              groupBy={(opt) => opt.tipo}
+              getOptionLabel={(opt) => opt.nombre}
+              value={adscripcion}
+              onChange={handleAdscripcionChange}
+              loading={sirhLoading}
               noOptionsText="Sin resultados"
-              clearOnEscape
+              isOptionEqualToValue={(opt, val) => opt.nombre === val.nombre}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Buscar adscripción SIRH"
+                  helperText="Subsecretaría, dirección, coordinación o departamento"
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {sirhLoading ? <CircularProgress size={14} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
             />
-
-            <Autocomplete
-              size="small"
-              options={direcciones.map((d) => d.nombre)}
-              value={sirhDir || null}
-              onChange={(_, v) => setSirhDir(v ?? "")}
-              disabled={subsecretarias.length > 0 && !sirhSub}
-              renderInput={(params) => <TextField {...params} label="Dirección" />}
-              noOptionsText="Sin resultados"
-              clearOnEscape
-            />
-
-            <Autocomplete
-              size="small"
-              options={coordinaciones.map((c) => c.nombre)}
-              value={sirhCoor || null}
-              onChange={(_, v) => setSirhCoor(v ?? "")}
-              disabled={direcciones.length > 0 && !sirhDir}
-              renderInput={(params) => <TextField {...params} label="Coordinación" />}
-              noOptionsText="Sin resultados"
-              clearOnEscape
-            />
-
-            <Autocomplete
-              size="small"
-              options={departamentos.map((d) => d.nombre)}
-              value={sirhDep || null}
-              onChange={(_, v) => setSirhDep(v ?? "")}
-              disabled={coordinaciones.length > 0 && !sirhCoor}
-              renderInput={(params) => <TextField {...params} label="Departamento" />}
-              noOptionsText="Sin resultados"
-              clearOnEscape
-            />
-
-            {(sirhSub || sirhDir || sirhCoor || sirhDep) && (
+            {adscripcion && (
               <Typography variant="caption" color="success.main" fontWeight={600}>
-                Al guardar se vinculará: {sirhDep || sirhCoor || sirhDir || sirhSub}
+                Al guardar: {adscripcion.nombre}
               </Typography>
             )}
           </>
@@ -992,24 +937,15 @@ function EditPanel({
             <DeleteIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        <Box sx={{ display: "flex", gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {isPending && (
+            <Typography variant="caption" color="warning.dark" fontWeight={700} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <SaveIcon sx={{ fontSize: 13 }} /> Auto-guardado
+            </Typography>
+          )}
           <Button size="small" onClick={onCancelar}>
-            Cancelar
+            Cerrar
           </Button>
-          <Tooltip title="Agrega este cambio a la cola — usa 'Guardar todo' para persistirlos en la base de datos">
-            <span>
-              <Button
-                size="small"
-                variant="contained"
-                color={isPending ? "warning" : "primary"}
-                onClick={onGuardar}
-                disabled={!form._dirty}
-                startIcon={<SaveIcon sx={{ fontSize: "14px !important" }} />}
-              >
-                {isPending ? "Actualizar" : "Agregar"}
-              </Button>
-            </span>
-          </Tooltip>
         </Box>
       </Box>
     </Box>
