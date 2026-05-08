@@ -13,9 +13,9 @@
 **Plans:** 3 planes
 
 ### Plans
-- [ ] 01-01-PLAN.md — Seguridad backend core: JWT sin fallback, CORS allowlist, OTP sin devCodigo, CSPRNG
-- [ ] 01-02-PLAN.md — Rate limiting + legacy cleanup: authRateLimiter, eliminar login-rfc, refreshToken con verificarSesion
-- [ ] 01-03-PLAN.md — Estabilidad: Prisma client sync, FOLIO_PREFIX corregido, Building3D audit
+- [x] 01-01-PLAN.md — Seguridad backend core: JWT sin fallback, CORS allowlist, OTP sin devCodigo, CSPRNG
+- [x] 01-02-PLAN.md — Rate limiting + legacy cleanup: authRateLimiter, eliminar login-rfc, refreshToken con verificarSesion
+- [x] 01-03-PLAN.md — Estabilidad: Prisma client sync, FOLIO_PREFIX corregido, Building3D audit
 
 ### Deliverables
 - JWT secret forzado desde env var (sin fallback)
