@@ -1,12 +1,12 @@
+import { randomInt } from "crypto";
 import { prisma } from "../config/database.js";
 import { enviarOtp, type EnvioOtpResult } from "./whatsapp.service.js";
 import { fetchEmpleadoByRfc, updateTelefonoEnSirh } from "./sirh.service.js";
 
 const OTP_TTL_MINUTOS = 10;
 
-/** Genera un código numérico de 6 dígitos */
-const generarCodigo = (): string =>
-  Math.floor(100000 + Math.random() * 900000).toString();
+/** Genera un código numérico de 6 dígitos usando CSPRNG */
+const generarCodigo = (): string => randomInt(100000, 999999).toString();
 
 /** Enmascara el teléfono: "9512345678" → "******5678" */
 export const maskTelefono = (tel: string): string =>

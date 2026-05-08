@@ -1,7 +1,10 @@
 import jwt from "jsonwebtoken";
 import type { JwtPayload } from "../types/index.js";
 
-const SECRET = process.env.JWT_SECRET ?? "siast_dev_secret";
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET env var is required");
+}
+const SECRET = process.env.JWT_SECRET;
 const EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "8h";
 
 export const signToken = (
