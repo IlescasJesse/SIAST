@@ -284,12 +284,19 @@ export async function enviarOtp(
   }
 
   // ── Modo consola (fallback) ───────────────────────────────────────────────
+  if (process.env.NODE_ENV === "production") {
+    throw Object.assign(
+      new Error("Servicio OTP no disponible. Contacte soporte."),
+      { status: 503 },
+    );
+  }
+
+  // DEV: imprimir en consola únicamente, NUNCA en response body
   console.log("\n┌──────────────────────────────────────────────┐");
   console.log(`│  OTP CONSOLA → ******${telefono.slice(-4)}                  │`);
   console.log(`│  RFC/Nombre: ${nombre.slice(0, 25).padEnd(25)}   │`);
   console.log(`│  Código: ${codigo}  (WhatsApp no disponible)  │`);
   console.log("└──────────────────────────────────────────────┘\n");
 
-  // Siempre devolver devCodigo en fallback para que aparezca en el UI
-  return { ok: true, devCodigo: codigo };
+  return { ok: true }; // SIN devCodigo
 }

@@ -111,7 +111,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     }
 
     const token = authHeader.split(" ")[1];
-    const SECRET = process.env.JWT_SECRET ?? "siast_dev_secret";
+    const SECRET = process.env.JWT_SECRET!; // validado en startup (index.ts)
 
     let payload: JwtPayload & { iat?: number; exp?: number };
     try {
