@@ -29,15 +29,6 @@ export const useAuthStore = create((set) => ({
     return data;
   },
 
-  // ── Legacy (sin OTP) ──────────────────────────────────────
-  loginRFC: async (rfc) => {
-    const { data } = await api.post("/api/auth/login-rfc", { rfc });
-    localStorage.setItem("siast_token", data.token);
-    localStorage.setItem("siast_user", JSON.stringify(data.user));
-    set({ user: data.user, token: data.token });
-    return data;
-  },
-
   loginStaff: async (usuario, password) => {
     const { data } = await api.post("/api/auth/login", { usuario, password });
     localStorage.setItem("siast_token", data.token);

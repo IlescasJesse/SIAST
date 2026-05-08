@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import * as authService from "../services/auth.service.js";
 import * as otpService from "../services/otp.service.js";
-import { cerrarSesion } from "../services/sesiones.service.js";
+import { cerrarSesion, verificarSesion } from "../services/sesiones.service.js";
 import type { AuthRequest } from "../types/index.js";
 import { prisma } from "../config/database.js";
 import { signToken } from "../config/jwt.js";
@@ -13,16 +13,6 @@ const getMeta = (req: Request) => ({
   ipAddress: (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? undefined,
   userAgent: req.headers["user-agent"]?.slice(0, 300) ?? undefined,
 });
-
-export const loginRFC = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { rfc } = req.body as { rfc: string };
-    const result = await authService.loginRFC(rfc, getMeta(req));
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-};
 
 // ── OTP ──────────────────────────────────────────────────────
 
@@ -111,12 +101,11 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     }
 
     const token = authHeader.split(" ")[1];
-    const SECRET = process.env.JWT_SECRET!; // validado en startup (index.ts)
 
     let payload: JwtPayload & { iat?: number; exp?: number };
     try {
       // Permitir tokens expirados para poder renovarlos
-      payload = jwt.verify(token, SECRET, { ignoreExpiration: true }) as JwtPayload & {
+      payload = jwt.verify(token, process.env.JWT_SECRET!, { ignoreExpiration: true }) as JwtPayload & {
         iat?: number;
         exp?: number;
       };
@@ -132,6 +121,16 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
       res.status(401).json({ error: "Sesión expirada. Por favor inicia sesión de nuevo." });
       return;
     }
+
+    // ── SEC-05: verificar que la sesión no fue revocada ──────────────────────
+    if (payload.jti) {
+      const sesionActiva = await verificarSesion(payload.jti);
+      if (!sesionActiva) {
+        res.status(401).json({ error: "Sesión revocada. Por favor inicia sesión de nuevo." });
+        return;
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Emitir nuevo token con el mismo payload (sin iat/exp anteriores)
     const { iat, exp, ...restPayload } = payload;
