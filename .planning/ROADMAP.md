@@ -10,6 +10,12 @@
 **Goal:** Eliminar vulnerabilidades críticas y deuda técnica bloqueante.
 **Requirements:** SEC-01 a SEC-05, STB-01 a STB-03
 **Estimated effort:** 1-2 días
+**Plans:** 3 planes
+
+### Plans
+- [ ] 01-01-PLAN.md — Seguridad backend core: JWT sin fallback, CORS allowlist, OTP sin devCodigo, CSPRNG
+- [ ] 01-02-PLAN.md — Rate limiting + legacy cleanup: authRateLimiter, eliminar login-rfc, refreshToken con verificarSesion
+- [ ] 01-03-PLAN.md — Estabilidad: Prisma client sync, FOLIO_PREFIX corregido, Building3D audit
 
 ### Deliverables
 - JWT secret forzado desde env var (sin fallback)
