@@ -20,23 +20,26 @@ import { setIo } from "./services/notificaciones.service.js";
 import { syncEmpleados } from "./services/sirh.service.js";
 import { initWhatsApp } from "./services/whatsapp.service.js";
 
+// ── STARTUP: validación de variables de entorno obligatorias ──────────────────
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET env var is required");
+}
+if (!process.env.CORS_ORIGINS) {
+  throw new Error("CORS_ORIGINS env var is required");
+}
+const corsOrigins = process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+// ─────────────────────────────────────────────────────────────────────────────
+
 const app = express();
 const httpServer = createServer(app);
 const port = Number(process.env.PORT ?? 5101);
-
-const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:5173";
-const VIEWER_URL = process.env.VIEWER_URL ?? "http://localhost:5174";
-const IS_PROD = process.env.NODE_ENV === "production";
-
-// En desarrollo permite cualquier origen (acceso desde la red local)
-const corsOrigin = IS_PROD ? [FRONTEND_URL, VIEWER_URL, "http://localhost:3008"] : true;
 
 // ============================================================
 // Socket.IO
 // ============================================================
 const io = new Server(httpServer, {
   cors: {
-    origin: corsOrigin,
+    origin: corsOrigins,
     credentials: true,
   },
 });
@@ -48,7 +51,7 @@ setIo(io);
 // ============================================================
 app.use(
   cors({
-    origin: corsOrigin,
+    origin: corsOrigins,
     credentials: true,
   }),
 );
