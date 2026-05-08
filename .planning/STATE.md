@@ -7,11 +7,16 @@
 
 ## Current Phase
 
+**Phase 2: Features Pendientes — Procesos y Flujos** — Context gathered, ready for planning
+- Status: Context captured (2026-05-08)
+- Resume: `.planning/phases/02-features-pendientes-procesos-y-flujos/02-CONTEXT.md`
+
+## Phase 1 (Completed)
+
 **Phase 1: Seguridad y Estabilidad** — COMPLETE
 - Status: Complete
 - Plans: 3 (01-01, 01-02, 01-03) in 2 waves
 - Last Activity: 2026-05-08
-- Current focus: Wave 2 — STB-01/02/03 (COMPLETO)
 - Plans completed: 01-01, 01-02, 01-03
 - Decisions: FOLIO_PREFIX corregido (13 keys correctos), Prisma client sincronizado, Building3D limpio
 
@@ -20,7 +25,7 @@
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
-| 2 | Features Pendientes — Procesos y Flujos | 🔲 Pending |
+| 2 | Features Pendientes — Procesos y Flujos | 📋 Context captured |
 | 3 | Métricas Operacionales | 🔲 Pending |
 | 4 | Reportes Exportables | 🔲 Pending |
 
