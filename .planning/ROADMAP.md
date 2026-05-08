@@ -40,6 +40,13 @@
 **Goal:** ProcesoDefinicion DB operativa; flujos SIRH/SIAST activos; escalamiento RM vinculado.
 **Requirements:** PRO-01 a PRO-04, NOT-01 a NOT-02
 **Depends on:** Phase 1 complete
+**Plans:** 4 planes
+
+### Plans
+- [ ] 02-01-PLAN.md — Seed ProcesoDefinicion: SIRH y SIAST como flujos DIRECTO en DB
+- [ ] 02-02-PLAN.md — tickets.service.ts: migrar a DB + 6 bug fixes de flujo de pasos
+- [ ] 02-03-PLAN.md — metricas.controller.ts: migrar a DB, eliminar PROCESO_MAP import
+- [ ] 02-04-PLAN.md — Limpieza final: eliminar PROCESO_MAP de @stf/shared + seed autónomo
 
 ### Deliverables
 - Tickets leen proceso desde DB (`ProcesoDefinicion`) en lugar de `PROCESO_MAP` hardcodeado
