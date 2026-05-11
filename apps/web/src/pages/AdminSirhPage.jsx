@@ -14,6 +14,8 @@ import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import UpdateIcon from "@mui/icons-material/Update";
 import WarningIcon from "@mui/icons-material/Warning";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import DownloadIcon from "@mui/icons-material/Download";
+import * as XLSX from "xlsx";
 import { getSirhStatus, triggerSirhSync, getSirhEmpleados } from "../api/admin.js";
 import { useNotifStore } from "../store/notificaciones.js";
 
@@ -43,9 +45,10 @@ export function AdminSirhPage() {
   const [rowsPerPage]           = useState(50);
   const [search, setSearch]     = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState("");
-  const [syncMsg, setSyncMsg]   = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError]         = useState("");
+  const [syncMsg, setSyncMsg]     = useState("");
   const searchTimer             = useRef(null);
 
   const loadStatus = useCallback(async () => {
@@ -111,6 +114,40 @@ export function AdminSirhPage() {
     };
   }, [loadStatus, loadEmpleados]);
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const limit = 200;
+      let page = 1;
+      let all = [];
+      while (true) {
+        const res = await getSirhEmpleados({ page, limit, activo: "true" });
+        all = all.concat(res.data);
+        if (all.length >= res.meta.total) break;
+        page++;
+      }
+      const rows = all.map((emp) => ({
+        RFC: emp.rfc,
+        "Nombre completo": emp.nombreCompleto,
+        Departamento: emp.departamento ?? "",
+        Puesto: emp.puesto ?? "",
+        Piso: emp.piso ?? "",
+        Teléfono: emp.telefono ?? "",
+        Email: emp.email ?? "",
+        Actualizado: emp.updatedAt ? new Date(emp.updatedAt).toLocaleString("es-MX") : "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Empleados SIRH");
+      const fecha = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `empleados_sirh_${fecha}.xlsx`);
+    } catch (e) {
+      setError(e?.response?.data?.error ?? "Error al exportar");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleSync = async () => {
     if (syncing) return;
     try {
@@ -146,14 +183,24 @@ export function AdminSirhPage() {
             a SIRH en tiempo real.
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : <SyncIcon />}
-          onClick={handleSync}
-          disabled={syncing || status?.habilitado === false}
-        >
-          {syncing ? "Sincronizando..." : "Sincronizar ahora"}
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+            onClick={handleExport}
+            disabled={exporting || loading}
+          >
+            {exporting ? "Exportando..." : "Exportar XLSX"}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : <SyncIcon />}
+            onClick={handleSync}
+            disabled={syncing || status?.habilitado === false}
+          >
+            {syncing ? "Sincronizando..." : "Sincronizar ahora"}
+          </Button>
+        </Stack>
       </Stack>
 
       {status?.habilitado === false && (
