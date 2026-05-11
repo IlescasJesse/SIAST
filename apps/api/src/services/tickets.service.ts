@@ -3,7 +3,7 @@ import { SubcategoriaTicket, CategoriaTicket } from "@prisma/client";
 import type { JwtPayload } from "../types/index.js";
 import * as notif from "./notificaciones.service.js";
 import { enviarNotifTicketCreado } from "./whatsapp.service.js";
-import { FOLIO_PREFIX, getProcesoInfo } from "@stf/shared";
+import { FOLIO_PREFIX } from "@stf/shared";
 
 const SUBCATEGORIAS_VALIDAS = new Set(Object.values(SubcategoriaTicket));
 const CATEGORIAS_VALIDAS    = new Set(Object.values(CategoriaTicket));
@@ -77,6 +77,7 @@ export const listarTickets = async (
     user.rol === "TECNICO_SERVICIOS"
   ) {
     where.tecnicoId = user.id;
+    where.estado = { notIn: ["RESUELTO", "CANCELADO"] };
   } else if (user.rol === "GESTOR_RECURSOS_MATERIALES") {
     // El gestor ve todos los tickets de su categoría (RECURSOS_MATERIALES),
     // incluyendo los nuevos sin asignar
@@ -244,7 +245,10 @@ export const crearTicket = async (
 
   // Generar pasos del flujo de trabajo para TECNOLOGIAS según el proceso definido
   if (categoriaVal === "TECNOLOGIAS") {
-    const proceso = getProcesoInfo(subcategoriaVal, body.subTipo);
+    const proceso = await prisma.procesoDefinicion.findFirst({
+      where: { subcategoria: subcategoriaVal as never, subTipo: body.subTipo ?? null, activo: true },
+      include: { pasos: { orderBy: { orden: "asc" } } },
+    });
     if (proceso && proceso.tipoFlujo !== "PENDIENTE" && proceso.pasos.length > 0) {
       await prisma.pasoTicket.createMany({
         data: proceso.pasos.map((paso) => ({
@@ -326,6 +330,15 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
   const ticket = await prisma.ticket.findFirst({ where: { id, activo: true } });
   if (!ticket) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
 
+  // Guard: tickets con flujo de pasos no se asignan manualmente (D-12)
+  const pasosExistentes = await prisma.pasoTicket.findMany({ where: { ticketId: id } });
+  if (pasosExistentes.length > 0) {
+    throw Object.assign(
+      new Error("Este ticket usa flujo de pasos. Asignar técnico desde el panel de pasos."),
+      { status: 400 },
+    );
+  }
+
   const tecnico = await prisma.usuario.findFirst({
     where: { id: tecnicoId, activo: true },
   });
@@ -394,6 +407,19 @@ export const cambiarEstado = async (
       new Error(`Transición no permitida: ${ticket.estado} → ${body.estado}`),
       { status: 400 },
     );
+  }
+
+  // Guard: no resolver ticket con pasos pendientes (D-10)
+  if (body.estado === "RESUELTO") {
+    const pasosPendientes = await prisma.pasoTicket.findMany({
+      where: { ticketId: id, estado: { not: "COMPLETADO" } },
+    });
+    if (pasosPendientes.length > 0) {
+      throw Object.assign(
+        new Error("El ticket tiene pasos pendientes. Completa todos los pasos para resolver."),
+        { status: 400 },
+      );
+    }
   }
 
   const fechas: Record<string, Date> = {};
@@ -472,6 +498,13 @@ export const completarPaso = async (
   if (paso.estado === "COMPLETADO") {
     throw Object.assign(new Error("El paso ya fue completado"), { status: 400 });
   }
+  // Validar identidad del técnico, no solo el rol (D-09)
+  if (paso.tecnicoId !== null && paso.tecnicoId !== user.id) {
+    throw Object.assign(
+      new Error("Solo el técnico asignado puede completar este paso"),
+      { status: 403 },
+    );
+  }
   if (paso.rolRequerido !== user.rol) {
     throw Object.assign(
       new Error("No tienes el rol requerido para completar este paso"),
@@ -489,13 +522,21 @@ export const completarPaso = async (
     },
   });
 
-  // Verificar si hay más pasos pendientes
+  // Verificar si hay más pasos pendientes (D-08: buscar por orden > actual, no por orden exacto)
   const siguientePaso = await prisma.pasoTicket.findFirst({
-    where: { ticketId, orden: paso.orden + 1, estado: "PENDIENTE" },
+    where: { ticketId, orden: { gt: paso.orden }, estado: { not: "COMPLETADO" } },
+    orderBy: { orden: "asc" },
   });
 
   if (!siguientePaso) {
     // Todos los pasos completados → resolver ticket
+    // Leer estado real antes de actualizar (D-13)
+    const ticketPreResolve = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { estado: true },
+    });
+    const estadoAnteriorReal = ticketPreResolve?.estado ?? "EN_PROGRESO";
+
     const ticket = await prisma.ticket.update({
       where: { id: ticketId },
       data: { estado: "RESUELTO", fechaResolucion: new Date() },
@@ -504,7 +545,7 @@ export const completarPaso = async (
     await prisma.historialTicket.create({
       data: {
         ticketId,
-        estadoAnterior: "EN_PROGRESO",
+        estadoAnterior: estadoAnteriorReal,
         estadoNuevo: "RESUELTO",
         usuarioId: user.id,
         comentario: "Todos los pasos completados",
@@ -512,7 +553,7 @@ export const completarPaso = async (
     });
     await notif.emitirCambioEstado({
       ticketId,
-      estadoAnterior: "EN_PROGRESO",
+      estadoAnterior: estadoAnteriorReal,
       estadoNuevo: "RESUELTO",
       empleadoRfc: ticket.empleadoRfc,
       tecnicoId: ticket.tecnicoId ?? undefined,
