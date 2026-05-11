@@ -15,6 +15,7 @@ async function main() {
   await prisma.notificacion.deleteMany({});
   await prisma.comentario.deleteMany({});
   await prisma.historialTicket.deleteMany({});
+  await prisma.pasoTicket.deleteMany({});
   await prisma.ticket.deleteMany({});
   await prisma.usuario.deleteMany({});
 
