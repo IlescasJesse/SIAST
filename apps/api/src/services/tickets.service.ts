@@ -3,7 +3,7 @@ import { SubcategoriaTicket, CategoriaTicket } from "@prisma/client";
 import type { JwtPayload } from "../types/index.js";
 import * as notif from "./notificaciones.service.js";
 import { enviarNotifTicketCreado } from "./whatsapp.service.js";
-import { FOLIO_PREFIX, getProcesoInfo } from "@stf/shared";
+import { FOLIO_PREFIX } from "@stf/shared";
 
 const SUBCATEGORIAS_VALIDAS = new Set(Object.values(SubcategoriaTicket));
 const CATEGORIAS_VALIDAS    = new Set(Object.values(CategoriaTicket));
@@ -77,6 +77,7 @@ export const listarTickets = async (
     user.rol === "TECNICO_SERVICIOS"
   ) {
     where.tecnicoId = user.id;
+    where.estado = { notIn: ["RESUELTO", "CANCELADO"] };
   } else if (user.rol === "GESTOR_RECURSOS_MATERIALES") {
     // El gestor ve todos los tickets de su categoría (RECURSOS_MATERIALES),
     // incluyendo los nuevos sin asignar
@@ -242,21 +243,22 @@ export const crearTicket = async (
     include: ticketInclude,
   });
 
-  // Generar pasos del flujo de trabajo para TECNOLOGIAS según el proceso definido
-  if (categoriaVal === "TECNOLOGIAS") {
-    const proceso = getProcesoInfo(subcategoriaVal, body.subTipo);
-    if (proceso && proceso.tipoFlujo !== "PENDIENTE" && proceso.pasos.length > 0) {
-      await prisma.pasoTicket.createMany({
-        data: proceso.pasos.map((paso) => ({
-          ticketId: ticket.id,
-          orden: paso.orden,
-          rolRequerido: paso.rolRequerido,
-          nombre: paso.nombre,
-          labelUnidades: paso.labelUnidades ?? null,
-          estado: "PENDIENTE",
-        })),
-      });
-    }
+  // Generar pasos del flujo de trabajo según el proceso definido en DB (D-01)
+  const proceso = await prisma.procesoDefinicion.findFirst({
+    where: { subcategoria: subcategoriaVal as never, subTipo: body.subTipo ?? null, activo: true },
+    include: { pasos: { orderBy: { orden: "asc" } } },
+  });
+  if (proceso && proceso.pasos.length > 0) {
+    await prisma.pasoTicket.createMany({
+      data: proceso.pasos.map((paso) => ({
+        ticketId: ticket.id,
+        orden: paso.orden,
+        rolRequerido: paso.rolRequerido,
+        nombre: paso.nombre,
+        labelUnidades: (paso as any).labelUnidades ?? null,
+        estado: "PENDIENTE",
+      })),
+    });
   }
 
   await prisma.historialTicket.create({
