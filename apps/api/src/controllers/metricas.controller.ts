@@ -2,7 +2,6 @@ import type { Response, NextFunction } from "express";
 import type { AuthRequest } from "../types/index.js";
 import { prisma } from "../config/database.js";
 import type { MetricasSolicitudesResponse, MetricaTecnico, MetricaProceso } from "@stf/shared";
-import { getProcesoKey, PROCESO_MAP } from "@stf/shared";
 import type { Rol } from "@prisma/client";
 
 // ============================================================
@@ -191,8 +190,19 @@ export const metricasProcesos = async (
     const resultado: MetricaProceso[] = [];
 
     for (const grupo of grupos) {
-      const key = getProcesoKey(grupo.subcategoria, grupo.sub_tipo);
-      const procesoInfo = PROCESO_MAP[key];
+      // Construir la clave del proceso (reemplaza getProcesoKey — D-03)
+      const key = grupo.sub_tipo
+        ? `${grupo.subcategoria}:${grupo.sub_tipo}`
+        : grupo.subcategoria;
+
+      // Leer nombre desde DB en lugar de PROCESO_MAP (D-03)
+      const procesoDb = await prisma.procesoDefinicion.findFirst({
+        where: {
+          subcategoria: grupo.subcategoria as never,
+          subTipo: grupo.sub_tipo ?? null,
+        },
+        select: { nombre: true },
+      });
 
       // Tickets de este grupo que están resueltos
       const ticketsResueltos = await prisma.ticket.findMany({
@@ -234,7 +244,7 @@ export const metricasProcesos = async (
 
       resultado.push({
         proceso: key,
-        nombre: procesoInfo?.nombre ?? key,
+        nombre: procesoDb?.nombre ?? key,
         totalSolicitudes: Number(grupo.total),
         resueltasATiempo,
         tiempoPromedioHoras,
