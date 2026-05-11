@@ -37,29 +37,30 @@
 
 ## Phase 2: Features Pendientes — Procesos y Flujos
 
-**Goal:** ProcesoDefinicion DB operativa; flujos SIRH/SIAST activos; escalamiento RM vinculado.
-**Requirements:** PRO-01 a PRO-04, NOT-01 a NOT-02
+**Goal:** ProcesoDefinicion DB operativa; flujos SIRH/SIAST activos; audit trail completo en pasos.
+**Requirements:** PRO-01 a PRO-03, NOT-01 a NOT-02
 **Depends on:** Phase 1 complete
-**Plans:** 4 planes
+**Plans:** 5 planes (4 base + 1 gap closure)
 
 ### Plans
 - [ ] 02-01-PLAN.md — Seed ProcesoDefinicion: SIRH y SIAST como flujos DIRECTO en DB
 - [ ] 02-02-PLAN.md — tickets.service.ts: migrar a DB + 6 bug fixes de flujo de pasos
 - [ ] 02-03-PLAN.md — metricas.controller.ts: migrar a DB, eliminar PROCESO_MAP import
 - [ ] 02-04-PLAN.md — Limpieza final: eliminar PROCESO_MAP de @stf/shared + seed autónomo
+- [ ] 02-05-PLAN.md — Gap closure: PRO-04 al backlog + historialTicket en asignarPaso (NOT-02)
 
 ### Deliverables
 - Tickets leen proceso desde DB (`ProcesoDefinicion`) en lugar de `PROCESO_MAP` hardcodeado
 - Admin puede crear/editar procesos y los tickets los respetan inmediatamente
 - Flujo SISTEMAS_INSTITUCIONALES:SIRH: pasos definidos, técnicos asignables
 - Flujo SISTEMAS_INSTITUCIONALES:SIAST: pasos definidos, técnicos asignables
-- Escalamiento Recursos Materiales desde MANTENIMIENTO_CORRECTIVO vinculado a paso SIAST
 - Socket.IO events emitidos correctamente en todos los flujos nuevos
+- `asignarPaso()` registra audit trail en `historialTicket` con técnico asignado y paso
 
 ### UAT
 - Admin edita pasos de proceso → nuevo ticket usa definición actualizada
 - Técnico SIRH puede ser asignado a paso SISTEMAS_INSTITUCIONALES:SIRH
-- Escalamiento de mantenimiento correctivo genera paso en cola de SIAST
+- Asignación de técnico a paso queda registrada en historialTicket con comentario de auditoría
 
 ---
 
@@ -107,6 +108,7 @@
 - Autenticación 2FA para staff con permisos elevados
 - Integración con directorio LDAP/AD (si Secretaría lo implementa)
 - packages/ui shadcn conectado y unificado con MUI
+- **PRO-04 (diferido)**: Escalamiento Recursos Materiales desde `MANTENIMIENTO_CORRECTIVO` vinculado a paso SIAST — requiere diseño de flujo cross-sistema (SIAST-MANTENIMIENTO); diferido en fase 2 por decisión en 02-CONTEXT.md; fase TBD
 
 ---
 
