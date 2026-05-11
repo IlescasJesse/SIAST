@@ -596,18 +596,34 @@ export const PROCESO_MAP: Record<string, ProcesoInfo> = {
       },
     ],
   },
-  // SISTEMAS_INSTITUCIONALES — pendiente de definir
+  // SISTEMAS_INSTITUCIONALES — flujo DIRECTO con 1 paso TECNICO_TI
   "SISTEMAS_INSTITUCIONALES:SIRH": {
     nombre: "Soporte SIRH",
-    tipoFlujo: "PENDIENTE",
-    descripcion: "Personal dedicado SIRH — proceso pendiente de definir.",
-    pasos: [],
+    tipoFlujo: "DIRECTO",
+    descripcion: "Atención de soporte técnico para el sistema SIRH.",
+    pasos: [
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_TI",
+        nombre: "Atención por Soporte TI",
+        descripcion: "Atención directa por técnico TI al usuario del SIRH.",
+        registraUnidades: false,
+      },
+    ],
   },
   "SISTEMAS_INSTITUCIONALES:SIAST": {
     nombre: "Soporte SIAST",
-    tipoFlujo: "PENDIENTE",
-    descripcion: "Personal dedicado SIAST — proceso pendiente de definir.",
-    pasos: [],
+    tipoFlujo: "DIRECTO",
+    descripcion: "Atención de soporte técnico para el sistema SIAST.",
+    pasos: [
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_TI",
+        nombre: "Atención por Soporte TI",
+        descripcion: "Atención directa por técnico TI al usuario del SIAST.",
+        registraUnidades: false,
+      },
+    ],
   },
 };
 
