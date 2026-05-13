@@ -43,11 +43,11 @@
 **Plans:** 5 planes (4 base + 1 gap closure)
 
 ### Plans
-- [ ] 02-01-PLAN.md — Seed ProcesoDefinicion: SIRH y SIAST como flujos DIRECTO en DB
-- [ ] 02-02-PLAN.md — tickets.service.ts: migrar a DB + 6 bug fixes de flujo de pasos
-- [ ] 02-03-PLAN.md — metricas.controller.ts: migrar a DB, eliminar PROCESO_MAP import
-- [ ] 02-04-PLAN.md — Limpieza final: eliminar PROCESO_MAP de @stf/shared + seed autónomo
-- [ ] 02-05-PLAN.md — Gap closure: PRO-04 al backlog + historialTicket en asignarPaso (NOT-02)
+- [x] 02-01-PLAN.md — Seed ProcesoDefinicion: SIRH y SIAST como flujos DIRECTO en DB
+- [x] 02-02-PLAN.md — tickets.service.ts: migrar a DB + 6 bug fixes de flujo de pasos
+- [x] 02-03-PLAN.md — metricas.controller.ts: migrar a DB, eliminar PROCESO_MAP import
+- [x] 02-04-PLAN.md — Limpieza final: eliminar PROCESO_MAP de @stf/shared + seed autónomo
+- [x] 02-05-PLAN.md — Gap closure: PRO-04 al backlog + historialTicket en asignarPaso (NOT-02)
 
 ### Deliverables
 - Tickets leen proceso desde DB (`ProcesoDefinicion`) en lugar de `PROCESO_MAP` hardcodeado
