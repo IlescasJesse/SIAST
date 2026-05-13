@@ -1,273 +1,256 @@
 ---
 phase: 02-features-pendientes-procesos-y-flujos
-reviewed: 2026-05-11T19:04:54Z
+reviewed: 2026-05-13T00:00:00Z
 depth: standard
-files_reviewed: 5
+files_reviewed: 4
 files_reviewed_list:
-  - packages/shared/src/index.ts
-  - packages/database/prisma/seed.ts
   - apps/api/src/services/tickets.service.ts
   - apps/api/src/controllers/metricas.controller.ts
+  - packages/shared/src/index.ts
   - packages/database/prisma/seed_procesos.ts
 findings:
-  critical: 3
-  warning: 6
-  info: 2
-  total: 11
+  critical: 2
+  warning: 5
+  info: 3
+  total: 10
 status: issues_found
 ---
 
-# Phase 02: Code Review Report — Procesos y Flujos
+# Fase 02: Reporte de Revisión de Código (re-revisión 2026-05-13)
 
-**Reviewed:** 2026-05-11T19:04:54Z
-**Depth:** standard
-**Files Reviewed:** 5
-**Status:** issues_found
-
-## Summary
-
-Se revisaron los cinco archivos de la fase 2 que cubren: la migración del catálogo de procesos de constante en memoria a DB (`procesoDefinicion`), los guards D-08 a D-13 en `tickets.service.ts`, la remoción de `PROCESO_MAP` del paquete compartido, y las nuevas queries de métricas.
-
-Los bugs críticos se concentran en dos áreas: (1) la autorización de `completarPaso` permite que cualquier técnico con el rol correcto complete pasos ajenos cuando no hay `tecnicoId` asignado aún, y (2) el parámetro `slaHoras` en métricas no tiene validación, permitiendo valores negativos o `NaN` que producen resultados silenciosamente incorrectos. Un tercer bug crítico es un folio potencialmente duplicado por race condition en `generarFolio`.
-
-Las advertencias cubren: N+1 queries en el loop de métricas de procesos, un seed que borra pasos en producción sin transacción (riesgo de estado parcialmente roto si el proceso falla a mitad), y varios problemas de tipo TypeScript (`as never`) que ocultan errores en tiempo de compilación.
+**Revisado:** 2026-05-13
+**Profundidad:** standard
+**Archivos revisados:** 4
+**Estado:** issues_found
 
 ---
 
-## Critical Issues
+## Resumen
 
-### CR-01: Guard D-09 incompleto — técnico sin asignar puede completar cualquier paso
-
-**File:** `apps/api/src/services/tickets.service.ts:502`
-
-**Issue:** El guard que verifica la identidad del técnico solo aplica cuando `paso.tecnicoId !== null`. Cuando un paso aún no tiene técnico asignado (`tecnicoId === null`), la condición `paso.tecnicoId !== null && paso.tecnicoId !== user.id` es `false`, por lo que cualquier técnico con el rol correcto puede completar ese paso. El guard de rol (línea 508) no suple esta brecha: todos los `TECNICO_TI` tienen el mismo rol.
-
-```typescript
-// Código actual — vulnerable cuando tecnicoId es null
-if (paso.tecnicoId !== null && paso.tecnicoId !== user.id) {
-  throw Object.assign(
-    new Error("Solo el técnico asignado puede completar este paso"),
-    { status: 403 },
-  );
-}
-```
-
-**Fix:** Rechazar explícitamente cuando el paso no tiene técnico asignado, o alternativamente permitirlo solo si el usuario tiene el permiso `pasos.completar_cualquiera`:
-
-```typescript
-// Opción A — bloquear hasta que el paso esté asignado
-if (paso.tecnicoId === null) {
-  throw Object.assign(
-    new Error("El paso aún no tiene técnico asignado. Asigna un técnico primero."),
-    { status: 400 },
-  );
-}
-if (paso.tecnicoId !== user.id) {
-  throw Object.assign(
-    new Error("Solo el técnico asignado puede completar este paso"),
-    { status: 403 },
-  );
-}
-```
+Re-revisión enfocada en los cuatro archivos del alcance declarado. Se confirma que varios hallazgos de la revisión anterior (CR-01 folio race condition, WR-04 técnico activo, IN-02 duplicación de subtipos) siguen sin corregirse. Se agregan hallazgos nuevos derivados de la implementación de `asignarPaso` / `historialTicket` (NOT-02), la validación de fechas en métricas, y el riesgo de eliminación de `PasoDefinicion` en el seed. El N+1 en `metricasTecnicos` es nuevo y se clasifica como BLOCKER porque puede agotar el pool de Prisma bajo carga real.
 
 ---
 
-### CR-02: `slaHoras` sin validación — NaN y valores negativos silenciosamente incorrectos
+## Problemas Críticos
 
-**File:** `apps/api/src/controllers/metricas.controller.ts:179`
+### CR-01: Race condition en `generarFolio` — folios duplicados bajo carga concurrente
 
-**Issue:** `Number(req.query.slaHoras ?? 24)` produce `NaN` si el cliente envía una cadena no numérica (p. ej. `?slaHoras=abc`). Con `NaN`, la comparación `diff <= slaMs` siempre es `false`, por lo que `resueltasATiempo` siempre resulta en 0 sin error visible. Con un valor negativo (`?slaHoras=-1`), `slaMs` es negativo y todos los tickets cuentan como fuera de SLA.
+**Archivo:** `apps/api/src/services/tickets.service.ts:21-29`
 
-```typescript
-// Actual
-const slaHoras = Number(req.query.slaHoras ?? 24);
-```
+**Problema:** `generarFolio` realiza `COUNT` y luego `create` en operaciones separadas sin transacción ni bloqueo de fila. Dos requests concurrentes con la misma subcategoría pueden leer el mismo `count` y generar el mismo folio. Si `folio` tiene restricción `UNIQUE` en la BD, la segunda escritura produce un error 500 sin mensaje claro al cliente. Si no tiene la restricción, los duplicados son silenciosos.
 
-**Fix:**
-```typescript
-const slaHorasRaw = Number(req.query.slaHoras ?? 24);
-if (!Number.isFinite(slaHorasRaw) || slaHorasRaw <= 0) {
-  res.status(400).json({ error: "El parámetro slaHoras debe ser un número positivo" });
-  return;
-}
-const slaHoras = slaHorasRaw;
-const slaMs = slaHoras * 3600 * 1000;
-```
-
----
-
-### CR-03: Race condition en `generarFolio` — folios duplicados bajo carga concurrente
-
-**File:** `apps/api/src/services/tickets.service.ts:21`
-
-**Issue:** La generación del folio hace `COUNT` y luego `create` en dos operaciones separadas sin transacción ni bloqueo. Si dos requests concurrentes crean tickets de la misma subcategoría simultáneamente, ambas pueden leer el mismo `count`, produciendo el mismo folio. Esto viola la unicidad del folio como identificador de negocio.
+Este hallazgo fue reportado en la revisión anterior (CR-03) y no fue corregido.
 
 ```typescript
+// Corrección mínima — transacción serializable:
 async function generarFolio(categoria: string, subcategoria: string): Promise<string> {
   const key = `${categoria}-${subcategoria}`;
   const prefix = FOLIO_PREFIX[key] ?? "TIC";
-  const count = await prisma.ticket.count({          // ← lee N
-    where: { folio: { startsWith: prefix } },
-  });
-  const num = String(count + 1).padStart(4, "0");    // ← calcula N+1
-  return `${prefix}-${num}`;                         // ← otro request puede leer el mismo N
+  return prisma.$transaction(async (tx) => {
+    const count = await tx.ticket.count({ where: { folio: { startsWith: prefix } } });
+    const num = String(count + 1).padStart(4, "0");
+    return `${prefix}-${num}`;
+  }, { isolationLevel: "Serializable" });
 }
 ```
 
-**Fix:** Usar una columna `autoincrement` por prefijo en DB, o agregar una restricción `UNIQUE` sobre `folio` en el schema de Prisma y reintentar ante conflicto. Solución mínima: envolver la lectura + escritura del ticket en una transacción serializable (`prisma.$transaction([...], { isolationLevel: 'Serializable' })`). La opción más robusta es un contador dedicado por prefijo con bloqueo.
-
 ---
 
-## Warnings
+### CR-02: N+1 queries en `metricasTecnicos` puede agotar el pool de conexiones de Prisma
 
-### WR-01: N+1 queries en `metricasProcesos` — una query por grupo por iteración
+**Archivo:** `apps/api/src/controllers/metricas.controller.ts:122-161`
 
-**File:** `apps/api/src/controllers/metricas.controller.ts:192`
+**Problema:** El loop `for (const tecnico of tecnicos)` ejecuta 4 queries Prisma seriales por técnico: `pasoTicket.count` (asignados), `pasoTicket.count` (completados), `pasoTicket.aggregate` (unidades), `pasoTicket.findMany` (fechas). Con el rol `TECNICO_TI`, `TECNICO_REDES` y `TECNICO_SERVICIOS` activos en producción (p. ej. 12 técnicos), esto genera 48 queries seriales por llamada al endpoint. El pool de conexiones de Prisma es 10 por defecto. Si varias solicitudes de métricas llegan simultáneamente, el pool se agota y las peticiones de otros endpoints (`crearTicket`, `cambiarEstado`) también quedan bloqueadas, provocando timeouts en operaciones críticas de negocio.
 
-**Issue:** El loop sobre `grupos` ejecuta 3 queries adicionales por iteración: `procesoDefinicion.findFirst`, `ticket.findMany` (resueltos), y `pasoTicket.aggregate`. Con 15 subcategorías/sub-tipos activos esto ya son 45 queries; si crece el catálogo o hay muchos sub-tipos el tiempo de respuesta se degradará linealmente. Aunque el rendimiento está fuera de scope v1, estas queries dentro de un loop son también un problema de **corrección bajo carga**: si una query falla a mitad del loop, el array `resultado` devuelto es parcial y la respuesta llega con datos incompletos sin error HTTP.
-
-**Fix:** Mover las queries de `ticket.findMany` resueltos y `pasoTicket.aggregate` a joins o sub-queries raw de SQL fuera del loop para obtener todos los datos en 2–3 queries totales. Para el error parcial, envolver el loop en la misma `try/catch` general (ya está) pero agregar un check de `resultado.length === grupos.length` antes de responder.
-
----
-
-### WR-02: `seed.ts` — `deleteMany` sin transacción, estado parcial si el seed falla
-
-**File:** `packages/database/prisma/seed.ts:15`
-
-**Issue:** Las líneas 15–19 eliminan datos transaccionales en secuencia sin transacción. Si el proceso muere entre dos `deleteMany` (p. ej. al eliminar `pasoTicket` pero antes de eliminar `ticket`), la base de datos queda en estado inconsistente con referencias huérfanas. El efecto es más grave porque el seed también llama a `deleteMany({})` en producción si se ejecuta accidentalmente.
+Esto no es solo un problema de rendimiento: es un riesgo de correctness bajo carga concurrente real.
 
 ```typescript
-await prisma.notificacion.deleteMany({});
-await prisma.comentario.deleteMany({});
-await prisma.historialTicket.deleteMany({});
-await prisma.pasoTicket.deleteMany({});
-await prisma.ticket.deleteMany({});
-await prisma.usuario.deleteMany({});
-```
-
-**Fix:** Envolver en `prisma.$transaction`:
-```typescript
-await prisma.$transaction([
-  prisma.notificacion.deleteMany({}),
-  prisma.comentario.deleteMany({}),
-  prisma.historialTicket.deleteMany({}),
-  prisma.pasoTicket.deleteMany({}),
-  prisma.ticket.deleteMany({}),
-  prisma.usuario.deleteMany({}),
-]);
+// Corrección — consolidar en groupBy fuera del loop:
+const statsAsignados = await prisma.pasoTicket.groupBy({
+  by: ["tecnicoId"],
+  where: { tecnicoId: { not: null } },
+  _count: { _all: true },
+});
+const statsCompletados = await prisma.pasoTicket.groupBy({
+  by: ["tecnicoId"],
+  where: { tecnicoId: { not: null }, estado: "COMPLETADO" },
+  _count: { _all: true },
+  _sum: { cantidadUnidades: true },
+});
+const pasosFecha = await prisma.pasoTicket.findMany({
+  where: { estado: "COMPLETADO", completadoAt: { not: null } },
+  select: { tecnicoId: true, createdAt: true, completadoAt: true },
+});
+// Cruzar con la lista de técnicos en memoria (O(n) JS).
 ```
 
 ---
 
-### WR-03: `seed_procesos.ts` — `deleteMany` + re-creación de pasos sin transacción
+## Advertencias
 
-**File:** `packages/database/prisma/seed_procesos.ts:224`
+### WR-01: `asignarPaso` — `estadoAnteriorTicket` usa valor sintético si `findUnique` devuelve null
 
-**Issue:** Al actualizar un proceso existente, el seed borra todos sus `PasoDefinicion` (línea 224) y luego los re-crea en un loop (líneas 241–253). Si el proceso falla después del `deleteMany` pero antes de que todos los pasos sean recreados, el proceso queda sin pasos en DB. Los tickets futuros de esa subcategoría se crearán sin pasos de flujo (la condición `proceso.pasos.length > 0` en `tickets.service.ts:252` lo omite silenciosamente).
+**Archivo:** `apps/api/src/services/tickets.service.ts:595-597`
 
-**Fix:** Envolver la secuencia `update + deleteMany + createMany` en una transacción por proceso:
+**Problema:** Si `prisma.ticket.findUnique` devuelve `null` (ticket borrado suavemente entre la validación del paso y esta query), el código colapsa silenciosamente al literal `"ASIGNADO"`. Ese valor puede ser incorrecto (el ticket podría estar en `"ABIERTO"`) y produce una entrada de `historialTicket` con `estadoAnterior` falso. El código debería lanzar error en este caso, no continuar con datos inventados.
+
 ```typescript
+// Actual — fallback silencioso incorrecto:
+const estadoAnteriorTicket = (
+  await prisma.ticket.findUnique({ where: { id: ticketId }, select: { estado: true } })
+)?.estado ?? "ASIGNADO";
+
+// Corrección:
+const ticketActual = await prisma.ticket.findUnique({
+  where: { id: ticketId },
+  select: { estado: true },
+});
+if (!ticketActual) {
+  throw Object.assign(new Error("Ticket no encontrado"), { status: 404 });
+}
+const estadoAnteriorTicket = ticketActual.estado;
+```
+
+---
+
+### WR-02: `asignarPaso` no verifica que el técnico esté activo
+
+**Archivo:** `apps/api/src/services/tickets.service.ts:586`
+
+**Problema:** `prisma.usuario.findUnique({ where: { id: tecnicoId } })` no filtra `activo: true`. Un técnico dado de baja puede ser asignado a un paso del flujo. La función `asignarTicket` (línea 343) sí usa `activo: true`, por lo que es una inconsistencia deliberada o un olvido.
+
+Este hallazgo fue reportado como WR-04 en la revisión anterior y no fue corregido.
+
+```typescript
+// Corrección:
+const tecnico = await prisma.usuario.findFirst({ where: { id: tecnicoId, activo: true } });
+if (!tecnico) {
+  throw Object.assign(new Error("Técnico no encontrado o inactivo"), { status: 404 });
+}
+```
+
+---
+
+### WR-03: `completarPaso` — actualización a RESUELTO no verifica activo del ticket
+
+**Archivo:** `apps/api/src/services/tickets.service.ts:540-543`
+
+**Problema:** Cuando todos los pasos se completan, `prisma.ticket.update` actualiza el ticket a `RESUELTO` sin verificar `activo: true`. Si el ticket fue cancelado (soft-delete, `activo = false`) entre el inicio y el fin del completado, el update procede igualmente, dejando el ticket con `estado = RESUELTO` y `activo = false` simultáneamente, un estado incoherente que confunde las queries de `listarTickets` que filtran `activo: true`.
+
+```typescript
+// Corrección — agregar activo: true al where del update:
+const ticket = await prisma.ticket.update({
+  where: { id: ticketId, activo: true },  // Prisma lanza P2025 si no existe
+  data: { estado: "RESUELTO", fechaResolucion: new Date() },
+  include: ticketInclude,
+});
+```
+
+---
+
+### WR-04: `seed_procesos.ts` — `deleteMany` de `PasoDefinicion` sin transacción ni verificación de pasos activos
+
+**Archivo:** `packages/database/prisma/seed_procesos.ts:222-253`
+
+**Problema:** Al actualizar un proceso existente, el seed borra todos sus `PasoDefinicion` (línea 224) y los recrea en un loop. Hay dos sub-problemas:
+
+1. Si el proceso falla entre el `deleteMany` y el final del loop de `create`, el proceso queda sin pasos en DB. El campo `proceso.pasos.length > 0` en `tickets.service.ts:252` hará que los tickets futuros de esa subcategoría se creen sin pasos, silenciosamente.
+2. Si hay `PasoTicket` activos (estado `PENDIENTE` o `EN_PROGRESO`) que referencian estos `PasoDefinicion` y la FK tiene `onDelete: Restrict`, el `deleteMany` falla con un error de FK en producción.
+
+```typescript
+// Corrección — envolver en transacción y verificar pasos activos:
 await prisma.$transaction(async (tx) => {
+  const pasosActivosCount = await tx.pasoTicket.count({
+    where: { pasoDefinicionId: { in: existingPasos.map(p => p.id) }, estado: { not: "COMPLETADO" } },
+  });
+  if (pasosActivosCount > 0) {
+    console.warn(`[SKIP] ${subcategoria} — ${pasosActivosCount} pasos activos en uso`);
+    return;
+  }
   await tx.procesoDefinicion.update({ where: { id: existing.id }, data: { ... } });
   await tx.pasoDefinicion.deleteMany({ where: { procesoId } });
   for (const paso of procesoInfo.pasos) {
-    await tx.pasoDefinicion.create({ data: { ... } });
+    await tx.pasoDefinicion.create({ data: { procesoId, ...paso } });
   }
 });
 ```
 
 ---
 
-### WR-04: `asignarPaso` — no valida que el técnico esté activo
+### WR-05: `metricasSolicitudes` — parámetros de fecha sin validación de formato
 
-**File:** `apps/api/src/services/tickets.service.ts:586`
+**Archivo:** `apps/api/src/controllers/metricas.controller.ts:23-29`
 
-**Issue:** `asignarPaso` busca el técnico con `findUnique` sin filtrar `activo: true`. Un usuario desactivado puede ser asignado a un paso.
+**Problema:** `new Date(desde)` y `new Date(hasta)` aceptan cualquier string. Con una cadena inválida como `"ayer"` o `""`, `new Date()` produce `Invalid Date`. Prisma recibe un objeto `Date` inválido y lanza un error genérico 500 que puede exponer el stack trace al cliente dependiendo del error handler configurado. El parámetro `slaHoras` (línea 179 de `metricasProcesos`) tiene el mismo problema con `Number()` que produce `NaN`.
 
 ```typescript
-const tecnico = await prisma.usuario.findUnique({ where: { id: tecnicoId } });
-```
+// Corrección para fechas:
+if (desde && isNaN(new Date(desde).getTime())) {
+  res.status(400).json({ error: "Parámetro 'desde' tiene formato de fecha inválido" });
+  return;
+}
+if (hasta && isNaN(new Date(hasta).getTime())) {
+  res.status(400).json({ error: "Parámetro 'hasta' tiene formato de fecha inválido" });
+  return;
+}
 
-Comparar con `asignarTicket` (línea 343) que sí filtra `activo: true`.
-
-**Fix:**
-```typescript
-const tecnico = await prisma.usuario.findFirst({ where: { id: tecnicoId, activo: true } });
-```
-
----
-
-### WR-05: `cambiarEstado` — empleados pueden cancelar tickets de otros empleados
-
-**File:** `apps/api/src/services/tickets.service.ts:396`
-
-**Issue:** La ruta `PATCH /:id/estado` permite `EMPLEADO` (ver `tickets.routes.ts:23`). La función `cambiarEstado` no valida que `user.rfc === ticket.empleadoRfc` antes de proceder. Un empleado autenticado puede cancelar el ticket de cualquier otro empleado si conoce su ID. El guard de rol de `routes` no restringe por ownership.
-
-**Fix:** Agregar verificación de ownership para empleados:
-```typescript
-if (user.rol === "EMPLEADO" && ticket.empleadoRfc !== user.rfc) {
-  throw Object.assign(new Error("Sin permisos para modificar esta solicitud"), { status: 403 });
+// Corrección para slaHoras:
+const slaHorasRaw = Number(req.query.slaHoras ?? 24);
+if (!Number.isFinite(slaHorasRaw) || slaHorasRaw <= 0) {
+  res.status(400).json({ error: "El parámetro slaHoras debe ser un número positivo" });
+  return;
 }
 ```
 
 ---
 
-### WR-06: `completarPaso` — ticket puede resolverse aunque esté en estado `CANCELADO`
+## Informativos
 
-**File:** `apps/api/src/services/tickets.service.ts:531`
+### IN-01: `GESTOR_RECURSOS_MATERIALES` tiene `metricas.ver` en permisos pero no en la ruta
 
-**Issue:** Cuando se completa el último paso, el código lee el estado actual del ticket (D-13, línea 534) pero aun así actualiza incondicionalmente a `RESUELTO` (línea 542). Si el ticket fue cancelado mientras el técnico completaba el último paso, se sobre-escribe el estado `CANCELADO` con `RESUELTO`.
+**Archivo:** `packages/shared/src/index.ts:542` y `apps/api/src/routes/metricas.routes.ts:12`
+
+**Problema:** `PERMISOS_DEFAULT` otorga `"metricas.ver"` al rol `GESTOR_RECURSOS_MATERIALES`, pero `requireRol` en `metricas.routes.ts` no incluye ese rol. El gestor no puede acceder a `/api/metricas/solicitudes` pese a que su permiso declarado lo habilita. Es una inconsistencia entre el catálogo de permisos y la implementación real de las rutas.
 
 ```typescript
-// Lee estado pero no lo verifica
-const ticketPreResolve = await prisma.ticket.findUnique({ ... select: { estado: true } });
-const estadoAnteriorReal = ticketPreResolve?.estado ?? "EN_PROGRESO";
-// Actualiza sin importar el estado leído
-const ticket = await prisma.ticket.update({
-  data: { estado: "RESUELTO", ... },
-});
-```
-
-**Fix:**
-```typescript
-if (ticketPreResolve?.estado === "CANCELADO") {
-  throw Object.assign(
-    new Error("El ticket fue cancelado — no se puede resolver"),
-    { status: 409 },
-  );
-}
+// metricas.routes.ts — corrección:
+const rolesMetricas = requireRol(
+  "ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS",
+  "GESTOR_RECURSOS_MATERIALES",
+);
 ```
 
 ---
 
-## Info
+### IN-02: `SUB_TIPO_EQUIPOS` y `SUBTIPO_EQUIPOS` — duplicación de constantes en shared
 
-### IN-01: Uso excesivo de `as never` para eludir tipos de Prisma
+**Archivo:** `packages/shared/src/index.ts:320-329` y `424-433`
 
-**File:** `apps/api/src/services/tickets.service.ts:233-235, 249, 431`
+**Problema:** `SUB_TIPO_EQUIPOS` (array `{value, label}`, línea 320) y `SUBTIPO_EQUIPOS` (objeto `as const`, línea 424) cubren los mismos ocho valores pero con distinta estructura. Si se agrega un subtipo a uno pero no al otro, el formulario del frontend y la lógica del backend quedan desincronizados silenciosamente.
 
-**Issue:** Se usa `as never` para asignar campos enum de Prisma (`categoria`, `subcategoria`, `prioridad`, `estado`). Esto silencia errores de TypeScript que podrían detectar inconsistencias entre los valores del schema y los validados en el servicio. El proyecto tiene TypeScript estricto por convención (CLAUDE.md).
+Este hallazgo fue reportado como IN-02 en la revisión anterior y no fue corregido.
 
-**Fix:** Importar los tipos enum directamente desde `@prisma/client` y hacer cast a ellos:
+**Sugerencia:** Eliminar `SUB_TIPO_EQUIPOS` y derivarlo de `SUBTIPO_EQUIPOS`:
 ```typescript
-import { CategoriaTicket, SubcategoriaTicket, PrioridadTicket } from "@prisma/client";
-// ...
-categoria: categoriaVal as CategoriaTicket,
-subcategoria: subcategoriaVal as SubcategoriaTicket,
+// SUBTIPO_EQUIPOS es la fuente de verdad
+export const SUB_TIPO_EQUIPOS = Object.keys(SUBTIPO_EQUIPOS).map((value) => ({
+  value,
+  label: value, // reemplazar con LABEL_SUBTIPO_EQUIPOS[value] si se agrega ese mapa
+}));
 ```
 
 ---
 
-### IN-02: Duplicación de constantes `SUB_TIPO_EQUIPOS` / `SUBTIPO_EQUIPOS` en `shared/index.ts`
+### IN-03: Paginación en `listarTickets` es incorrecta — se pagina antes de reordenar
 
-**File:** `packages/shared/src/index.ts:320-434`
+**Archivo:** `apps/api/src/services/tickets.service.ts:92-132`
 
-**Issue:** Existen dos definiciones para los subtipos de equipos: `SUB_TIPO_EQUIPOS` (línea 320, array de objetos `{value, label}`) y `SUBTIPO_EQUIPOS` (línea 424, objeto constante). Tienen los mismos valores pero distinta estructura. La coexistencia de dos variantes para el mismo dominio genera riesgo de divergencia futura si se agrega un subtipo a una pero no a la otra.
+**Problema:** `skip` y `take` se aplican en la query de Prisma (línea 98-99) antes de que `computeAutoPriority` recalcule la prioridad de cada ticket en JS y se reordene el array. El usuario que pide la página 2 puede ver tickets que deberían estar en la página 1 según la prioridad calculada en runtime. El contador `total` devuelto es correcto, pero las ventanas paginadas son inconsistentes entre recargas (ya que `Date.now()` cambia).
 
-**Fix:** Eliminar `SUB_TIPO_EQUIPOS` (el array) y derivarlo de `SUBTIPO_EQUIPOS` donde se necesite el label, usando `LABEL_SUBCATEGORIA` o una constante nueva `LABEL_SUBTIPO_EQUIPOS`. Revisar todos los consumidores antes de eliminar.
+**Sugerencia:** Si la paginación correcta es un requisito, persista el campo `prioridad` calculado en la BD y ordene desde Prisma, o elimine la paginación del lado del servidor y devuelva el set completo para ordenar en el cliente.
 
 ---
 
-_Reviewed: 2026-05-11T19:04:54Z_
-_Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_Revisado: 2026-05-13_
+_Revisor: Claude (gsd-code-reviewer)_
+_Profundidad: standard_
