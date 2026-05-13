@@ -7,9 +7,9 @@
 
 ## Current Phase
 
-**Phase 3: Métricas Operacionales** — Ready to start
-- Status: Pending (Phase 2 complete 2026-05-13)
-- Next: `/gsd-discuss-phase 03`
+**Phase 3: Roles y Áreas de Soporte** — Context gathered, ready to plan
+- Status: Context complete (2026-05-13)
+- Next: `/gsd-plan-phase 03`
 
 ## Completed Phases
 
@@ -32,8 +32,9 @@
 |-------|------|--------|
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
 | 2 | Features Pendientes — Procesos y Flujos | ✅ Complete (5/5 plans, 14/14 verified) |
-| 3 | Métricas Operacionales | 🔲 Ready to start |
-| 4 | Reportes Exportables | 🔲 Pending |
+| 3 | Roles y Áreas de Soporte | 📋 Context ready → `/gsd-plan-phase 03` |
+| 4 | Métricas Operacionales | 🔲 Pending (was Phase 3) |
+| 5 | Reportes Exportables | 🔲 Pending (was Phase 4) |
 
 ## Key Context
 
