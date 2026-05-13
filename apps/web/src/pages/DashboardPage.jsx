@@ -38,6 +38,7 @@ const PRIORIDAD_COLOR = TICKET_PRIORIDAD_COLOR;
 const ROL_LABEL = {
   ADMIN: "Administrador",
   TECNICO_TI: "Técnico TI",
+  TECNICO_REDES: "Técnico de Redes",
   TECNICO_SERVICIOS: "Técnico en Servicios Generales",
   MESA_AYUDA: "Mesa de Ayuda",
   GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",

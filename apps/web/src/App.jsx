@@ -82,7 +82,7 @@ export const App = () => {
               </Route>
 
               {/* Dashboard — solo admin y técnicos */}
-              <Route element={<ProtectedRoute roles={["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"]} />}>
+              <Route element={<ProtectedRoute roles={["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"]} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
               </Route>
 
