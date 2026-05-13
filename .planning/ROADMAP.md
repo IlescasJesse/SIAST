@@ -65,7 +65,7 @@
 
 ---
 
-## Phase 3: Roles y Áreas de Soporte
+## Phase 3: Roles y Áreas de Soporte ✅ Complete (2026-05-13)
 
 **Goal:** Reestructurar el sistema de roles para reflejar la organización real de soporte: 4 áreas (TI, REDES, MANTENIMIENTO, RECURSOS MATERIALES) con responsables y técnicos especializados.
 **Requirements:** ROL-01 a ROL-05
@@ -73,10 +73,10 @@
 **Plans:** 4 planes
 
 ### Plans
-- [ ] 03-01-PLAN.md — Schema + shared types: enum Rol extendido (14 valores), modelo AreaSoporte, PERMISOS_DEFAULT actualizado
-- [ ] 03-02-PLAN.md — Migración DB + seed: migrate dev, 4 AreaSoporte seeds, 3 ProcesoDefinicion MANTENIMIENTO
-- [ ] 03-03-PLAN.md — Backend guards: requireResponsableDeArea(), asignarTicket/cambiarEstado/listarTickets, bug fix crearTicket, endpoint GET /areas-soporte
-- [ ] 03-04-PLAN.md — Frontend: selector AreaSoporte condicional en UsuariosPage + AdminUsuariosPage, getAreasSoporte API helpers
+- [x] 03-01-PLAN.md — Schema + shared types: enum Rol extendido (14 valores), modelo AreaSoporte, PERMISOS_DEFAULT actualizado
+- [x] 03-02-PLAN.md — Migración DB + seed: migrate dev, 4 AreaSoporte seeds, 3 ProcesoDefinicion MANTENIMIENTO
+- [x] 03-03-PLAN.md — Backend guards: requireResponsableDeArea(), asignarTicket/cambiarEstado/listarTickets, bug fix crearTicket, endpoint GET /areas-soporte
+- [x] 03-04-PLAN.md — Frontend: selector AreaSoporte condicional en UsuariosPage + AdminUsuariosPage, getAreasSoporte API helpers
 
 ### Deliverables
 - 4 nuevos roles RESPONSABLE_*: RESPONSABLE_TI, RESPONSABLE_REDES, RESPONSABLE_MANTENIMIENTO, RESPONSABLE_RECURSOS_MATERIALES

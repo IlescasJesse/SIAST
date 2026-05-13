@@ -7,12 +7,18 @@
 
 ## Current Phase
 
-**Phase 3: Roles y Áreas de Soporte** — Planned, ready to execute
-- Status: Planned (2026-05-13) — 4 planes, 4 waves
-- Plans: 03-01 (schema), 03-02 (DB+seed), 03-03 (backend guards), 03-04 (frontend)
-- Next: `/gsd-execute-phase 03`
+**Phase 4: Métricas Operacionales** — Context gathered, ready for planning
+- Status: Context gathered (2026-05-13)
+- Decisions: Recharts, SLA fijo, endpoint único, tabs en DashboardPage, ticketsVersion pattern
+- Next: `/gsd-plan-phase 04`
 
 ## Completed Phases
+
+**Phase 3: Roles y Áreas de Soporte** — COMPLETE
+- Status: Complete (2026-05-13)
+- Plans: 4 (03-01 a 03-04) — schema, seed, backend, frontend
+- All 4 plans executed on main. API + Web build verified.
+- Decisions: 14 roles, 4 AreaSoporte, areaSoporteId en Usuario, guards RESPONSABLE_*
 
 **Phase 2: Features Pendientes — Procesos y Flujos** — COMPLETE
 - Status: Complete (2026-05-13)
@@ -33,9 +39,9 @@
 |-------|------|--------|
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
 | 2 | Features Pendientes — Procesos y Flujos | ✅ Complete (5/5 plans, 14/14 verified) |
-| 3 | Roles y Áreas de Soporte | 📋 Planned (4/4 plans) → `/gsd-execute-phase 03` |
-| 4 | Métricas Operacionales | 🔲 Pending (was Phase 3) |
-| 5 | Reportes Exportables | 🔲 Pending (was Phase 4) |
+| 3 | Roles y Áreas de Soporte | ✅ Complete (4/4 plans) |
+| 4 | Métricas Operacionales | 📋 Context gathered → plan |
+| 5 | Reportes Exportables | 🔲 Pending |
 
 ## Key Context
 
