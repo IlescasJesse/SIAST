@@ -10,17 +10,27 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import PersonOffIcon from "@mui/icons-material/PersonOff";
 import PersonIcon from "@mui/icons-material/Person";
-import { getUsuarios, createUsuario, updateUsuario, desactivarUsuario } from "../api/admin.js";
+import { getUsuarios, createUsuario, updateUsuario, desactivarUsuario, getAreasSoporte } from "../api/admin.js";
 import { LABEL_ROL, LABEL_PERMISO, PERMISOS_LIST, PERMISOS_DEFAULT } from "@stf/shared";
 
 const ROLES = [
-  "ADMIN", "MESA_AYUDA", "TECNICO_TI",
-  "TECNICO_REDES", "TECNICO_SERVICIOS", "GESTOR_RECURSOS_MATERIALES",
+  "ADMIN", "MESA_AYUDA",
+  "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+  "TECNICO_TI", "TECNICO_REDES",
+  "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
+  "TECNICO_SERVICIOS",
+  "GESTOR_RECURSOS_MATERIALES",
+];
+
+const RESPONSABLE_ROLES = [
+  "RESPONSABLE_TI", "RESPONSABLE_REDES",
+  "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
 ];
 
 const EMPTY_FORM = {
   nombre: "", apellidos: "", usuario: "", password: "", email: "",
   telefono: "", rol: "MESA_AYUDA", activo: true, permisos: [],
+  areaSoporteId: null,
 };
 
 export const AdminUsuariosPage = () => {
@@ -32,6 +42,7 @@ export const AdminUsuariosPage = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [permisosExpanded, setPermisosExpanded] = useState(false);
+  const [areasSoporte, setAreasSoporte] = useState([]);
 
   const cargar = useCallback(async () => {
     try {
@@ -47,6 +58,9 @@ export const AdminUsuariosPage = () => {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    getAreasSoporte().then(setAreasSoporte).catch(() => {});
+  }, []);
 
   const abrirCrear = () => {
     setEditId(null);
@@ -61,14 +75,19 @@ export const AdminUsuariosPage = () => {
       nombre: u.nombre, apellidos: u.apellidos, usuario: u.usuario,
       password: "", email: u.email ?? "", telefono: u.telefono ?? "",
       rol: u.rol, activo: u.activo, permisos: u.permisos ?? [],
+      areaSoporteId: u.areaSoporteId ?? null,
     });
     setPermisosExpanded(false);
     setDialogOpen(true);
   };
 
   const handleRolChange = (newRol) => {
-    // Al cambiar rol, resetear permisos extra (quedan vacíos = usa defaults del rol)
-    setForm((f) => ({ ...f, rol: newRol, permisos: [] }));
+    setForm((f) => ({
+      ...f,
+      rol: newRol,
+      permisos: [],
+      areaSoporteId: RESPONSABLE_ROLES.includes(newRol) ? f.areaSoporteId : null,
+    }));
   };
 
   const togglePermiso = (perm) => {
@@ -243,6 +262,21 @@ export const AdminUsuariosPage = () => {
                 label="Activo"
               />
             </Box>
+
+            {RESPONSABLE_ROLES.includes(form.rol) && (
+              <FormControl size="small" fullWidth required>
+                <InputLabel>Área de Soporte</InputLabel>
+                <Select
+                  value={form.areaSoporteId ?? ""}
+                  label="Área de Soporte"
+                  onChange={(e) => setForm((f) => ({ ...f, areaSoporteId: e.target.value || null }))}
+                >
+                  {areasSoporte.map((a) => (
+                    <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
             <Divider />
 

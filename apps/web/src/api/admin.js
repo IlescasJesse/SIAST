@@ -19,6 +19,10 @@ export const getLogsAcceso = (params) => api.get("/api/admin/logs-acceso", { par
 export const getSesiones = () => api.get("/api/admin/sesiones").then((r) => r.data.data);
 export const cerrarSesionAdmin = (id) => api.delete(`/api/admin/sesiones/${id}`).then((r) => r.data);
 
+// ── Áreas de Soporte ───────────────────────────────────────────────────────────
+export const getAreasSoporte = () =>
+  api.get("/api/admin/areas-soporte").then((r) => r.data.data);
+
 // ── SIRH ──────────────────────────────────────────────────────────────────────
 export const getSirhStatus = () => api.get("/api/admin/sirh/status").then((r) => r.data.data);
 export const triggerSirhSync = () => api.post("/api/admin/sirh/sync").then((r) => r.data);

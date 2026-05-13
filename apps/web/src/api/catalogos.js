@@ -27,6 +27,10 @@ export const getSirhEmpleado = (rfc) =>
 export const getDisponibilidadTecnico = (empleadoId) =>
   api.get(`/api/catalogos/disponibilidad-tecnico/${empleadoId}`).then((r) => r.data);
 
+// ─── Áreas de Soporte (Phase 3) ──────────────────────────────────────────
+export const getAreasSoporte = () =>
+  api.get("/api/admin/areas-soporte").then((r) => r.data.data);
+
 // ─── Admin: sincronización SIRH ───────────────────────────────────────────
 export const getSirhSyncStatus = () =>
   api.get("/api/admin/sirh/status").then((r) => r.data);

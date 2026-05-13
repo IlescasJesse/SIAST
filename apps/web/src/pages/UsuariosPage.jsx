@@ -21,9 +21,21 @@ import PeopleIcon from "@mui/icons-material/People";
 import WhatsAppIcon2 from "@mui/icons-material/WhatsApp";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario } from "../api/usuarios.js";
-import { getSirhEmpleado, getSirhSyncStatus, postSirhSyncNow } from "../api/catalogos.js";
+import { getSirhEmpleado, getSirhSyncStatus, postSirhSyncNow, getAreasSoporte } from "../api/catalogos.js";
 
-const ROLES_STAFF = ["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"];
+const ROLES_STAFF = [
+  "ADMIN", "MESA_AYUDA",
+  "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+  "TECNICO_TI", "TECNICO_REDES",
+  "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
+  "TECNICO_SERVICIOS",
+  "GESTOR_RECURSOS_MATERIALES",
+];
+
+const RESPONSABLE_ROLES = [
+  "RESPONSABLE_TI", "RESPONSABLE_REDES",
+  "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+];
 
 const ROL_COLOR = {
   ADMIN: "error",
@@ -37,6 +49,7 @@ const emptyForm = {
   nombre: "", apellidos: "", usuario: "", password: "", rol: "MESA_AYUDA",
   telefono: "", email: "",
   esEmpleadoEstructura: false, empleadoId: "", rfc: "",
+  areaSoporteId: null,
 };
 
 export const UsuariosPage = () => {
@@ -49,6 +62,7 @@ export const UsuariosPage = () => {
   const [rfcBuscando, setRfcBuscando] = useState(false);
   const [rfcBuscado, setRfcBuscado] = useState(null); // null | { nombre, apellidos } | "error"
   const [rfcManual, setRfcManual] = useState(false); // true cuando SIRH no encontró el RFC
+  const [areasSoporte, setAreasSoporte] = useState([]);
 
   // ── Estado SIRH sync ──────────────────────────────────────────────────────
   const [syncData, setSyncData] = useState(null);
@@ -99,6 +113,7 @@ export const UsuariosPage = () => {
   useEffect(() => {
     load();
     loadSyncStatus();
+    getAreasSoporte().then(setAreasSoporte).catch(() => {});
   }, [loadSyncStatus]);
 
   /** Genera sugerencia de usuario: primera letra del primer nombre + primer apellido, sin espacios, en minúsculas */
@@ -123,6 +138,7 @@ export const UsuariosPage = () => {
       esEmpleadoEstructura: u.esEmpleadoEstructura ?? false,
       empleadoId: u.empleadoId ?? "",
       rfc: u.rfc ?? "",
+      areaSoporteId: u.areaSoporteId ?? null,
     });
     setError("");
     setRfcManual(false);
@@ -181,6 +197,10 @@ export const UsuariosPage = () => {
       if (!payload.esEmpleadoEstructura) {
         payload.empleadoId = null;
         payload.rfc = null;
+      }
+      // Limpiar areaSoporteId si el rol no es RESPONSABLE_*
+      if (!RESPONSABLE_ROLES.includes(payload.rol)) {
+        payload.areaSoporteId = null;
       }
       if (dialog === "crear") {
         await createUsuario(payload);
@@ -552,6 +572,20 @@ export const UsuariosPage = () => {
               {ROLES_STAFF.map((r) => <MenuItem key={r} value={r}>{r.replace("_", " ")}</MenuItem>)}
             </Select>
           </FormControl>
+          {RESPONSABLE_ROLES.includes(form.rol) && (
+            <FormControl fullWidth required>
+              <InputLabel>Área de Soporte</InputLabel>
+              <Select
+                value={form.areaSoporteId ?? ""}
+                label="Área de Soporte"
+                onChange={(e) => set("areaSoporteId", e.target.value || null)}
+              >
+                {areasSoporte.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialog(null)}>Cancelar</Button>
