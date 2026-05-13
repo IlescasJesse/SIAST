@@ -7,11 +7,17 @@
 
 ## Current Phase
 
-**Phase 2: Features Pendientes — Procesos y Flujos** — Context gathered, ready for planning
-- Status: Context captured (2026-05-08)
-- Resume: `.planning/phases/02-features-pendientes-procesos-y-flujos/02-CONTEXT.md`
+**Phase 3: Métricas Operacionales** — Ready to start
+- Status: Pending (Phase 2 complete 2026-05-13)
+- Next: `/gsd-discuss-phase 03`
 
-## Phase 1 (Completed)
+## Completed Phases
+
+**Phase 2: Features Pendientes — Procesos y Flujos** — COMPLETE
+- Status: Complete (2026-05-13)
+- Plans: 5 (02-01 a 02-05) — 4 base + 1 gap closure
+- Verification: 14/14 must-haves passed
+- Decisions: ProcesoDefinicion DB operativa, PROCESO_MAP eliminado, historialTicket audit trail completo
 
 **Phase 1: Seguridad y Estabilidad** — COMPLETE
 - Status: Complete
@@ -25,8 +31,8 @@
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
-| 2 | Features Pendientes — Procesos y Flujos | 📋 Context captured |
-| 3 | Métricas Operacionales | 🔲 Pending |
+| 2 | Features Pendientes — Procesos y Flujos | ✅ Complete (5/5 plans, 14/14 verified) |
+| 3 | Métricas Operacionales | 🔲 Ready to start |
 | 4 | Reportes Exportables | 🔲 Pending |
 
 ## Key Context

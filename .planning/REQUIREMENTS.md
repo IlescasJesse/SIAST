@@ -23,15 +23,15 @@
 
 ### Procesos y Flujos
 
-- [ ] **PRO-01**: Tickets creados leen definición de proceso desde `ProcesoDefinicion` DB (no PROCESO_MAP hardcodeado)
-- [ ] **PRO-02**: Flujo `SISTEMAS_INSTITUCIONALES:SIRH` completado con pasos y técnicos asignados
-- [ ] **PRO-03**: Flujo `SISTEMAS_INSTITUCIONALES:SIAST` completado con pasos y técnicos asignados
+- [x] **PRO-01**: Tickets creados leen definición de proceso desde `ProcesoDefinicion` DB (no PROCESO_MAP hardcodeado)
+- [x] **PRO-02**: Flujo `SISTEMAS_INSTITUCIONALES:SIRH` completado con pasos y técnicos asignados
+- [x] **PRO-03**: Flujo `SISTEMAS_INSTITUCIONALES:SIAST` completado con pasos y técnicos asignados
 - [ ] **PRO-04** _(backlog / fase TBD)_: Escalamiento Recursos Materiales desde `MANTENIMIENTO_CORRECTIVO` vinculado — diferido por decisión en 02-CONTEXT.md; requiere diseño de flujo cross-sistema (SIAST-MANTENIMIENTO)
 
 ### Notificaciones
 
-- [ ] **NOT-01**: `ticket:paso_asignado` y `ticket:paso_listo` emitidos en todos los flujos nuevos
-- [ ] **NOT-02**: Historia/audit trail actualizado en asignación de recursos
+- [x] **NOT-01**: `ticket:paso_asignado` y `ticket:paso_listo` emitidos en todos los flujos nuevos
+- [x] **NOT-02**: Historia/audit trail actualizado en asignación de recursos
 
 ## Milestone 3: Métricas y Reportes
 
@@ -63,8 +63,8 @@
 |-------------|-------|--------|
 | SEC-01 a SEC-05 | Phase 1 | Pending |
 | STB-01 a STB-03 | Phase 1 | Pending |
-| PRO-01 a PRO-03 | Phase 2 | Pending |
+| PRO-01 a PRO-03 | Phase 2 | ✅ Complete (2026-05-13) |
 | PRO-04          | Backlog  | Diferido (fase TBD) |
-| NOT-01 a NOT-02 | Phase 2 | Pending |
+| NOT-01 a NOT-02 | Phase 2 | ✅ Complete (2026-05-13) |
 | MET-01 a MET-04 | Phase 3 | Pending |
 | REP-01 a REP-03 | Phase 4 | Pending |

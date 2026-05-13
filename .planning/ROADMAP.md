@@ -35,12 +35,13 @@
 
 ---
 
-## Phase 2: Features Pendientes — Procesos y Flujos
+## Phase 2: Features Pendientes — Procesos y Flujos ✅ Complete (2026-05-13)
 
 **Goal:** ProcesoDefinicion DB operativa; flujos SIRH/SIAST activos; audit trail completo en pasos.
 **Requirements:** PRO-01 a PRO-03, NOT-01 a NOT-02
 **Depends on:** Phase 1 complete
 **Plans:** 5 planes (4 base + 1 gap closure)
+**Verification:** 14/14 must-haves passed
 
 ### Plans
 - [x] 02-01-PLAN.md — Seed ProcesoDefinicion: SIRH y SIAST como flujos DIRECTO en DB
