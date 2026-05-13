@@ -17,10 +17,18 @@ enum Rol {
   ADMIN
   TECNICO_TI
   TECNICO_REDES
-  TECNICO_SERVICIOS
+  TECNICO_SERVICIOS       // deprecated en Phase 3 — mantener para filas existentes
   MESA_AYUDA
   GESTOR_RECURSOS_MATERIALES
   EMPLEADO
+  // ── Phase 3: nuevos roles ──
+  RESPONSABLE_TI
+  RESPONSABLE_REDES
+  RESPONSABLE_MANTENIMIENTO
+  RESPONSABLE_RECURSOS_MATERIALES
+  TECNICO_ELECTRICISTA
+  TECNICO_PLOMERO
+  TECNICO_MOVILIDAD
 }
 
 enum CategoriaTicket {
@@ -111,6 +119,8 @@ model Usuario {
   esEmpleadoEstructura Boolean @default(false)
   empleadoId           String? @unique @db.VarChar(24) // _id de MongoDB en SIRH
   rfc                  String? @unique @db.VarChar(13) // RFC del empleado en SIRH
+  areaSoporteId        Int?         @map("area_soporte_id")
+  areaSoporte          AreaSoporte? @relation(fields: [areaSoporteId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,6 +139,22 @@ model Usuario {
   @@index([rol])
   @@index([activo])
   @@map("usuarios")
+}
+
+// ============================================================
+// ÁREAS DE SOPORTE (Phase 3)
+// ============================================================
+
+model AreaSoporte {
+  id             Int      @id @default(autoincrement())
+  nombre         String   @unique @db.VarChar(50)
+  subcategorias  Json
+  rolesIncluidos Json
+  activo         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  usuarios       Usuario[]
+
+  @@map("areas_soporte")
 }
 
 // ============================================================

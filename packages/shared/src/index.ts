@@ -12,6 +12,14 @@ export const RolSchema = z.enum([
   "MESA_AYUDA",
   "GESTOR_RECURSOS_MATERIALES",
   "EMPLEADO",
+  // Phase 3: 7 nuevos roles
+  "RESPONSABLE_TI",
+  "RESPONSABLE_REDES",
+  "RESPONSABLE_MANTENIMIENTO",
+  "RESPONSABLE_RECURSOS_MATERIALES",
+  "TECNICO_ELECTRICISTA",
+  "TECNICO_PLOMERO",
+  "TECNICO_MOVILIDAD",
 ]);
 
 export const CategoriaTicketSchema = z.enum(["TECNOLOGIAS", "SERVICIOS", "RECURSOS_MATERIALES"]);
@@ -314,6 +322,13 @@ export const LABEL_ROL: Record<string, string> = {
   MESA_AYUDA: "Mesa de Ayuda",
   GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",
   EMPLEADO: "Empleado",
+  RESPONSABLE_TI: "Responsable de TI",
+  RESPONSABLE_REDES: "Responsable de Redes",
+  RESPONSABLE_MANTENIMIENTO: "Responsable de Mantenimiento",
+  RESPONSABLE_RECURSOS_MATERIALES: "Responsable de Recursos Materiales",
+  TECNICO_ELECTRICISTA: "Técnico Electricista",
+  TECNICO_PLOMERO: "Técnico Plomero",
+  TECNICO_MOVILIDAD: "Técnico de Movilidad",
 };
 
 // Subtipos para EQUIPOS_DISPOSITIVOS — usados en el formulario de nueva solicitud
@@ -541,6 +556,13 @@ export const PERMISOS_DEFAULT: Record<Rol, Permiso[]> = {
   TECNICO_SERVICIOS: ["solicitudes.ver_todas"],
   GESTOR_RECURSOS_MATERIALES: ["solicitudes.ver_todas", "recursos.gestionar", "metricas.ver"],
   EMPLEADO: [],
+  RESPONSABLE_TI: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  RESPONSABLE_REDES: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  RESPONSABLE_MANTENIMIENTO: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  RESPONSABLE_RECURSOS_MATERIALES: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  TECNICO_ELECTRICISTA: ["solicitudes.ver_todas"],
+  TECNICO_PLOMERO: ["solicitudes.ver_todas"],
+  TECNICO_MOVILIDAD: ["solicitudes.ver_todas"],
 };
 
 export function tienePermiso(
