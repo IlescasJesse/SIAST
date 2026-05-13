@@ -612,6 +612,17 @@ export const asignarPaso = async (
     include: ticketInclude,
   });
 
+  // Audit trail — NOT-02: registrar asignación de técnico a paso en historialTicket
+  await prisma.historialTicket.create({
+    data: {
+      ticketId,
+      estadoAnterior: estadoAnteriorTicket as never,
+      estadoNuevo: "EN_PROGRESO",
+      usuarioId: user.id,
+      comentario: `Paso ${paso.orden} — ${paso.nombre ?? `Paso ${paso.orden}`}: asignado a ${tecnico.nombre} ${tecnico.apellidos}`,
+    },
+  });
+
   // Notificar al técnico que tiene un nuevo paso asignado
   await notif.emitirPasoAsignado({
     ticketId,
