@@ -62,7 +62,8 @@ Que un empleado pueda abrir una solicitud y un técnico pueda resolverla con tra
 | packages/ui shadcn | Definido pero no conectado a páginas | ⚠️ Revisar |
 | Soft delete en tickets | Auditoría gubernamental requiere historial | ✓ Mantener |
 | Socket.IO ticketsVersion counter | Patrón para forzar refetch desde eventos socket | ✓ Mantener |
-| PROCESO_MAP hardcodeado | ProcesoDefinicion DB existe pero no se usa | ⚠️ Conectar en Phase 2 |
+| PROCESO_MAP hardcodeado | Eliminado en Phase 2 — tickets leen ProcesoDefinicion DB | ✓ Completado |
+| historialTicket en asignarPaso | Agregado en Phase 2 gap closure (NOT-02) | ✓ Completado |
 
 ---
-*Last updated: 2026-05-06 — inicialización GSD*
+*Last updated: 2026-05-13 — Phase 2 complete (14/14 verified). Phase 3 (Métricas Operacionales) ready to start.*
