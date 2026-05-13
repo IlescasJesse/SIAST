@@ -57,6 +57,14 @@
 | Integración SAP/ERP | No existe sistema ERP en esta dependencia actualmente |
 | Tests automatizados exhaustivos | Deseables pero no bloqueantes para entregas actuales |
 
+## Milestone 1 (continued): Roles y Áreas de Soporte
+
+- [ ] **ROL-01**: 7 nuevos valores en enum `Rol`: `RESPONSABLE_TI`, `RESPONSABLE_REDES`, `RESPONSABLE_MANTENIMIENTO`, `RESPONSABLE_RECURSOS_MATERIALES`, `TECNICO_ELECTRICISTA`, `TECNICO_PLOMERO`, `TECNICO_MOVILIDAD` — en Prisma schema y en `RolSchema` Zod de `@stf/shared`
+- [ ] **ROL-02**: Entidad `AreaSoporte` en DB con 4 áreas seed (TI, REDES, MANTENIMIENTO, RECURSOS_MATERIALES) y campo `areaSoporteId` en `Usuario`
+- [ ] **ROL-03**: Backend: guards de área (`requireResponsableDeArea()`), extensión de `asignarTicket` + `cambiarEstado`, endpoint `GET /api/admin/areas-soporte`
+- [ ] **ROL-04**: RESPONSABLE_* puede reasignar tickets entre técnicos de su área y cerrar/cancelar solicitudes de su área
+- [ ] **ROL-05**: Panel admin muestra selector de AreaSoporte al crear/editar usuario con rol RESPONSABLE_*
+
 ## Traceability
 
 | Requirement | Phase | Status |
@@ -66,5 +74,6 @@
 | PRO-01 a PRO-03 | Phase 2 | ✅ Complete (2026-05-13) |
 | PRO-04          | Backlog  | Diferido (fase TBD) |
 | NOT-01 a NOT-02 | Phase 2 | ✅ Complete (2026-05-13) |
+| ROL-01 a ROL-05 | Phase 3 | Pending |
 | MET-01 a MET-04 | Phase 3 | Pending |
 | REP-01 a REP-03 | Phase 4 | Pending |
