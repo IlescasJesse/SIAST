@@ -264,6 +264,41 @@ async function main() {
   console.log(`${areas.length} areas del edificio sincronizadas`);
 
   // ──────────────────────────────────────────────────────────────
+  // 2.5. ÁREAS DE SOPORTE (Phase 3)
+  // ──────────────────────────────────────────────────────────────
+  const areasSoporteData = [
+    {
+      nombre: "TI",
+      subcategorias: ["SISTEMAS_INSTITUCIONALES", "EQUIPOS_DISPOSITIVOS", "CUENTAS_DOMINIO", "CORREO_OUTLOOK"],
+      rolesIncluidos: ["RESPONSABLE_TI", "TECNICO_TI"],
+    },
+    {
+      nombre: "REDES",
+      subcategorias: ["RED_INTERNET"],
+      rolesIncluidos: ["RESPONSABLE_REDES", "TECNICO_REDES"],
+    },
+    {
+      nombre: "MANTENIMIENTO",
+      subcategorias: ["SANITARIOS", "ILUMINACION", "MOVILIDAD"],
+      rolesIncluidos: ["RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"],
+    },
+    {
+      nombre: "RECURSOS_MATERIALES",
+      subcategorias: ["SALA_JUNTAS", "EQUIPO_AUDIOVISUAL", "PRESTAMO_EQUIPO", "MOBILIARIO", "PAPELERIA"],
+      rolesIncluidos: ["RESPONSABLE_RECURSOS_MATERIALES", "GESTOR_RECURSOS_MATERIALES"],
+    },
+  ];
+
+  for (const area of areasSoporteData) {
+    await prisma.areaSoporte.upsert({
+      where: { nombre: area.nombre },
+      update: { subcategorias: area.subcategorias, rolesIncluidos: area.rolesIncluidos },
+      create: { ...area, activo: true },
+    });
+  }
+  console.log(`${areasSoporteData.length} áreas de soporte sincronizadas`);
+
+  // ──────────────────────────────────────────────────────────────
   // 3. USUARIO ADMIN (único)
   // ──────────────────────────────────────────────────────────────
   const hashedPassword = await bcrypt.hash("Admin2026!", 10);

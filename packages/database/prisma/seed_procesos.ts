@@ -178,6 +178,28 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
       },
     ],
   },
+  // ── Phase 3: MANTENIMIENTO (SERVICIOS) ─────────────────────────────
+  SANITARIOS: {
+    nombre: "Sanitarios y plomería",
+    tipoFlujo: "DIRECTO",
+    pasos: [
+      { orden: 1, rolRequerido: "TECNICO_PLOMERO", nombre: "Atención por Técnico Plomero" },
+    ],
+  },
+  ILUMINACION: {
+    nombre: "Iluminación y electricidad",
+    tipoFlujo: "DIRECTO",
+    pasos: [
+      { orden: 1, rolRequerido: "TECNICO_ELECTRICISTA", nombre: "Atención por Técnico Electricista" },
+    ],
+  },
+  MOVILIDAD: {
+    nombre: "Movilidad y accesibilidad",
+    tipoFlujo: "DIRECTO",
+    pasos: [
+      { orden: 1, rolRequerido: "TECNICO_MOVILIDAD", nombre: "Atención por Técnico de Movilidad" },
+    ],
+  },
 };
 
 /**
