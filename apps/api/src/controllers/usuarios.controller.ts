@@ -19,6 +19,8 @@ const userSelect = {
   empleadoId: true,
   rfc: true,
   createdAt: true,
+  areaSoporteId: true,
+  areaSoporte: { select: { nombre: true } },
 };
 
 export const listar = async (_req: Request, res: Response, next: NextFunction) => {
@@ -32,12 +34,17 @@ export const listar = async (_req: Request, res: Response, next: NextFunction) =
 
 export const crear = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body as {
+    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, areaSoporteId, ...rest } = req.body as {
       nombre: string; apellidos: string; usuario: string;
       password: string; rol: string; email?: string; telefono?: string;
       esEmpleadoEstructura?: boolean; empleadoId?: string; rfc?: string;
-      permisos?: string[];
+      permisos?: string[]; areaSoporteId?: number;
     };
+
+    if ((rest.rol as string)?.startsWith("RESPONSABLE_") && !areaSoporteId) {
+      res.status(400).json({ error: "El campo areaSoporteId es obligatorio para roles RESPONSABLE_*" });
+      return;
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const usuario = await prisma.usuario.create({
@@ -49,6 +56,7 @@ export const crear = async (req: Request, res: Response, next: NextFunction) => 
         empleadoId: esEmpleadoEstructura ? (empleadoId ?? null) : null,
         rfc: esEmpleadoEstructura ? (rfc ?? null) : null,
         ...(permisos !== undefined && { permisos: permisos ?? [] }),
+        areaSoporteId: areaSoporteId ?? null,
       },
       select: userSelect,
     });
@@ -73,7 +81,7 @@ export const obtener = async (req: Request, res: Response, next: NextFunction) =
 
 export const actualizar = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body;
+    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, areaSoporteId, ...rest } = req.body;
 
     const data: Record<string, unknown> = { ...rest };
     if (password) data.password = await bcrypt.hash(password, 10);
@@ -83,6 +91,12 @@ export const actualizar = async (req: Request, res: Response, next: NextFunction
       data.esEmpleadoEstructura = esEmpleadoEstructura;
       data.empleadoId = esEmpleadoEstructura ? (empleadoId ?? null) : null;
       data.rfc = esEmpleadoEstructura ? (rfc ?? null) : null;
+    }
+
+    if (rest.rol && !(rest.rol as string).startsWith("RESPONSABLE_")) {
+      data.areaSoporteId = null;
+    } else if (areaSoporteId !== undefined) {
+      data.areaSoporteId = areaSoporteId;
     }
 
     const usuario = await prisma.usuario.update({
