@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.claude/worktrees/**)",
+      "Read(**/node_modules/**)",
+      "Read(**/package-lock.json)",
+      "Read(**/dist/**)",
+      "Read(**/.next/**)",
+      "Read(*.lock)",
+      "Read(**/*.lock)"
+    ]
+  }
+}

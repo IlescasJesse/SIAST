@@ -254,10 +254,21 @@ function buildEmpleadoData(emp: SirhEmpleado) {
 }
 
 async function upsertEmpleado(data: ReturnType<typeof buildEmpleadoData>): Promise<"created" | "updated"> {
-  const existe = await prisma.empleado.findUnique({ where: { rfc: data.rfc } });
-  if (existe) {
+  const porSirhId =
+    data.sirhId
+      ? await prisma.empleado.findUnique({ where: { sirhId: data.sirhId } })
+      : null;
+  if (porSirhId) {
     await prisma.empleado.update({
-      where: { rfc: data.rfc },
+      where: { id: porSirhId.id },
+      data: { ...data, sincronizadoSIRH: true, activo: true },
+    });
+    return "updated";
+  }
+  const porRfc = await prisma.empleado.findUnique({ where: { rfc: data.rfc } });
+  if (porRfc) {
+    await prisma.empleado.update({
+      where: { id: porRfc.id },
       data: { ...data, sincronizadoSIRH: true, activo: true },
     });
     return "updated";

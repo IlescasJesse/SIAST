@@ -19,6 +19,7 @@ const menuItems = (rol) => {
   const items = [
     { label: "Estadísticas", icon: <DashboardIcon />, to: "/dashboard", roles: ["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"] },
     { label: "Solicitudes", icon: <ConfirmationNumberIcon />, to: "/solicitudes", roles: ["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"] },
+    { label: "Mis Solicitudes", icon: <ConfirmationNumberIcon />, to: "/solicitudes", roles: ["EMPLEADO"] },
     { label: "Nueva Solicitud", icon: <AddCircleOutlineIcon />, to: "/solicitudes/nueva", roles: ["ADMIN", "MESA_AYUDA", "EMPLEADO"] },
     { label: "Mapa de Áreas", icon: <EditLocationAltIcon />, to: "/admin/areas", roles: ["ADMIN"] },
     { label: "Recursos", icon: <Inventory2Icon />, to: "/recursos", roles: ["ADMIN", "GESTOR_RECURSOS_MATERIALES"] },

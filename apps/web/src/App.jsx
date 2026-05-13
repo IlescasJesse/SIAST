@@ -53,7 +53,7 @@ const ProtectedRoute = ({ roles }) => {
     const redirectParam = location.pathname !== "/" ? `?redirect=${encodeURIComponent(location.pathname)}` : "";
     return <Navigate to={`/login${redirectParam}`} replace />;
   }
-  if (roles && !roles.includes(user.rol)) return <Navigate to="/solicitudes" replace />;
+  if (roles && !roles.includes(user.rol)) return <Navigate to="/" replace />;
   return <Outlet />;
 };
 
@@ -86,7 +86,7 @@ export const App = () => {
                 <Route path="/dashboard" element={<DashboardPage />} />
               </Route>
 
-              {/* Solicitudes */}
+              {/* Solicitudes — cualquier usuario autenticado; backend filtra por rol */}
               <Route path="/solicitudes" element={<SolicitudListPage />} />
               <Route path="/solicitudes/nueva" element={<SolicitudNewPage />} />
               <Route path="/solicitudes/:id" element={<SolicitudDetailPage />} />

@@ -444,12 +444,23 @@ export const SUBTIPO_CUENTAS = {
   CREACION_USUARIO: "CREACION_USUARIO",
 } as const;
 
-// Sub-tipos para SISTEMAS_INSTITUCIONALES (pendiente de definir)
+// Sub-tipos para SISTEMAS_INSTITUCIONALES
 export const SUBTIPO_SISTEMAS = {
   SIRH: "SIRH",
   SIAST: "SIAST",
 } as const;
 
+// Arrays con labels para el formulario de nueva solicitud
+export const SUB_TIPO_SISTEMAS = [
+  { value: "SIRH", label: "SIRH — Sistema Integral de Recursos Humanos" },
+  { value: "SIAST", label: "SIAST — Sistema de Atención y Seguimiento de Tickets" },
+];
+
+export const SUB_TIPO_RED = [
+  { value: "SIN_ACCESO_INTERNET", label: "Sin acceso a internet" },
+  { value: "SOLICITUD_ACCESO_INTERNET", label: "Solicitud de acceso a internet" },
+  { value: "SOPORTE_DOMINIO", label: "Soporte de dominio" },
+];
 
 // ============================================================
 // TIPOS DE RESPUESTA — MÉTRICAS

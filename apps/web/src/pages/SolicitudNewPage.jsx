@@ -32,7 +32,7 @@ import { createSolicitud } from "../api/solicitudes.js";
 import { getAreas } from "../api/catalogos.js";
 import { useAuthStore } from "../store/auth.js";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
-import { SUBCATEGORIAS_POR_CATEGORIA, LABEL_SUBCATEGORIA, LABEL_CATEGORIA, DESCRIPCION_SUBCATEGORIA, LABEL_PISO, SUB_TIPO_EQUIPOS } from "@stf/shared";
+import { SUBCATEGORIAS_POR_CATEGORIA, LABEL_SUBCATEGORIA, LABEL_CATEGORIA, DESCRIPCION_SUBCATEGORIA, LABEL_PISO, SUB_TIPO_EQUIPOS, SUB_TIPO_SISTEMAS, SUB_TIPO_RED } from "@stf/shared";
 
 const CATEGORIA_STYLE = {
   "Tecnologías de la Información": { border: "#1565c0", bg: "#e3f0fd" },
@@ -155,7 +155,9 @@ export const SolicitudNewPage = () => {
 
   // Al cambiar subcategoría, limpiar los campos adicionales
   const handleSubcategoriaChange = (val) => {
-    setForm((prev) => ({ ...prev, subcategoria: val, subTipo: "" }));
+    // CUENTAS_DOMINIO solo tiene un subTipo posible — auto-seleccionar
+    const autoSubTipo = val === "CUENTAS_DOMINIO" ? "CREACION_USUARIO" : "";
+    setForm((prev) => ({ ...prev, subcategoria: val, subTipo: autoSubTipo }));
     setSalaJuntasEquipo({});
     setSalaJuntasAsistentes("");
     setPrestamoEquipo("");
@@ -229,6 +231,10 @@ export const SolicitudNewPage = () => {
     }
     if (form.subcategoria === "EQUIPOS_DISPOSITIVOS" && !form.subTipo) {
       setError("Selecciona el tipo de solicitud de equipos");
+      return;
+    }
+    if (form.subcategoria === "SISTEMAS_INSTITUCIONALES" && !form.subTipo) {
+      setError("Selecciona el sistema institucional (SIRH o SIAST)");
       return;
     }
     if ((form.subcategoria === "SALA_JUNTAS" || form.subcategoria === "MOBILIARIO") && (!fechaUso || !horaInicio || !horaFin)) {
@@ -395,6 +401,39 @@ export const SolicitudNewPage = () => {
                     onChange={(e) => set("subTipo", e.target.value)}
                   >
                     {SUB_TIPO_EQUIPOS.map((s) => (
+                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              {form.subcategoria === "SISTEMAS_INSTITUCIONALES" && (
+                <FormControl fullWidth required>
+                  <InputLabel>Sistema institucional</InputLabel>
+                  <Select
+                    value={form.subTipo}
+                    label="Sistema institucional"
+                    onChange={(e) => set("subTipo", e.target.value)}
+                  >
+                    {SUB_TIPO_SISTEMAS.map((s) => (
+                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              {form.subcategoria === "RED_INTERNET" && (
+                <FormControl fullWidth>
+                  <InputLabel shrink>Tipo de problema</InputLabel>
+                  <Select
+                    value={form.subTipo}
+                    label="Tipo de problema"
+                    notched
+                    displayEmpty
+                    onChange={(e) => set("subTipo", e.target.value)}
+                  >
+                    <MenuItem value="">General / Otro</MenuItem>
+                    {SUB_TIPO_RED.map((s) => (
                       <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
                     ))}
                   </Select>
