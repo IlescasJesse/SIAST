@@ -47,7 +47,7 @@ MUI theme spacing unit = 8px. All spacing uses theme.spacing() multiples.
 
 Exceptions:
 - KPI stat cards: py="16px !important" (matches existing StatCard pattern in DashboardPage)
-- StatCard icon box: p=1.2 (9.6px — MUI fractional, existing pattern, do not change)
+- StatCard icon box: p=1 (8px) — grid-aligned, multiples of 4
 - Touch targets for icon-only buttons (date filter toggle): minimum 40px (MUI default)
 - Grid container spacing: spacing(2) = 16px gap between cards (existing pattern)
 - Section header margin-bottom: mb(3) = 24px (existing pattern)
@@ -56,18 +56,16 @@ Exceptions:
 
 ## Typography
 
-All values from MUI theme (apps/web/src/theme/index.js). Font: Inter.
+All values from MUI theme (apps/web/src/theme/index.js). Font: Inter. Exactly 4 sizes declared.
 
 | Role | MUI Variant | Size | Weight | Line Height | Usage |
 |------|-------------|------|--------|-------------|-------|
+| Label | caption | 12px | 400 | 1.66 | Subtitles, dates, chip text, disabled text, chart axis tick labels |
 | Body | body2 | 14px | 400 | 1.43 | Table cells, labels, secondary text |
-| Label | caption | 12px | 400 | 1.66 | Subtitles, dates, chip text, disabled text |
-| Heading | subtitle2 | 14px | 700 | 1.57 | Section card titles (uppercased, letterSpacing 0.4) |
+| Heading | subtitle2 / h5 | 24px | 700 | 1.2 | Section card titles (subtitle2 uppercased, letterSpacing 0.4); page section header (h5) |
 | Display | h4 | 34px | 700 | 1.0 | KPI stat values (lineHeight 1) |
 
-Additional heading used in page header: h5 (24px, weight 700) — matches DashboardPage existing header.
-
-Chart axis labels: 11px, weight 400, color text.secondary (#5a5a5a). Applied via Recharts tick props.
+Chart axis tick labels use the 12px caption tier (fontFamily="'Inter', 'Roboto', sans-serif", weight 400, color text.secondary #5a5a5a). Applied via Recharts tick props. No separate size is introduced.
 
 ---
 
@@ -353,6 +351,7 @@ shadcn registry: not applicable (shadcn not initialized for this project's pages
 8. MetricasHistorial daily job: backend concern, not a frontend interaction contract item.
 9. Print CSS: add @media print global styles in DashboardPage or via MUI GlobalStyles component.
 10. RESPONSABLE_* areaSoporteId is available in JWT payload — no need for frontend to send it as query param.
+11. StatCard icon box: use p=1 (8px) — do not use fractional MUI spacing values.
 
 ---
 
