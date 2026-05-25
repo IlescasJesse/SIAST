@@ -4,7 +4,7 @@ import {
   Box, Typography, Button, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, IconButton, Tooltip, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  FormControl, InputLabel, Select, MenuItem, Alert, Chip,
+  FormControl, InputLabel, Select, MenuItem, ListSubheader, Alert, Chip,
   FormControlLabel, Switch, InputAdornment, Card, CardContent,
   Divider, LinearProgress,
 } from "@mui/material";
@@ -21,26 +21,20 @@ import PeopleIcon from "@mui/icons-material/People";
 import WhatsAppIcon2 from "@mui/icons-material/WhatsApp";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario } from "../api/usuarios.js";
-import { getSirhEmpleado, getSirhSyncStatus, postSirhSyncNow, getAreasSoporte } from "../api/catalogos.js";
+import { getSirhEmpleado, getSirhSyncStatus, postSirhSyncNow } from "../api/catalogos.js";
+import { LABEL_ROL } from "@stf/shared";
 
-const ROLES_STAFF = [
-  "ADMIN", "MESA_AYUDA",
-  "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
-  "TECNICO_TI", "TECNICO_REDES",
-  "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
-  "TECNICO_SERVICIOS",
-  "GESTOR_RECURSOS_MATERIALES",
-];
-
-const RESPONSABLE_ROLES = [
-  "RESPONSABLE_TI", "RESPONSABLE_REDES",
-  "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+const ROL_GRUPOS = [
+  { grupo: "General", roles: ["ADMIN", "MESA_AYUDA"] },
+  { grupo: "Área TI", roles: ["RESPONSABLE_TI", "TECNICO_TI"] },
+  { grupo: "Área Redes", roles: ["RESPONSABLE_REDES", "TECNICO_REDES"] },
+  { grupo: "Área Mantenimiento", roles: ["RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
+  { grupo: "Área Recursos Materiales", roles: ["RESPONSABLE_RECURSOS_MATERIALES", "GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO"] },
 ];
 
 const ROL_COLOR = {
   ADMIN: "error",
   TECNICO_TI: "primary",
-  TECNICO_SERVICIOS: "info",
   MESA_AYUDA: "success",
   GESTOR_RECURSOS_MATERIALES: "warning",
 };
@@ -49,7 +43,6 @@ const emptyForm = {
   nombre: "", apellidos: "", usuario: "", password: "", rol: "MESA_AYUDA",
   telefono: "", email: "",
   esEmpleadoEstructura: false, empleadoId: "", rfc: "",
-  areaSoporteId: null,
 };
 
 export const UsuariosPage = () => {
@@ -59,10 +52,10 @@ export const UsuariosPage = () => {
   const [dialog, setDialog] = useState(null); // null | "crear" | {id, ...usuario}
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [rfcBuscando, setRfcBuscando] = useState(false);
   const [rfcBuscado, setRfcBuscado] = useState(null); // null | { nombre, apellidos } | "error"
   const [rfcManual, setRfcManual] = useState(false); // true cuando SIRH no encontró el RFC
-  const [areasSoporte, setAreasSoporte] = useState([]);
 
   // ── Estado SIRH sync ──────────────────────────────────────────────────────
   const [syncData, setSyncData] = useState(null);
@@ -113,7 +106,6 @@ export const UsuariosPage = () => {
   useEffect(() => {
     load();
     loadSyncStatus();
-    getAreasSoporte().then(setAreasSoporte).catch(() => {});
   }, [loadSyncStatus]);
 
   /** Genera sugerencia de usuario: primera letra del primer nombre + primer apellido, sin espacios, en minúsculas */
@@ -126,6 +118,7 @@ export const UsuariosPage = () => {
   const openCrear = () => {
     setForm(emptyForm);
     setError("");
+    setFieldErrors({});
     setRfcBuscado(null);
     setRfcManual(false);
     setDialog("crear");
@@ -138,9 +131,9 @@ export const UsuariosPage = () => {
       esEmpleadoEstructura: u.esEmpleadoEstructura ?? false,
       empleadoId: u.empleadoId ?? "",
       rfc: u.rfc ?? "",
-      areaSoporteId: u.areaSoporteId ?? null,
     });
     setError("");
+    setFieldErrors({});
     setRfcManual(false);
     setRfcBuscado(
       u.esEmpleadoEstructura && u.rfc
@@ -181,26 +174,29 @@ export const UsuariosPage = () => {
 
   const handleGuardar = async () => {
     setError("");
-    if (!form.nombre.trim() || !form.apellidos.trim() || !form.usuario.trim() || !form.rol) {
-      setError("Nombre, apellidos, usuario y rol son obligatorios");
+    const errors = {};
+    if (!form.nombre.trim()) errors.nombre = "El nombre es obligatorio";
+    if (!form.apellidos.trim()) errors.apellidos = "Los apellidos son obligatorios";
+    if (!form.usuario.trim()) errors.usuario = "El usuario de login es obligatorio";
+    if (!form.rol) errors.rol = "El rol es obligatorio";
+    if (dialog === "crear" && !form.password.trim()) errors.password = "La contraseña es obligatoria";
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
-    if (dialog === "crear" && !form.password.trim()) {
-      setError("La contraseña es obligatoria al crear un usuario");
-      return;
-    }
+    setFieldErrors({});
+
     setSaving(true);
     try {
       const payload = { ...form };
       if (!payload.password) delete payload.password;
+      // Eliminar areaSoporteId si existiera — el backend lo deriva del rol
+      delete payload.areaSoporteId;
       // Limpiar empleadoId/rfc si no es empleado de estructura
       if (!payload.esEmpleadoEstructura) {
         payload.empleadoId = null;
         payload.rfc = null;
-      }
-      // Limpiar areaSoporteId si el rol no es RESPONSABLE_*
-      if (!RESPONSABLE_ROLES.includes(payload.rol)) {
-        payload.areaSoporteId = null;
       }
       if (dialog === "crear") {
         await createUsuario(payload);
@@ -208,9 +204,19 @@ export const UsuariosPage = () => {
         await updateUsuario(dialog.id, payload);
       }
       setDialog(null);
+      setForm(emptyForm);      // limpiar form tras éxito
+      setFieldErrors({});
       load();
     } catch (err) {
-      setError(err.response?.data?.error ?? "Error al guardar");
+      const errMsg = err.response?.data?.error ?? "Error al guardar";
+      const campos = err.response?.data?.campos ?? [];
+      if (campos.length > 0) {
+        const backendErrors = {};
+        campos.forEach((c) => { backendErrors[c] = errMsg; });
+        setFieldErrors(backendErrors);
+      } else {
+        setError(errMsg);
+      }
     } finally {
       setSaving(false);
     }
@@ -506,13 +512,15 @@ export const UsuariosPage = () => {
             <TextField
               label="Nombre(s)"
               value={form.nombre}
-              onChange={(e) => set("nombre", e.target.value)}
+              onChange={(e) => { set("nombre", e.target.value); setFieldErrors((fe) => ({ ...fe, nombre: undefined })); }}
               onBlur={() => {
                 if (!form.usuario.trim() && form.nombre && form.apellidos) {
                   set("usuario", sugerirUsuario(form.nombre, form.apellidos));
                 }
               }}
               fullWidth required
+              error={Boolean(fieldErrors.nombre)}
+              helperText={fieldErrors.nombre}
               InputProps={{
                 readOnly: form.esEmpleadoEstructura && Boolean(rfcBuscado && rfcBuscado !== "error") && !rfcManual,
               }}
@@ -520,13 +528,15 @@ export const UsuariosPage = () => {
             <TextField
               label="Apellidos"
               value={form.apellidos}
-              onChange={(e) => set("apellidos", e.target.value)}
+              onChange={(e) => { set("apellidos", e.target.value); setFieldErrors((fe) => ({ ...fe, apellidos: undefined })); }}
               onBlur={() => {
                 if (!form.usuario.trim() && form.nombre && form.apellidos) {
                   set("usuario", sugerirUsuario(form.nombre, form.apellidos));
                 }
               }}
               fullWidth required
+              error={Boolean(fieldErrors.apellidos)}
+              helperText={fieldErrors.apellidos}
               InputProps={{
                 readOnly: form.esEmpleadoEstructura && Boolean(rfcBuscado && rfcBuscado !== "error") && !rfcManual,
               }}
@@ -535,18 +545,21 @@ export const UsuariosPage = () => {
           <TextField
             label="Usuario (login)"
             value={form.usuario}
-            onChange={(e) => set("usuario", e.target.value)}
+            onChange={(e) => { set("usuario", e.target.value); setFieldErrors((fe) => ({ ...fe, usuario: undefined })); }}
             fullWidth required
-            helperText="Sugerencia: inicial del nombre + apellido paterno (ej: jilescas)"
+            error={Boolean(fieldErrors.usuario)}
+            helperText={fieldErrors.usuario ?? "Sugerencia: inicial del nombre + apellido paterno (ej: jilescas)"}
             inputProps={{ style: { fontFamily: "monospace" } }}
           />
           <TextField
             label={dialog === "crear" ? "Contraseña" : "Nueva contraseña (dejar vacío para no cambiar)"}
             type="password"
             value={form.password}
-            onChange={(e) => set("password", e.target.value)}
+            onChange={(e) => { set("password", e.target.value); setFieldErrors((fe) => ({ ...fe, password: undefined })); }}
             fullWidth
             required={dialog === "crear"}
+            error={Boolean(fieldErrors.password)}
+            helperText={fieldErrors.password}
           />
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField
@@ -569,23 +582,14 @@ export const UsuariosPage = () => {
           <FormControl fullWidth required>
             <InputLabel>Rol</InputLabel>
             <Select value={form.rol} label="Rol" onChange={(e) => set("rol", e.target.value)}>
-              {ROLES_STAFF.map((r) => <MenuItem key={r} value={r}>{r.replace("_", " ")}</MenuItem>)}
+              {ROL_GRUPOS.flatMap(({ grupo, roles }) => [
+                <ListSubheader key={`h-${grupo}`}>{grupo}</ListSubheader>,
+                ...roles.map((r) => (
+                  <MenuItem key={r} value={r}>{LABEL_ROL[r] ?? r}</MenuItem>
+                )),
+              ])}
             </Select>
           </FormControl>
-          {RESPONSABLE_ROLES.includes(form.rol) && (
-            <FormControl fullWidth required>
-              <InputLabel>Área de Soporte</InputLabel>
-              <Select
-                value={form.areaSoporteId ?? ""}
-                label="Área de Soporte"
-                onChange={(e) => set("areaSoporteId", e.target.value || null)}
-              >
-                {areasSoporte.map((a) => (
-                  <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialog(null)}>Cancelar</Button>
