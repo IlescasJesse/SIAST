@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Button, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, Table, TableBody, TableCell, TableHead, TableRow, Paper,
-  Select, MenuItem, FormControl, InputLabel, Chip, Switch, FormControlLabel,
+  Select, MenuItem, ListSubheader, FormControl, InputLabel, Chip, Switch, FormControlLabel,
   IconButton, Tooltip, Alert, CircularProgress, Divider, FormGroup, Checkbox,
   FormLabel,
 } from "@mui/material";
@@ -10,27 +10,20 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import PersonOffIcon from "@mui/icons-material/PersonOff";
 import PersonIcon from "@mui/icons-material/Person";
-import { getUsuarios, createUsuario, updateUsuario, desactivarUsuario, getAreasSoporte } from "../api/admin.js";
+import { getUsuarios, createUsuario, updateUsuario, desactivarUsuario } from "../api/admin.js";
 import { LABEL_ROL, LABEL_PERMISO, PERMISOS_LIST, PERMISOS_DEFAULT } from "@stf/shared";
 
-const ROLES = [
-  "ADMIN", "MESA_AYUDA",
-  "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
-  "TECNICO_TI", "TECNICO_REDES",
-  "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
-  "TECNICO_SERVICIOS",
-  "GESTOR_RECURSOS_MATERIALES",
-];
-
-const RESPONSABLE_ROLES = [
-  "RESPONSABLE_TI", "RESPONSABLE_REDES",
-  "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+const ROL_GRUPOS = [
+  { grupo: "General", roles: ["ADMIN", "MESA_AYUDA"] },
+  { grupo: "Área TI", roles: ["RESPONSABLE_TI", "TECNICO_TI"] },
+  { grupo: "Área Redes", roles: ["RESPONSABLE_REDES", "TECNICO_REDES"] },
+  { grupo: "Área Mantenimiento", roles: ["RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
+  { grupo: "Área Recursos Materiales", roles: ["RESPONSABLE_RECURSOS_MATERIALES", "GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO"] },
 ];
 
 const EMPTY_FORM = {
   nombre: "", apellidos: "", usuario: "", password: "", email: "",
   telefono: "", rol: "MESA_AYUDA", activo: true, permisos: [],
-  areaSoporteId: null,
 };
 
 export const AdminUsuariosPage = () => {
@@ -42,7 +35,7 @@ export const AdminUsuariosPage = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [permisosExpanded, setPermisosExpanded] = useState(false);
-  const [areasSoporte, setAreasSoporte] = useState([]);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const cargar = useCallback(async () => {
     try {
@@ -58,14 +51,13 @@ export const AdminUsuariosPage = () => {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
-  useEffect(() => {
-    getAreasSoporte().then(setAreasSoporte).catch(() => {});
-  }, []);
 
   const abrirCrear = () => {
     setEditId(null);
     setForm(EMPTY_FORM);
     setPermisosExpanded(false);
+    setFieldErrors({});
+    setError(null);
     setDialogOpen(true);
   };
 
@@ -75,19 +67,15 @@ export const AdminUsuariosPage = () => {
       nombre: u.nombre, apellidos: u.apellidos, usuario: u.usuario,
       password: "", email: u.email ?? "", telefono: u.telefono ?? "",
       rol: u.rol, activo: u.activo, permisos: u.permisos ?? [],
-      areaSoporteId: u.areaSoporteId ?? null,
     });
     setPermisosExpanded(false);
+    setFieldErrors({});
+    setError(null);
     setDialogOpen(true);
   };
 
   const handleRolChange = (newRol) => {
-    setForm((f) => ({
-      ...f,
-      rol: newRol,
-      permisos: [],
-      areaSoporteId: RESPONSABLE_ROLES.includes(newRol) ? f.areaSoporteId : null,
-    }));
+    setForm((f) => ({ ...f, rol: newRol, permisos: [] }));
   };
 
   const togglePermiso = (perm) => {
@@ -111,19 +99,43 @@ export const AdminUsuariosPage = () => {
   };
 
   const guardar = async () => {
+    // Validar campos requeridos antes de submit
+    const errors = {};
+    if (!form.nombre.trim()) errors.nombre = "El nombre es obligatorio";
+    if (!form.apellidos.trim()) errors.apellidos = "Los apellidos son obligatorios";
+    if (!form.usuario.trim()) errors.usuario = "El usuario de login es obligatorio";
+    if (!editId && !form.password.trim()) errors.password = "La contraseña es obligatoria";
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
+
     setSaving(true);
     try {
       const payload = { ...form };
       if (editId && !payload.password) delete payload.password;
+      // Eliminar areaSoporteId si viniera en payload — el backend lo deriva del rol
+      delete payload.areaSoporteId;
       if (editId) {
         await updateUsuario(editId, payload);
       } else {
         await createUsuario(payload);
       }
       setDialogOpen(false);
+      setForm(EMPTY_FORM);
       cargar();
     } catch (e) {
-      setError(e?.response?.data?.error ?? "Error al guardar");
+      const errMsg = e?.response?.data?.error ?? "Error al guardar";
+      const campos = e?.response?.data?.campos ?? [];
+      if (campos.length > 0) {
+        const backendErrors = {};
+        campos.forEach((c) => { backendErrors[c] = errMsg; });
+        setFieldErrors(backendErrors);
+      } else {
+        setError(errMsg);
+      }
     } finally {
       setSaving(false);
     }
@@ -237,12 +249,43 @@ export const AdminUsuariosPage = () => {
         <DialogContent dividers>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
             <Box sx={{ display: "flex", gap: 2 }}>
-              <TextField label="Nombre" value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} size="small" fullWidth required />
-              <TextField label="Apellidos" value={form.apellidos} onChange={(e) => setForm((f) => ({ ...f, apellidos: e.target.value }))} size="small" fullWidth required />
+              <TextField
+                label="Nombre"
+                value={form.nombre}
+                onChange={(e) => { setForm((f) => ({ ...f, nombre: e.target.value })); setFieldErrors((fe) => ({ ...fe, nombre: undefined })); }}
+                size="small" fullWidth required
+                error={Boolean(fieldErrors.nombre)}
+                helperText={fieldErrors.nombre}
+              />
+              <TextField
+                label="Apellidos"
+                value={form.apellidos}
+                onChange={(e) => { setForm((f) => ({ ...f, apellidos: e.target.value })); setFieldErrors((fe) => ({ ...fe, apellidos: undefined })); }}
+                size="small" fullWidth required
+                error={Boolean(fieldErrors.apellidos)}
+                helperText={fieldErrors.apellidos}
+              />
             </Box>
             <Box sx={{ display: "flex", gap: 2 }}>
-              <TextField label="Usuario" value={form.usuario} onChange={(e) => setForm((f) => ({ ...f, usuario: e.target.value }))} size="small" fullWidth required />
-              <TextField label="Contraseña" type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} size="small" fullWidth placeholder={editId ? "Dejar vacío para no cambiar" : ""} required={!editId} />
+              <TextField
+                label="Usuario"
+                value={form.usuario}
+                onChange={(e) => { setForm((f) => ({ ...f, usuario: e.target.value })); setFieldErrors((fe) => ({ ...fe, usuario: undefined })); }}
+                size="small" fullWidth required
+                error={Boolean(fieldErrors.usuario)}
+                helperText={fieldErrors.usuario ?? "Ej: jilescas"}
+              />
+              <TextField
+                label="Contraseña"
+                type="password"
+                value={form.password}
+                onChange={(e) => { setForm((f) => ({ ...f, password: e.target.value })); setFieldErrors((fe) => ({ ...fe, password: undefined })); }}
+                size="small" fullWidth
+                placeholder={editId ? "Dejar vacío para no cambiar" : ""}
+                required={!editId}
+                error={Boolean(fieldErrors.password)}
+                helperText={fieldErrors.password}
+              />
             </Box>
             <Box sx={{ display: "flex", gap: 2 }}>
               <TextField label="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} size="small" fullWidth />
@@ -252,9 +295,12 @@ export const AdminUsuariosPage = () => {
               <FormControl size="small" fullWidth>
                 <InputLabel>Rol</InputLabel>
                 <Select value={form.rol} label="Rol" onChange={(e) => handleRolChange(e.target.value)}>
-                  {ROLES.map((r) => (
-                    <MenuItem key={r} value={r}>{LABEL_ROL[r] ?? r}</MenuItem>
-                  ))}
+                  {ROL_GRUPOS.flatMap(({ grupo, roles }) => [
+                    <ListSubheader key={`h-${grupo}`}>{grupo}</ListSubheader>,
+                    ...roles.map((r) => (
+                      <MenuItem key={r} value={r}>{LABEL_ROL[r] ?? r}</MenuItem>
+                    )),
+                  ])}
                 </Select>
               </FormControl>
               <FormControlLabel
@@ -262,21 +308,6 @@ export const AdminUsuariosPage = () => {
                 label="Activo"
               />
             </Box>
-
-            {RESPONSABLE_ROLES.includes(form.rol) && (
-              <FormControl size="small" fullWidth required>
-                <InputLabel>Área de Soporte</InputLabel>
-                <Select
-                  value={form.areaSoporteId ?? ""}
-                  label="Área de Soporte"
-                  onChange={(e) => setForm((f) => ({ ...f, areaSoporteId: e.target.value || null }))}
-                >
-                  {areasSoporte.map((a) => (
-                    <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
 
             <Divider />
 
