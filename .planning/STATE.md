@@ -14,11 +14,11 @@
 
 ## Completed Phases
 
-**Phase 3: Roles y Áreas de Soporte** — COMPLETE
-- Status: Complete (2026-05-13)
-- Plans: 4 (03-01 a 03-04) — schema, seed, backend, frontend
-- All 4 plans executed on main. API + Web build verified.
-- Decisions: 14 roles, 4 AreaSoporte, areaSoporteId en Usuario, guards RESPONSABLE_*
+**Phase 3: Roles y Áreas de Soporte** — COMPLETE (incl. gap closure)
+- Status: Complete (2026-05-25, gap closure 03-05 ejecutado)
+- Plans: 5 (03-01 a 03-05) — schema, seed, backend, frontend + gap closure validaciones
+- All 5 plans executed on main. API + Web build verified.
+- Decisions: 14 roles, 4 AreaSoporte, areaSoporteId en Usuario, guards RESPONSABLE_*, fieldErrors por campo en formularios usuario, validación 400 antes de Prisma
 
 **Phase 2: Features Pendientes — Procesos y Flujos** — COMPLETE
 - Status: Complete (2026-05-13)
@@ -39,7 +39,7 @@
 |-------|------|--------|
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
 | 2 | Features Pendientes — Procesos y Flujos | ✅ Complete (5/5 plans, 14/14 verified) |
-| 3 | Roles y Áreas de Soporte | ✅ Complete (4/4 plans) |
+| 3 | Roles y Áreas de Soporte | ✅ Complete (5/5 plans, incl. gap closure 03-05) |
 | 4 | Métricas Operacionales | 📋 Context gathered → plan |
 | 5 | Reportes Exportables | 🔲 Pending |
 
