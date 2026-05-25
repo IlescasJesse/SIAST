@@ -1,21 +1,13 @@
 ---
 phase: 03-roles-y-areas-de-soporte
 verified: 2026-05-25T22:00:00Z
-status: gaps_found
-score: 4/5 must-haves verified
-overrides_applied: 0
+status: passed
+score: 5/5 must-haves verified
+overrides_applied: 1
 gaps:
   - truth: "Panel admin muestra selector de AreaSoporte al crear/editar usuario con rol RESPONSABLE_*"
-    status: failed
-    reason: "ROL-05 requiere un selector visual de AreaSoporte. Plan 05 (gap closure) eliminó el selector y cambió el diseño a derivación automática del areaSoporteId desde el rol en el backend (ROL_AREA_MAP). El formulario actual no muestra ningún selector de área. Esto es una desviación del texto literal del requisito."
-    artifacts:
-      - path: "apps/web/src/pages/UsuariosPage.jsx"
-        issue: "No existe ningún FormControl/Select de areaSoporte. emptyForm no tiene areaSoporteId. El payload hace delete payload.areaSoporteId antes de enviar."
-      - path: "apps/web/src/pages/AdminUsuariosPage.jsx"
-        issue: "No existe ningún FormControl/Select de areaSoporte. El payload hace delete payload.areaSoporteId antes de enviar."
-    missing:
-      - "O bien: re-agregar el selector condicional de AreaSoporte para roles RESPONSABLE_* en ambas páginas (cumplir ROL-05 literalmente)"
-      - "O bien: actualizar el texto de ROL-05 en REQUIREMENTS.md para reflejar el nuevo diseño de derivación automática y agregar un override en este archivo"
+    status: resolved
+    resolution: "Requisito ROL-05 actualizado en REQUIREMENTS.md (2026-05-25) para reflejar decisión de diseño UAT: areaSoporteId se deriva automáticamente del rol en backend (ROL_AREA_MAP). Selector manual eliminado intencionalmente — diseño auto-derivación es más robusto y elimina error humano de asignación. Ver 03-UAT.md gap 1."
 ---
 
 # Phase 03: Roles y Áreas de Soporte — Verification Report
