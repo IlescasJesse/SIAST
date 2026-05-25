@@ -2,6 +2,29 @@ import type { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../config/database.js";
 
+const ROL_AREA_MAP: Record<string, string> = {
+  RESPONSABLE_TI: "TI",
+  TECNICO_TI: "TI",
+  RESPONSABLE_REDES: "REDES",
+  TECNICO_REDES: "REDES",
+  RESPONSABLE_MANTENIMIENTO: "MANTENIMIENTO",
+  TECNICO_ELECTRICISTA: "MANTENIMIENTO",
+  TECNICO_PLOMERO: "MANTENIMIENTO",
+  TECNICO_MOVILIDAD: "MANTENIMIENTO",
+  RESPONSABLE_RECURSOS_MATERIALES: "RECURSOS_MATERIALES",
+  GESTOR_RECURSOS_MATERIALES: "RECURSOS_MATERIALES",
+  GESTOR_SALAS_JUNTA: "RECURSOS_MATERIALES",
+  GESTOR_RECURSOS: "RECURSOS_MATERIALES",
+  GESTOR_INVENTARIO: "RECURSOS_MATERIALES",
+};
+
+async function resolveAreaId(rol: string): Promise<number | null> {
+  const areaNombre = ROL_AREA_MAP[rol] ?? null;
+  if (!areaNombre) return null;
+  const area = await prisma.areaSoporte.findUnique({ where: { nombre: areaNombre } });
+  return area?.id ?? null;
+}
+
 const parseId = (param: string | string[]): number =>
   parseInt(Array.isArray(param) ? param[0] : param, 10);
 
@@ -34,33 +57,43 @@ export const listar = async (_req: Request, res: Response, next: NextFunction) =
 
 export const crear = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, areaSoporteId, ...rest } = req.body as {
+    const { password, usuario, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body as {
       nombre: string; apellidos: string; usuario: string;
       password: string; rol: string; email?: string; telefono?: string;
       esEmpleadoEstructura?: boolean; empleadoId?: string; rfc?: string;
-      permisos?: string[]; areaSoporteId?: number;
+      permisos?: string[];
     };
 
-    if ((rest.rol as string)?.startsWith("RESPONSABLE_") && !areaSoporteId) {
-      res.status(400).json({ error: "El campo areaSoporteId es obligatorio para roles RESPONSABLE_*" });
+    // Validar campos requeridos antes de cualquier operación async
+    const camposFaltantes: string[] = [];
+    if (!rest.nombre?.trim()) camposFaltantes.push("nombre");
+    if (!rest.apellidos?.trim()) camposFaltantes.push("apellidos");
+    if (!usuario?.trim()) camposFaltantes.push("usuario");
+    if (!rest.rol) camposFaltantes.push("rol");
+    if (!password?.trim()) camposFaltantes.push("password");
+    if (camposFaltantes.length > 0) {
+      res.status(400).json({ error: "Campos requeridos faltantes", campos: camposFaltantes });
       return;
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const usuario = await prisma.usuario.create({
+    const areaSoporteId = await resolveAreaId(rest.rol);
+
+    const usuarioCreado = await prisma.usuario.create({
       data: {
         ...rest,
+        usuario,
         rol: rest.rol as never,
         password: hashedPassword,
         esEmpleadoEstructura: esEmpleadoEstructura ?? false,
         empleadoId: esEmpleadoEstructura ? (empleadoId ?? null) : null,
         rfc: esEmpleadoEstructura ? (rfc ?? null) : null,
         ...(permisos !== undefined && { permisos: permisos ?? [] }),
-        areaSoporteId: areaSoporteId ?? null,
+        areaSoporteId,
       },
       select: userSelect,
     });
-    res.status(201).json(usuario);
+    res.status(201).json(usuarioCreado);
   } catch (err) {
     next(err);
   }
@@ -81,9 +114,24 @@ export const obtener = async (req: Request, res: Response, next: NextFunction) =
 
 export const actualizar = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, esEmpleadoEstructura, empleadoId, rfc, permisos, areaSoporteId, ...rest } = req.body;
+    const { password, usuario, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body;
+
+    // Validar campos que no pueden estar vacíos si vienen en el body
+    if (usuario !== undefined && !usuario?.trim()) {
+      res.status(400).json({ error: "El campo usuario no puede estar vacío", campos: ["usuario"] });
+      return;
+    }
+    if (rest.nombre !== undefined && !rest.nombre?.trim()) {
+      res.status(400).json({ error: "El campo nombre no puede estar vacío", campos: ["nombre"] });
+      return;
+    }
+    if (rest.apellidos !== undefined && !rest.apellidos?.trim()) {
+      res.status(400).json({ error: "El campo apellidos no puede estar vacío", campos: ["apellidos"] });
+      return;
+    }
 
     const data: Record<string, unknown> = { ...rest };
+    if (usuario !== undefined) data.usuario = usuario.trim();
     if (password) data.password = await bcrypt.hash(password, 10);
     if (permisos !== undefined) data.permisos = permisos;
 
@@ -93,18 +141,16 @@ export const actualizar = async (req: Request, res: Response, next: NextFunction
       data.rfc = esEmpleadoEstructura ? (rfc ?? null) : null;
     }
 
-    if (rest.rol && !(rest.rol as string).startsWith("RESPONSABLE_")) {
-      data.areaSoporteId = null;
-    } else if (areaSoporteId !== undefined) {
-      data.areaSoporteId = areaSoporteId;
+    if (rest.rol) {
+      data.areaSoporteId = await resolveAreaId(rest.rol as string);
     }
 
-    const usuario = await prisma.usuario.update({
+    const usuarioActualizado = await prisma.usuario.update({
       where: { id: parseId(req.params.id) },
       data,
       select: userSelect,
     });
-    res.json(usuario);
+    res.json(usuarioActualizado);
   } catch (err) {
     next(err);
   }
