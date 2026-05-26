@@ -7,13 +7,14 @@
 
 ## Current Phase
 
-**Phase 4: Métricas Operacionales** — Plan 03 complete, Plan 04 ready
-- Status: In progress (Plan 03 executed 2026-05-26)
+**Phase 4: Métricas Operacionales** — COMPLETE (4/4 plans executed 2026-05-26)
+- Status: Complete (Plan 04 executed 2026-05-26)
 - Decisions: Recharts, SLA fijo, endpoint único, tabs en DashboardPage, ticketsVersion pattern
 - Plan 01 decisions: areaSoporteId nullable sin @relation (integridad histórica), columnas tipadas sobre JSON monolítico, tipos legacy conservados para retrocompatibilidad
 - Plan 02 decisions: JWT de staff incluye areaSoporteId para RESPONSABLE_* scoping; TECNICO_SERVICIOS excluido (no en enum Rol); RESPONSABLE_* areaId siempre del JWT; funciones legacy eliminadas del controlador
 - Plan 03 decisions: recharts hoisted monorepo root (npm workspaces), AdapterDateFns sobre AdapterDayjs, Box height=260 Bar/Line + 220 Pie, Tooltip antes Legend z-order obligatorio
-- Next: Plan 04 — MetricasOperacionalesSection ensamblaje + integración DashboardPage
+- Plan 04 decisions: tipoFromTab area/tecnico/proceso, userId fallback para TECNICO_* en tab inicial, setInterval .unref() para job diario, upsert idempotente via @@unique([fecha, areaSoporteId])
+- Next: Phase 5 — Reportes Exportables
 
 ## Completed Phases
 
@@ -43,7 +44,7 @@
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
 | 2 | Features Pendientes — Procesos y Flujos | ✅ Complete (5/5 plans, 14/14 verified) |
 | 3 | Roles y Áreas de Soporte | ✅ Complete (5/5 plans, incl. gap closure 03-05) |
-| 4 | Métricas Operacionales | 🔄 In progress (2/4 plans) |
+| 4 | Métricas Operacionales | ✅ Complete (4/4 plans) |
 | 5 | Reportes Exportables | 🔲 Pending |
 
 ## Key Context
