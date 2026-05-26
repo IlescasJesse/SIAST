@@ -143,18 +143,29 @@ httpServer.listen(port, "0.0.0.0", () => {
       });
       for (const area of areas) {
         const areaData = await metricasService.obtenerMetricasPorArea(area.id);
+        // Contar el total real de tickets del área (activos + resueltos en el período)
+        const [totalArea, resueltosArea] = await Promise.all([
+          prisma.ticket.count({
+            where: { activo: true, tecnico: { areaSoporteId: area.id } },
+          }),
+          prisma.ticket.count({
+            where: { activo: true, estado: "RESUELTO", tecnico: { areaSoporteId: area.id } },
+          }),
+        ]);
         await prisma.metricasHistorial.upsert({
           where: { fecha_areaSoporteId: { fecha: hoy, areaSoporteId: area.id } },
           create: {
             fecha: hoy,
             areaSoporteId: area.id,
-            totalTickets: areaData.ticketsActivos + areaData.ticketsReabiertos,
-            ticketsResueltos: 0,
+            totalTickets: totalArea,
+            ticketsResueltos: resueltosArea,
             ticketsActivos: areaData.ticketsActivos,
             slaGlobal: areaData.slaGlobal,
             tiempoPromedioHoras: areaData.tiempoPromedioHoras,
           },
           update: {
+            totalTickets: totalArea,
+            ticketsResueltos: resueltosArea,
             ticketsActivos: areaData.ticketsActivos,
             slaGlobal: areaData.slaGlobal,
             tiempoPromedioHoras: areaData.tiempoPromedioHoras,
@@ -168,9 +179,23 @@ httpServer.listen(port, "0.0.0.0", () => {
     }
   }
 
-  // Ejecutar inmediatamente al arrancar y luego cada 24h (D-20, sin node-cron)
-  ejecutarSnapshotMetricas();
+  // Solo ejecutar al arrancar si no existe ya un snapshot de hoy (WR-04)
+  // Luego repetir cada 24h para actualizar el snapshot diario
   const VEINTICUATRO_HORAS = 24 * 60 * 60 * 1000;
+  (async () => {
+    try {
+      const hoyStr = new Date().toISOString().slice(0, 10);
+      const existeHoy = await prisma.metricasHistorial.findFirst({
+        where: { fecha: new Date(hoyStr) },
+      });
+      if (!existeHoy) {
+        // Delay 30s para que el servidor se estabilice antes del primer snapshot
+        setTimeout(ejecutarSnapshotMetricas, 30_000);
+      }
+    } catch (err) {
+      console.error("[MetricasHistorial] Error al verificar snapshot existente:", err);
+    }
+  })();
   setInterval(ejecutarSnapshotMetricas, VEINTICUATRO_HORAS).unref();
 });
 
