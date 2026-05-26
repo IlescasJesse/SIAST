@@ -29,6 +29,10 @@ enum Rol {
   TECNICO_ELECTRICISTA
   TECNICO_PLOMERO
   TECNICO_MOVILIDAD
+  // ── Phase 3+: gestores Recursos Materiales ──
+  GESTOR_SALAS_JUNTA
+  GESTOR_RECURSOS
+  GESTOR_INVENTARIO
 }
 
 enum CategoriaTicket {
@@ -595,4 +599,25 @@ model PasoDefinicion {
 
   @@index([procesoId])
   @@map("pasos_definicion")
+}
+
+// ============================================================
+// MÉTRICAS HISTORIAL (Phase 4 — daily snapshots)
+// ============================================================
+
+model MetricasHistorial {
+  id                  Int       @id @default(autoincrement())
+  fecha               DateTime  @db.Date
+  areaSoporteId       Int?      @map("area_soporte_id")
+  totalTickets        Int       @map("total_tickets")
+  ticketsResueltos    Int       @map("tickets_resueltos")
+  ticketsActivos      Int       @map("tickets_activos")
+  slaGlobal           Float     @map("sla_global")
+  tiempoPromedioHoras Float?    @map("tiempo_promedio_horas")
+  extras              Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@unique([fecha, areaSoporteId])
+  @@index([fecha])
+  @@map("metricas_historial")
 }
