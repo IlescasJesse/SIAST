@@ -28,7 +28,6 @@ const ROLES_RESPONSABLE = [
 const ROLES_TECNICO = [
   "TECNICO_TI",
   "TECNICO_REDES",
-  "TECNICO_SERVICIOS",
   "TECNICO_ELECTRICISTA",
   "TECNICO_PLOMERO",
   "TECNICO_MOVILIDAD",
@@ -76,6 +75,7 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
   const showTecnico = showGlobal || ROLES_TECNICO.includes(rol);
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
 
@@ -92,10 +92,15 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
           : {}),
     };
 
-    getMetricas(params)
+    getMetricas(params, controller.signal)
       .then(setData)
-      .catch((err) => setError(err?.response?.data?.error ?? "Error al cargar métricas"))
+      .catch((err) => {
+        if (err?.code === "ERR_CANCELED") return;
+        setError(err?.response?.data?.error ?? "Error al cargar métricas");
+      })
       .finally(() => setLoading(false));
+
+    return () => controller.abort();
   }, [ticketsVersion, dateRange.start, dateRange.end, activeTab, selectedAreaId, selectedTecnicoId, userId]);
 
   // Drill-down: click en responsable desde Tab Global → Tab Por Responsable
