@@ -5,19 +5,24 @@ import * as ctrl from "../controllers/metricas.controller.js";
 
 const router = Router();
 
-// Todas las rutas de métricas requieren autenticación
 router.use(authMiddleware);
 
-// Roles permitidos: ADMIN y cualquier técnico (para ver sus propias métricas)
-const rolesMetricas = requireRol("ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS");
+// Todos los roles con acceso a métricas (Phase 3+ incluidos — pitfall 6 del RESEARCH)
+const rolesMetricas = requireRol(
+  "ADMIN",
+  "MESA_AYUDA",
+  "RESPONSABLE_TI",
+  "RESPONSABLE_REDES",
+  "RESPONSABLE_MANTENIMIENTO",
+  "RESPONSABLE_RECURSOS_MATERIALES",
+  "TECNICO_TI",
+  "TECNICO_REDES",
+  "TECNICO_ELECTRICISTA",
+  "TECNICO_PLOMERO",
+  "TECNICO_MOVILIDAD",
+);
 
-// GET /api/metricas/solicitudes?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
-router.get("/solicitudes", rolesMetricas, ctrl.metricasSolicitudes);
-
-// GET /api/metricas/tecnicos
-router.get("/tecnicos", rolesMetricas, ctrl.metricasTecnicos);
-
-// GET /api/metricas/procesos?slaHoras=24
-router.get("/procesos", rolesMetricas, ctrl.metricasProcesos);
+// Endpoint único paramétrico (D-10)
+router.get("/", rolesMetricas, ctrl.obtener);
 
 export default router;

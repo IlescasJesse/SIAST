@@ -7,6 +7,7 @@ export interface JwtPayload {
   usuario?: string; // staff
   rfc?: string; // empleado
   nombre: string;
+  areaSoporteId?: number; // solo RESPONSABLE_* — incluido en JWT para scoping seguro sin DB lookup
   jti?: string; // ID único de sesión (UUID)
   iat?: number;
   exp?: number;
