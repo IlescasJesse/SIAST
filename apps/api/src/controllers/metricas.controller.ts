@@ -25,8 +25,18 @@ const QuerySchema = z.object({
       if (isNaN(d.getTime())) throw new Error("fechaFin inválida");
       return d;
     }),
-  areaId: z.string().optional().transform((s) => (s ? Number(s) : undefined)),
-  tecnicoId: z.string().optional().transform((s) => (s ? Number(s) : undefined)),
+  areaId: z.string().optional().transform((s) => {
+    if (!s) return undefined;
+    const n = Number(s);
+    if (isNaN(n) || !Number.isInteger(n) || n <= 0) throw new Error("areaId debe ser un entero positivo");
+    return n;
+  }),
+  tecnicoId: z.string().optional().transform((s) => {
+    if (!s) return undefined;
+    const n = Number(s);
+    if (isNaN(n) || !Number.isInteger(n) || n <= 0) throw new Error("tecnicoId debe ser un entero positivo");
+    return n;
+  }),
 });
 
 // ============================================================
@@ -53,6 +63,26 @@ export const obtener = async (
     const user = req.user!;
 
     // 2. Role scoping — SEGURIDAD CRÍTICA (D-12, T-04-02-01)
+    const ROLES_TECNICO = [
+      "TECNICO_TI",
+      "TECNICO_REDES",
+      "TECNICO_ELECTRICISTA",
+      "TECNICO_PLOMERO",
+      "TECNICO_MOVILIDAD",
+    ];
+
+    // CR-01: TECNICO_* solo puede acceder a tipo=proceso (sus propias métricas)
+    if (ROLES_TECNICO.includes(user.rol) && tipo !== "proceso") {
+      res.status(403).json({ error: "Técnicos solo pueden acceder a métricas tipo=proceso" });
+      return;
+    }
+
+    // CR-02: RESPONSABLE_* no puede acceder a tipo=area (métricas globales)
+    if ((ROLES_RESPONSABLE as readonly string[]).includes(user.rol) && tipo === "area") {
+      res.status(403).json({ error: "Responsables no pueden acceder a métricas globales" });
+      return;
+    }
+
     // RESPONSABLE_*: ignorar areaId del query param, forzar desde JWT
     if ((ROLES_RESPONSABLE as readonly string[]).includes(user.rol)) {
       if (!user.areaSoporteId) {
@@ -63,13 +93,6 @@ export const obtener = async (
     }
 
     // 3. TECNICO_*: para tipo=proceso, forzar su propio tecnicoId (T-04-02-04)
-    const ROLES_TECNICO = [
-      "TECNICO_TI",
-      "TECNICO_REDES",
-      "TECNICO_ELECTRICISTA",
-      "TECNICO_PLOMERO",
-      "TECNICO_MOVILIDAD",
-    ];
     const tecnicoIdEfectivo = ROLES_TECNICO.includes(user.rol) ? user.id : (tecnicoId ?? undefined);
 
     // 4. Delegar al servicio según tipo
