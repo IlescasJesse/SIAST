@@ -44,6 +44,7 @@ import { PerfilPage } from "./pages/PerfilPage.jsx";
 import { AreasPage } from "./pages/AreasPage.jsx";
 import { RecursosPage } from "./pages/RecursosPage.jsx";
 import { AdminPage } from "./pages/AdminPage.jsx";
+import { MetricasPage } from "./pages/MetricasPage.jsx";
 
 // Ruta protegida: redirige a /login preservando la ruta actual como ?redirect=
 const ProtectedRoute = ({ roles }) => {
@@ -76,14 +77,19 @@ export const App = () => {
               {/* Redirect raíz según rol */}
               <Route path="/" element={<RootRedirect />} />
 
-              {/* Recursos Materiales — Admin y Gestor */}
-              <Route element={<ProtectedRoute roles={["ADMIN", "GESTOR_RECURSOS_MATERIALES"]} />}>
+              {/* Recursos Materiales — Admin, Gestor y Responsable */}
+              <Route element={<ProtectedRoute roles={["ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"]} />}>
                 <Route path="/recursos" element={<PageErrorBoundary><RecursosPage /></PageErrorBoundary>} />
               </Route>
 
-              {/* Dashboard — solo admin y técnicos */}
-              <Route element={<ProtectedRoute roles={["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"]} />}>
+              {/* Dashboard — admin, técnicos, gestores y responsables */}
+              <Route element={<ProtectedRoute roles={["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"]} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+              </Route>
+
+              {/* Métricas Operacionales */}
+              <Route element={<ProtectedRoute roles={["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_TI", "TECNICO_REDES", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"]} />}>
+                <Route path="/metricas" element={<PageErrorBoundary><MetricasPage /></PageErrorBoundary>} />
               </Route>
 
               {/* Solicitudes — cualquier usuario autenticado; backend filtra por rol */}
@@ -117,6 +123,6 @@ const RootRedirect = () => {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
   if (user.rol === "EMPLEADO") return <Navigate to="/solicitudes/nueva" replace />;
-  if (user.rol === "GESTOR_RECURSOS_MATERIALES") return <Navigate to="/recursos" replace />;
+  if (user.rol === "GESTOR_RECURSOS_MATERIALES" || user.rol === "RESPONSABLE_RECURSOS_MATERIALES") return <Navigate to="/recursos" replace />;
   return <Navigate to="/dashboard" replace />;
 };

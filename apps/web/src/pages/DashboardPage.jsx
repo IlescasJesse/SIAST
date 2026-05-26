@@ -17,7 +17,6 @@ import TodayIcon from "@mui/icons-material/Today";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useAuthStore } from "../store/auth.js";
-import { MetricasOperacionalesSection } from "../components/metricas/MetricasOperacionalesSection.jsx";
 import { useNotifStore } from "../store/notificaciones.js";
 import { getSolicitudes, getMisPasos } from "../api/solicitudes.js";
 import { getCatalogos, getAsignaciones } from "../api/recursos.js";
@@ -582,18 +581,6 @@ export const DashboardPage = () => {
             <MetricasGestor recursos={recursos} asignaciones={asignaciones} />
           )}
           {rol === "EMPLEADO" && <MetricasEmpleado tickets={tickets} navigate={navigate} />}
-
-          {/* Sección Métricas Operacionales — visible para ADMIN, RESPONSABLE_*, TECNICO_* */}
-          {(rol === "ADMIN" ||
-            rol === "MESA_AYUDA" ||
-            rol.startsWith("RESPONSABLE_") ||
-            rol.startsWith("TECNICO_")) && (
-            <MetricasOperacionalesSection
-              rol={rol}
-              areaSoporteId={user?.areaSoporteId}
-              userId={user?.id}
-            />
-          )}
         </>
       )}
     </Box>
