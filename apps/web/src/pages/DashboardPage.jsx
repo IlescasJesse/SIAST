@@ -515,7 +515,13 @@ export const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
 
   const isGestor = rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES";
-  const esTecnico = ["TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS"].includes(rol);
+  const esTecnico = [
+    "TECNICO_TI",
+    "TECNICO_REDES",
+    "TECNICO_ELECTRICISTA",
+    "TECNICO_PLOMERO",
+    "TECNICO_MOVILIDAD",
+  ].includes(rol);
 
   useEffect(() => {
     (async () => {
