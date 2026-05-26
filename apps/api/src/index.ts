@@ -14,6 +14,8 @@ import catalogosRoutes from "./routes/catalogos.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import recursosRoutes from "./routes/recursos.routes.js";
 import metricasRoutes from "./routes/metricas.routes.js";
+import * as metricasService from "./services/metricas.service.js";
+import { prisma } from "./config/database.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { configurarSockets } from "./sockets/tickets.socket.js";
 import { setIo } from "./services/notificaciones.service.js";
@@ -105,6 +107,71 @@ httpServer.listen(port, "0.0.0.0", () => {
       console.error("[SIRH] Error en sync periódico:", err);
     });
   }, SYNC_INTERVAL_MS).unref(); // .unref() para no bloquear el cierre del proceso
+
+  // ── Job diario: snapshot de métricas en MetricasHistorial (Phase 4, D-20) ─────
+  async function ejecutarSnapshotMetricas(): Promise<void> {
+    try {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0); // inicio del día
+
+      // Snapshot global (sin área)
+      const global = await metricasService.obtenerMetricasGlobal();
+      await prisma.metricasHistorial.upsert({
+        where: { fecha_areaSoporteId: { fecha: hoy, areaSoporteId: null as any } },
+        create: {
+          fecha: hoy,
+          areaSoporteId: null,
+          totalTickets: global.totalTickets,
+          ticketsResueltos: global.ticketsResueltos,
+          ticketsActivos: global.ticketsActivos,
+          slaGlobal: global.slaGlobal,
+          tiempoPromedioHoras: global.tiempoPromedioHoras,
+        },
+        update: {
+          totalTickets: global.totalTickets,
+          ticketsResueltos: global.ticketsResueltos,
+          ticketsActivos: global.ticketsActivos,
+          slaGlobal: global.slaGlobal,
+          tiempoPromedioHoras: global.tiempoPromedioHoras,
+        },
+      });
+
+      // Snapshot por área
+      const areas = await prisma.areaSoporte.findMany({
+        where: { activo: true },
+        select: { id: true },
+      });
+      for (const area of areas) {
+        const areaData = await metricasService.obtenerMetricasPorArea(area.id);
+        await prisma.metricasHistorial.upsert({
+          where: { fecha_areaSoporteId: { fecha: hoy, areaSoporteId: area.id } },
+          create: {
+            fecha: hoy,
+            areaSoporteId: area.id,
+            totalTickets: areaData.ticketsActivos + areaData.ticketsReabiertos,
+            ticketsResueltos: 0,
+            ticketsActivos: areaData.ticketsActivos,
+            slaGlobal: areaData.slaGlobal,
+            tiempoPromedioHoras: areaData.tiempoPromedioHoras,
+          },
+          update: {
+            ticketsActivos: areaData.ticketsActivos,
+            slaGlobal: areaData.slaGlobal,
+            tiempoPromedioHoras: areaData.tiempoPromedioHoras,
+          },
+        });
+      }
+
+      console.log(`[MetricasHistorial] Snapshot guardado — ${hoy.toISOString().slice(0, 10)}`);
+    } catch (err) {
+      console.error("[MetricasHistorial] Error al guardar snapshot:", err);
+    }
+  }
+
+  // Ejecutar inmediatamente al arrancar y luego cada 24h (D-20, sin node-cron)
+  ejecutarSnapshotMetricas();
+  const VEINTICUATRO_HORAS = 24 * 60 * 60 * 1000;
+  setInterval(ejecutarSnapshotMetricas, VEINTICUATRO_HORAS).unref();
 });
 
 // ============================================================

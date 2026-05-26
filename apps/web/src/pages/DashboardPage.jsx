@@ -17,6 +17,7 @@ import TodayIcon from "@mui/icons-material/Today";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useAuthStore } from "../store/auth.js";
+import { MetricasOperacionalesSection } from "../components/metricas/MetricasOperacionalesSection.jsx";
 import { useNotifStore } from "../store/notificaciones.js";
 import { getSolicitudes, getMisPasos } from "../api/solicitudes.js";
 import { getCatalogos, getAsignaciones } from "../api/recursos.js";
@@ -384,7 +385,7 @@ function MetricasMesaAyuda({ tickets }) {
 function MetricasGestor({ recursos, asignaciones }) {
   const totalCatalogos = recursos.length;
   const totalUnidades = recursos.reduce((s, r) => s + (r._count?.unidades ?? r.unidades?.length ?? 0), 0);
-  const asignacionesActivas = asignaciones.filter((a) => a.estado === "ACTIVA" || !a.fechaDevolucion).length;
+  const asignacionesActivas = asignaciones.filter((a) => a.estado === "APROBADA" || a.estado === "PENDIENTE").length;
 
   const porTipo = {};
   recursos.forEach((r) => {
@@ -513,7 +514,7 @@ export const DashboardPage = () => {
   const [misPasos, setMisPasos] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const isGestor = rol === "GESTOR_RECURSOS_MATERIALES";
+  const isGestor = rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES";
   const esTecnico = ["TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS"].includes(rol);
 
   useEffect(() => {
@@ -527,11 +528,11 @@ export const DashboardPage = () => {
 
         if (isGestor) {
           const [rec, asig] = await Promise.all([
-            getCatalogos().catch(() => ({ catalogos: [] })),
-            getAsignaciones().catch(() => ({ asignaciones: [] })),
+            getCatalogos().catch(() => ({ data: [] })),
+            getAsignaciones().catch(() => ({ data: [] })),
           ]);
-          setRecursos(rec?.catalogos ?? rec ?? []);
-          setAsignaciones(asig?.asignaciones ?? asig ?? []);
+          setRecursos(rec?.data ?? []);
+          setAsignaciones(asig?.data ?? []);
         }
 
         if (esTecnico) {
@@ -571,10 +572,22 @@ export const DashboardPage = () => {
             <MetricasTecnico tickets={tickets} user={user} misPasos={misPasos} navigate={navigate} />
           )}
           {rol === "MESA_AYUDA" && <MetricasMesaAyuda tickets={tickets} />}
-          {rol === "GESTOR_RECURSOS_MATERIALES" && (
+          {(rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES") && (
             <MetricasGestor recursos={recursos} asignaciones={asignaciones} />
           )}
           {rol === "EMPLEADO" && <MetricasEmpleado tickets={tickets} navigate={navigate} />}
+
+          {/* Sección Métricas Operacionales — visible para ADMIN, RESPONSABLE_*, TECNICO_* */}
+          {(rol === "ADMIN" ||
+            rol === "MESA_AYUDA" ||
+            rol.startsWith("RESPONSABLE_") ||
+            rol.startsWith("TECNICO_")) && (
+            <MetricasOperacionalesSection
+              rol={rol}
+              areaSoporteId={user?.areaSoporteId}
+              userId={user?.id}
+            />
+          )}
         </>
       )}
     </Box>
