@@ -7,11 +7,12 @@
 
 ## Current Phase
 
-**Phase 4: Métricas Operacionales** — Plan 01 complete, Plan 02 ready
-- Status: In progress (Plan 01 executed 2026-05-26)
+**Phase 4: Métricas Operacionales** — Plan 02 complete, Plan 03 ready
+- Status: In progress (Plan 02 executed 2026-05-26)
 - Decisions: Recharts, SLA fijo, endpoint único, tabs en DashboardPage, ticketsVersion pattern
 - Plan 01 decisions: areaSoporteId nullable sin @relation (integridad histórica), columnas tipadas sobre JSON monolítico, tipos legacy conservados para retrocompatibilidad
-- Next: Plan 02 — Backend metricas.service.ts (aggregation real) + controlador endpoint único
+- Plan 02 decisions: JWT de staff incluye areaSoporteId para RESPONSABLE_* scoping; TECNICO_SERVICIOS excluido (no en enum Rol); RESPONSABLE_* areaId siempre del JWT; funciones legacy eliminadas del controlador
+- Next: Plan 03 — Frontend atoms: recharts, SlaIndicator, 3 chart wrappers, DateRangeFilter, tablas
 
 ## Completed Phases
 
