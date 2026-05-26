@@ -101,6 +101,13 @@
 **Goal:** Dashboard de métricas en tiempo real para administradores y responsables de área.
 **Requirements:** MET-01 a MET-04
 **Depends on:** Phase 3 complete
+**Plans:** 4 planes
+
+### Plans
+- [x] 04-01-PLAN.md — Schema MetricasHistorial + migración + tipos @stf/shared para endpoint unificado
+- [ ] 04-02-PLAN.md — Backend: metricas.service.ts (aggregation real), controlador endpoint único, ruta roles Phase 3+
+- [ ] 04-03-PLAN.md — Frontend atoms: recharts install, SlaIndicator, 3 chart wrappers, DateRangeFilter, EficienciaTable, RendimientoTecnicoTable
+- [ ] 04-04-PLAN.md — Integración: 3 tabs + MetricasOperacionalesSection + DashboardPage + job diario snapshots
 
 ### Deliverables
 - Endpoints GET /api/metricas/{area,tecnico,proceso} funcionales con AreaSoporte

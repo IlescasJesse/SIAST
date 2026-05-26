@@ -7,10 +7,11 @@
 
 ## Current Phase
 
-**Phase 4: Métricas Operacionales** — Context gathered, ready for planning
-- Status: Context gathered (2026-05-13)
+**Phase 4: Métricas Operacionales** — Plan 01 complete, Plan 02 ready
+- Status: In progress (Plan 01 executed 2026-05-26)
 - Decisions: Recharts, SLA fijo, endpoint único, tabs en DashboardPage, ticketsVersion pattern
-- Next: `/gsd-plan-phase 04`
+- Plan 01 decisions: areaSoporteId nullable sin @relation (integridad histórica), columnas tipadas sobre JSON monolítico, tipos legacy conservados para retrocompatibilidad
+- Next: Plan 02 — Backend metricas.service.ts (aggregation real) + controlador endpoint único
 
 ## Completed Phases
 
@@ -40,7 +41,7 @@
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
 | 2 | Features Pendientes — Procesos y Flujos | ✅ Complete (5/5 plans, 14/14 verified) |
 | 3 | Roles y Áreas de Soporte | ✅ Complete (5/5 plans, incl. gap closure 03-05) |
-| 4 | Métricas Operacionales | 📋 Context gathered → plan |
+| 4 | Métricas Operacionales | 🔄 In progress (1/4 plans) |
 | 5 | Reportes Exportables | 🔲 Pending |
 
 ## Key Context
