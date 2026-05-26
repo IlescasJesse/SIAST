@@ -621,7 +621,7 @@ export interface EficienciaResponsable {
   areaSoporteId: number;
   ticketsResueltos: number;
   tiempoPromedioHoras: number | null;
-  slaGlobal: number; // porcentaje 0-100
+  slaGlobal: number | null; // porcentaje 0-100, null = sin datos en el período
 }
 
 /** Rendimiento de un técnico (para tabla Tab Por Responsable) */
@@ -651,7 +651,7 @@ export interface MetricasGlobalResponse {
   totalTickets: number;
   ticketsActivos: number;
   ticketsResueltos: number;
-  slaGlobal: number; // %
+  slaGlobal: number | null; // %, null = sin datos en el período
   tiempoPromedioHoras: number | null;
   // Charts
   tendenciaDiaria: TendenciaDia[];
@@ -669,7 +669,7 @@ export interface MetricasPorAreaResponse {
   // KPIs tarjetas
   ticketsActivos: number;
   tiempoPromedioHoras: number | null;
-  slaGlobal: number;
+  slaGlobal: number | null; // null = sin datos en el período
   ticketsReabiertos: number;
   // Charts
   tendenciaDiaria: TendenciaDia[];

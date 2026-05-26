@@ -31,12 +31,12 @@ function buildDateWhere(fechaInicio?: Date, fechaFin?: Date): { createdAt?: { gt
 }
 
 // ── Helper: calcular SLA % ────────────────────────────────────────────────────
-async function calcularSLA(where: Record<string, unknown>): Promise<number> {
+async function calcularSLA(where: Record<string, unknown>): Promise<number | null> {
   const resueltos = await prisma.ticket.findMany({
     where: { ...where, estado: "RESUELTO", fechaResolucion: { not: null }, activo: true },
     select: { categoria: true, createdAt: true, fechaResolucion: true },
   });
-  if (resueltos.length === 0) return 0;
+  if (resueltos.length === 0) return null; // null = sin datos, 0 = todos incumplidos
   let cumplieron = 0;
   for (const t of resueltos) {
     const metaMs = (SLA_HORAS[t.categoria as string] ?? 24) * 3_600_000;
@@ -62,12 +62,13 @@ async function calcularTendencia(
     FROM tickets t
     ${
       areaId
-        ? Prisma.sql`JOIN usuarios u ON t.tecnico_id = u.id AND u.area_soporte_id = ${areaId}`
+        ? Prisma.sql`LEFT JOIN usuarios u ON t.tecnico_id = u.id`
         : Prisma.empty
     }
     WHERE t.activo = true
       AND t.created_at >= ${fechaInicio}
       AND t.created_at <= ${fechaFin}
+      ${areaId ? Prisma.sql`AND (u.area_soporte_id = ${areaId} OR t.tecnico_id IS NULL)` : Prisma.empty}
     GROUP BY DATE(t.created_at)
     ORDER BY dia ASC
   `;
@@ -391,10 +392,25 @@ export async function obtenerMetricasPorTecnico(
   const fInicio = fechaInicio ?? new Date(Date.now() - 30 * 86_400_000);
   const fFin = fechaFin ?? new Date();
 
+  const ROLES_TECNICOS_VALIDOS = [
+    "TECNICO_TI",
+    "TECNICO_REDES",
+    "TECNICO_ELECTRICISTA",
+    "TECNICO_PLOMERO",
+    "TECNICO_MOVILIDAD",
+  ];
+
   const tecnico = await prisma.usuario.findUnique({
     where: { id: tecnicoId },
-    select: { nombre: true, apellidos: true, areaSoporteId: true },
+    select: { nombre: true, apellidos: true, areaSoporteId: true, activo: true, rol: true },
   });
+
+  if (!tecnico || !tecnico.activo) {
+    throw Object.assign(new Error("Técnico no encontrado"), { status: 404 });
+  }
+  if (!ROLES_TECNICOS_VALIDOS.includes(tecnico.rol)) {
+    throw Object.assign(new Error("El usuario no es un técnico"), { status: 400 });
+  }
 
   const [ticketsCompletados, cancelados, tiempoPromedioHoras, tiemprimeraRespuestaHoras] =
     await Promise.all([
