@@ -56,7 +56,7 @@ async function calcularTendencia(
   type DayRow = { dia: string; creados: bigint; resueltos: bigint };
   const rows = await prisma.$queryRaw<DayRow[]>`
     SELECT
-      DATE(t.created_at) AS dia,
+      DATE(t.createdAt) AS dia,
       COUNT(*) AS creados,
       SUM(CASE WHEN t.estado = 'RESUELTO' THEN 1 ELSE 0 END) AS resueltos
     FROM tickets t
@@ -66,10 +66,10 @@ async function calcularTendencia(
         : Prisma.empty
     }
     WHERE t.activo = true
-      AND t.created_at >= ${fechaInicio}
-      AND t.created_at <= ${fechaFin}
+      AND t.createdAt >= ${fechaInicio}
+      AND t.createdAt <= ${fechaFin}
       ${areaId ? Prisma.sql`AND (u.area_soporte_id = ${areaId} OR t.tecnico_id IS NULL)` : Prisma.empty}
-    GROUP BY DATE(t.created_at)
+    GROUP BY DATE(t.createdAt)
     ORDER BY dia ASC
   `;
   return rows.map((r) => ({
@@ -171,8 +171,8 @@ export async function obtenerMetricasGlobal(
         JOIN usuarios u ON t.tecnico_id = u.id
         WHERE t.activo = true
           AND u.area_soporte_id = ${a.id}
-          ${dateWhere.createdAt?.gte ? Prisma.sql`AND t.created_at >= ${dateWhere.createdAt.gte}` : Prisma.empty}
-          ${dateWhere.createdAt?.lte ? Prisma.sql`AND t.created_at <= ${dateWhere.createdAt.lte}` : Prisma.empty}
+          ${dateWhere.createdAt?.gte ? Prisma.sql`AND t.createdAt >= ${dateWhere.createdAt.gte}` : Prisma.empty}
+          ${dateWhere.createdAt?.lte ? Prisma.sql`AND t.createdAt <= ${dateWhere.createdAt.lte}` : Prisma.empty}
       `;
       const row = rows[0];
       return {
@@ -428,11 +428,11 @@ export async function obtenerMetricasPorTecnico(
   // Tendencia productividad personal
   type ProdRow = { dia: string; completados: bigint };
   const prodRows = await prisma.$queryRaw<ProdRow[]>`
-    SELECT DATE(created_at) AS dia, COUNT(*) AS completados
+    SELECT DATE(createdAt) AS dia, COUNT(*) AS completados
     FROM tickets
     WHERE activo = true AND tecnico_id = ${tecnicoId} AND estado = 'RESUELTO'
-      AND created_at >= ${fInicio} AND created_at <= ${fFin}
-    GROUP BY DATE(created_at) ORDER BY dia ASC
+      AND createdAt >= ${fInicio} AND createdAt <= ${fFin}
+    GROUP BY DATE(createdAt) ORDER BY dia ASC
   `;
   const tendenciaProductividad: TendenciaDia[] = prodRows.map((r) => ({
     dia: String(r.dia),

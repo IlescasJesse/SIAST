@@ -124,14 +124,14 @@ httpServer.listen(port, "0.0.0.0", () => {
           totalTickets: global.totalTickets,
           ticketsResueltos: global.ticketsResueltos,
           ticketsActivos: global.ticketsActivos,
-          slaGlobal: global.slaGlobal,
+          slaGlobal: global.slaGlobal ?? 0,
           tiempoPromedioHoras: global.tiempoPromedioHoras,
         },
         update: {
           totalTickets: global.totalTickets,
           ticketsResueltos: global.ticketsResueltos,
           ticketsActivos: global.ticketsActivos,
-          slaGlobal: global.slaGlobal,
+          slaGlobal: global.slaGlobal ?? 0,
           tiempoPromedioHoras: global.tiempoPromedioHoras,
         },
       });
@@ -160,14 +160,14 @@ httpServer.listen(port, "0.0.0.0", () => {
             totalTickets: totalArea,
             ticketsResueltos: resueltosArea,
             ticketsActivos: areaData.ticketsActivos,
-            slaGlobal: areaData.slaGlobal,
+            slaGlobal: areaData.slaGlobal ?? 0,
             tiempoPromedioHoras: areaData.tiempoPromedioHoras,
           },
           update: {
             totalTickets: totalArea,
             ticketsResueltos: resueltosArea,
             ticketsActivos: areaData.ticketsActivos,
-            slaGlobal: areaData.slaGlobal,
+            slaGlobal: areaData.slaGlobal ?? 0,
             tiempoPromedioHoras: areaData.tiempoPromedioHoras,
           },
         });
