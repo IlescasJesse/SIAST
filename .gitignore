@@ -14,3 +14,6 @@ CREDENCIALES.md
 
 # Claude Code - worktrees temporales (no pertenecen al proyecto)
 .claude/worktrees/
+
+# DevVault — contexto local Claude Code (no commitear)
+.claude/CLAUDE.md
