@@ -3,11 +3,15 @@ import PropTypes from "prop-types";
 
 /**
  * Chip indicador de SLA con colores semánticos.
- * pct >= 90 → success (SLA OK)
- * pct 70-89 → warning (En riesgo)
- * pct < 70  → error (Incumplido)
+ * pct == null → Sin datos (default)
+ * pct >= 90  → success (SLA OK)
+ * pct 70-89  → warning (En riesgo)
+ * pct < 70   → error (Incumplido)
  */
 export function SlaIndicator({ pct }) {
+  if (pct == null) {
+    return <Chip label="Sin datos" color="default" size="small" variant="outlined" />;
+  }
   const config =
     pct >= 90
       ? { label: `SLA OK ${pct}%`, color: "success" }

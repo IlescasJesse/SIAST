@@ -8,15 +8,22 @@ import {
   Alert,
   Button,
   Divider,
+  TextField,
+  InputAdornment,
+  Chip,
 } from "@mui/material";
 import BarChartIcon from "@mui/icons-material/BarChart";
-import { subDays, format } from "date-fns";
+import SearchIcon from "@mui/icons-material/Search";
+import { subDays, format, differenceInCalendarDays, startOfDay, isEqual } from "date-fns";
+import { es } from "date-fns/locale";
 import { useNotifStore } from "../../store/notificaciones.js";
 import { getMetricas } from "../../api/metricas.js";
+import { getAreasSoporte, getUsuarios } from "../../api/admin.js";
 import { DateRangeFilter } from "./DateRangeFilter.jsx";
 import { MetricasTabGlobal } from "./MetricasTabGlobal.jsx";
 import { MetricasTabResponsable } from "./MetricasTabResponsable.jsx";
 import { MetricasTabTecnico } from "./MetricasTabTecnico.jsx";
+import { formatLabel } from "./utils.js";
 import PropTypes from "prop-types";
 
 const ROLES_RESPONSABLE = [
@@ -33,20 +40,26 @@ const ROLES_TECNICO = [
   "TECNICO_MOVILIDAD",
 ];
 
-/**
- * Mapea el tab activo al tipo de métrica esperado por el backend.
- * tab 0 → "area" (Global), tab 1 → "tecnico" (Por Responsable), tab 2 → "proceso" (Por Técnico)
- */
+// Orden de sub-tabs de área: TI primero
+const AREA_PRIORITY = ["TI", "TECNOLOG", "REDES", "MANTENIMIENTO", "RECURSOS"];
+
+function sortAreas(areas) {
+  return [...areas].sort((a, b) => {
+    const upper = (s) => s.toUpperCase();
+    const rank = (nombre) => {
+      const idx = AREA_PRIORITY.findIndex((k) => upper(nombre).includes(k));
+      return idx === -1 ? 99 : idx;
+    };
+    return rank(a.nombre) - rank(b.nombre);
+  });
+}
+
 function tipoFromTab(tab) {
   if (tab === 0) return "area";
   if (tab === 1) return "tecnico";
   return "proceso";
 }
 
-/**
- * Sección de métricas operacionales dentro de DashboardPage.
- * Gestiona el estado de tabs, filtro de fechas, y refetch por ticketsVersion.
- */
 export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
   const ticketsVersion = useNotifStore((s) => s.ticketsVersion);
 
@@ -57,39 +70,85 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
     start: subDays(new Date(), 30),
     end: new Date(),
   });
+  const [dateFilterActive, setDateFilterActive] = useState(false);
 
-  // Determinar tab inicial según rol
+  const handleDateRangeChange = (range) => {
+    setDateRange(range);
+    setDateFilterActive(true);
+  };
+
   const initialTab = useMemo(() => {
     if (ROLES_RESPONSABLE.includes(rol)) return 1;
     if (ROLES_TECNICO.includes(rol)) return 2;
-    return 0; // ADMIN / MESA_AYUDA
+    return 0;
   }, [rol]);
 
   const [activeTab, setActiveTab] = useState(initialTab);
   const [selectedAreaId, setSelectedAreaId] = useState(areaSoporteId ?? null);
-  const [selectedTecnicoId, setSelectedTecnicoId] = useState(null);
+  const [selectedTecnicoId, setSelectedTecnicoId] = useState(
+    ROLES_TECNICO.includes(rol) ? userId : null,
+  );
+  const [areasSoporte, setAreasSoporte] = useState([]);
+  const [tecnicos, setTecnicos] = useState([]);
+  const [searchTecnico, setSearchTecnico] = useState("");
 
-  // Determinar visibilidad de tabs según rol
   const showGlobal = rol === "ADMIN" || rol === "MESA_AYUDA";
   const showResponsable = showGlobal || ROLES_RESPONSABLE.includes(rol);
   const showTecnico = showGlobal || ROLES_TECNICO.includes(rol);
+  const esTecnicoRol = ROLES_TECNICO.includes(rol);
 
+  const sortedAreas = useMemo(() => sortAreas(areasSoporte), [areasSoporte]);
+
+  // Cargar áreas y técnicos para ADMIN/MESA_AYUDA
+  useEffect(() => {
+    if (!showGlobal) return;
+    getAreasSoporte()
+      .then((areas) => {
+        setAreasSoporte(areas);
+        // Auto-seleccionar primera área (TI) si aún no hay selección
+        if (!areaSoporteId && areas.length > 0) {
+          const sorted = sortAreas(areas);
+          setSelectedAreaId(sorted[0].id);
+        }
+      })
+      .catch(() => {});
+    getUsuarios()
+      .then((all) =>
+        setTecnicos(all.filter((u) => ROLES_TECNICO.includes(u.rol) && u.activo)),
+      )
+      .catch(() => {});
+  }, [showGlobal, areaSoporteId]);
+
+  // Fetch métricas
   useEffect(() => {
     const controller = new AbortController();
+    const tipo = tipoFromTab(activeTab);
+    const tecnicoIdFinal = esTecnicoRol ? userId : selectedTecnicoId;
+
+    if (tipo === "tecnico" && !selectedAreaId) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    if (tipo === "proceso" && !tecnicoIdFinal) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
-    const tipo = tipoFromTab(activeTab);
     const params = {
       tipo,
-      fechaInicio: format(dateRange.start, "yyyy-MM-dd"),
-      fechaFin: format(dateRange.end, "yyyy-MM-dd"),
-      ...(tipo === "tecnico" && selectedAreaId ? { areaId: selectedAreaId } : {}),
-      ...(tipo === "proceso" && selectedTecnicoId
-        ? { tecnicoId: selectedTecnicoId }
-        : tipo === "proceso" && userId
-          ? { tecnicoId: userId }
-          : {}),
+      ...(dateFilterActive
+        ? {
+            fechaInicio: format(dateRange.start, "yyyy-MM-dd"),
+            fechaFin: format(dateRange.end, "yyyy-MM-dd"),
+          }
+        : {}),
+      ...(tipo === "tecnico" ? { areaId: selectedAreaId } : {}),
+      ...(tipo === "proceso" ? { tecnicoId: tecnicoIdFinal } : {}),
     };
 
     getMetricas(params, controller.signal)
@@ -101,26 +160,60 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [ticketsVersion, dateRange.start, dateRange.end, activeTab, selectedAreaId, selectedTecnicoId, userId]);
+  }, [
+    ticketsVersion,
+    dateFilterActive,
+    dateRange.start,
+    dateRange.end,
+    activeTab,
+    selectedAreaId,
+    selectedTecnicoId,
+    userId,
+    rol,
+    esTecnicoRol,
+  ]);
 
-  // Drill-down: click en responsable desde Tab Global → Tab Por Responsable
   const handleResponsableClick = (row) => {
     setSelectedAreaId(row.areaSoporteId);
     setActiveTab(1);
   };
 
-  // Drill-down: click en técnico desde Tab Por Responsable → Tab Por Técnico
   const handleTecnicoClick = (row) => {
     setSelectedTecnicoId(row.id);
     setActiveTab(2);
   };
 
-  return (
-    <Box sx={{ mt: 4 }}>
-      {/* Divisor */}
-      <Divider sx={{ mb: 3 }} />
+  const subtitleText = useMemo(() => {
+    if (!dateFilterActive) return "Todos los datos · actualización en tiempo real";
 
-      {/* Encabezado de sección */}
+    const days = differenceInCalendarDays(dateRange.end, dateRange.start);
+    const isToday = days === 0;
+    const is7 = days === 7;
+    const is30 = days === 30;
+    const defStart = subDays(new Date(), 30);
+    const defEnd = new Date();
+    const isDefault =
+      differenceInCalendarDays(dateRange.start, defStart) === 0 &&
+      differenceInCalendarDays(dateRange.end, defEnd) === 0;
+
+    if (isToday) return "Hoy · actualización en tiempo real";
+    if (is7) return "Últimos 7 días · actualización en tiempo real";
+    if (isDefault || is30) return "Últimos 30 días · actualización en tiempo real";
+
+    return `Del ${format(dateRange.start, "d MMM", { locale: es })} al ${format(dateRange.end, "d MMM, yyyy", { locale: es })} · actualización en tiempo real`;
+  }, [dateRange, dateFilterActive]);
+
+  const tecnicosFiltrados = useMemo(() => {
+    if (!searchTecnico.trim()) return tecnicos;
+    const q = searchTecnico.toLowerCase();
+    return tecnicos.filter((t) =>
+      `${t.nombre} ${t.apellidos}`.toLowerCase().includes(q),
+    );
+  }, [tecnicos, searchTecnico]);
+
+  return (
+    <Box sx={{ mt: 1 }}>
+      {/* Encabezado */}
       <Box
         sx={{
           display: "flex",
@@ -137,21 +230,20 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
               Métricas Operacionales
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Últimos 30 días · actualización en tiempo real
+              {subtitleText}
             </Typography>
           </Box>
         </Box>
         <Box sx={{ "@media print": { display: "none" } }}>
-          <DateRangeFilter value={dateRange} onChange={setDateRange} />
+          <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} />
         </Box>
       </Box>
 
-      {/* LinearProgress durante refetch (D-16 UI-SPEC) */}
       <Box sx={{ height: 2, mb: 1 }}>
         {loading && <LinearProgress sx={{ height: 2 }} />}
       </Box>
 
-      {/* Tabs (ocultos en print — todos los panels se muestran) */}
+      {/* Tabs principales */}
       <Box
         sx={{ borderBottom: 1, borderColor: "divider", "@media print": { display: "none" } }}
       >
@@ -164,12 +256,12 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
           textColor="primary"
         >
           {showGlobal && <Tab label="Global" value={0} />}
-          {showResponsable && <Tab label="Por Responsable" value={1} />}
+          {showResponsable && <Tab label="Por Área" value={1} />}
           {showTecnico && <Tab label="Por Técnico" value={2} />}
         </Tabs>
       </Box>
 
-      {/* Error state */}
+      {/* Error */}
       {error && (
         <Alert
           severity="error"
@@ -188,9 +280,8 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
       )}
 
       {/* Tab panels */}
-      {!error && (
-        <Box sx={{ mt: 3 }}>
-          {/* Tab Global — solo ADMIN/MESA_AYUDA */}
+      <Box sx={{ mt: 3 }}>
+          {/* ── Tab 0: Global ─────────────────────────────────────────────── */}
           {showGlobal && (
             <Box
               sx={{
@@ -206,7 +297,7 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
             </Box>
           )}
 
-          {/* Tab Por Responsable */}
+          {/* ── Tab 1: Por Área ─────────────────── */}
           {showResponsable && (
             <Box
               sx={{
@@ -214,6 +305,37 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
                 "@media print": { display: "block", mt: 4 },
               }}
             >
+              {/* Sub-tabs de área (solo ADMIN/MESA_AYUDA ven selector) */}
+              {showGlobal && sortedAreas.length > 0 && (
+                <Box
+                  sx={{
+                    borderBottom: 1,
+                    borderColor: "divider",
+                    mb: 3,
+                    "@media print": { display: "none" },
+                  }}
+                >
+                  <Tabs
+                    value={selectedAreaId ?? false}
+                    onChange={(_, v) => setSelectedAreaId(v)}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    indicatorColor="secondary"
+                    textColor="secondary"
+                    sx={{ minHeight: 40 }}
+                  >
+                    {sortedAreas.map((a) => (
+                      <Tab
+                        key={a.id}
+                        label={formatLabel(a.nombre)}
+                        value={a.id}
+                        sx={{ fontSize: 12, minHeight: 40, py: 0.5 }}
+                      />
+                    ))}
+                  </Tabs>
+                </Box>
+              )}
+
               <MetricasTabResponsable
                 data={data?.tipo === "tecnico" ? data : null}
                 loading={loading && activeTab === 1}
@@ -222,7 +344,7 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
             </Box>
           )}
 
-          {/* Tab Por Técnico */}
+          {/* ── Tab 2: Por Técnico ─────────────────────────────────────────── */}
           {showTecnico && (
             <Box
               sx={{
@@ -230,16 +352,64 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
                 "@media print": { display: "block", mt: 4 },
               }}
             >
-              <MetricasTabTecnico
-                data={data?.tipo === "proceso" ? data : null}
-                loading={loading && activeTab === 2}
-              />
+              {/* Selector de técnico — solo ADMIN/MESA_AYUDA */}
+              {showGlobal && (
+                <Box sx={{ mb: 3 }}>
+                  <TextField
+                    size="small"
+                    placeholder="Buscar técnico por nombre…"
+                    value={searchTecnico}
+                    onChange={(e) => setSearchTecnico(e.target.value)}
+                    sx={{ mb: 1.5, maxWidth: 360 }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon fontSize="small" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                    {tecnicosFiltrados.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Sin técnicos encontrados
+                      </Typography>
+                    ) : (
+                      tecnicosFiltrados.map((t) => (
+                        <Chip
+                          key={t.id}
+                          label={`${t.nombre} ${t.apellidos}`}
+                          onClick={() => setSelectedTecnicoId(t.id)}
+                          color={selectedTecnicoId === t.id ? "primary" : "default"}
+                          variant={selectedTecnicoId === t.id ? "filled" : "outlined"}
+                          size="small"
+                          sx={{ cursor: "pointer" }}
+                        />
+                      ))
+                    )}
+                  </Box>
+                  {selectedTecnicoId && (
+                    <Divider sx={{ mt: 2, mb: 0 }} />
+                  )}
+                </Box>
+              )}
+
+              {/* Métricas del técnico seleccionado */}
+              {(esTecnicoRol || selectedTecnicoId) ? (
+                <MetricasTabTecnico
+                  data={data?.tipo === "proceso" ? data : null}
+                  loading={loading && activeTab === 2}
+                />
+              ) : (
+                <Typography color="text.secondary" sx={{ mt: 1 }}>
+                  Selecciona un técnico para ver sus métricas.
+                </Typography>
+              )}
             </Box>
           )}
         </Box>
-      )}
 
-      {/* Print: mostrar rango de fechas como texto */}
+      {/* Print: rango de fechas */}
       <Box sx={{ display: "none", "@media print": { display: "block", mt: 2 } }}>
         <Typography variant="caption" color="text.secondary">
           Período: {format(dateRange.start, "dd/MM/yyyy")} — {format(dateRange.end, "dd/MM/yyyy")}

@@ -1,5 +1,5 @@
 import { prisma } from "../config/database.js";
-import { Prisma, Rol } from "@prisma/client";
+import { Prisma, Rol, SubcategoriaTicket } from "@prisma/client";
 import type {
   MetricasGlobalResponse,
   MetricasPorAreaResponse,
@@ -18,16 +18,21 @@ const SLA_HORAS: Record<string, number> = {
 };
 
 // ── Helper: construir where con rango de fechas ───────────────────────────────
-function buildDateWhere(fechaInicio?: Date, fechaFin?: Date): { createdAt?: { gte?: Date; lte?: Date } } {
+type DateField = "createdAt" | "fechaResolucion";
+function buildDateWhere(
+  fechaInicio?: Date,
+  fechaFin?: Date,
+  field: DateField = "createdAt",
+): Record<string, { gte?: Date; lte?: Date }> {
   if (!fechaInicio && !fechaFin) return {};
-  const createdAt: { gte?: Date; lte?: Date } = {};
-  if (fechaInicio) createdAt.gte = fechaInicio;
+  const dateFilter: { gte?: Date; lte?: Date } = {};
+  if (fechaInicio) dateFilter.gte = fechaInicio;
   if (fechaFin) {
     const fin = new Date(fechaFin);
     fin.setHours(23, 59, 59, 999);
-    createdAt.lte = fin;
+    dateFilter.lte = fin;
   }
-  return { createdAt };
+  return { [field]: dateFilter };
 }
 
 // ── Helper: calcular SLA % ────────────────────────────────────────────────────
@@ -53,30 +58,60 @@ async function calcularTendencia(
   fechaFin: Date,
   areaId?: number,
 ): Promise<TendenciaDia[]> {
-  type DayRow = { dia: string; creados: bigint; resueltos: bigint };
-  const rows = await prisma.$queryRaw<DayRow[]>`
-    SELECT
-      DATE(t.createdAt) AS dia,
-      COUNT(*) AS creados,
-      SUM(CASE WHEN t.estado = 'RESUELTO' THEN 1 ELSE 0 END) AS resueltos
+  const joinClause = areaId
+    ? Prisma.sql`LEFT JOIN usuarios u ON t.tecnicoId = u.id`
+    : Prisma.empty;
+  const areaFilter = areaId
+    ? Prisma.sql`AND (u.area_soporte_id = ${areaId} OR t.tecnicoId IS NULL)`
+    : Prisma.empty;
+
+  // Creados: agrupados por createdAt
+  type CreadosRow = { dia: string; total: bigint };
+  const creadosRows = await prisma.$queryRaw<CreadosRow[]>`
+    SELECT DATE(t.createdAt) AS dia, COUNT(*) AS total
     FROM tickets t
-    ${
-      areaId
-        ? Prisma.sql`LEFT JOIN usuarios u ON t.tecnico_id = u.id`
-        : Prisma.empty
-    }
+    ${joinClause}
     WHERE t.activo = true
       AND t.createdAt >= ${fechaInicio}
       AND t.createdAt <= ${fechaFin}
-      ${areaId ? Prisma.sql`AND (u.area_soporte_id = ${areaId} OR t.tecnico_id IS NULL)` : Prisma.empty}
+      ${areaFilter}
     GROUP BY DATE(t.createdAt)
-    ORDER BY dia ASC
   `;
-  return rows.map((r) => ({
-    dia: String(r.dia),
-    creados: Number(r.creados),
-    resueltos: Number(r.resueltos),
-  }));
+
+  // Resueltos: agrupados por createdAt (para consistencia con demás queries)
+  type ResueltosRow = { dia: string; total: bigint };
+  const resueltosRows = await prisma.$queryRaw<ResueltosRow[]>`
+    SELECT DATE(t.createdAt) AS dia, COUNT(*) AS total
+    FROM tickets t
+    ${joinClause}
+    WHERE t.activo = true
+      AND t.estado = 'RESUELTO'
+      AND t.createdAt >= ${fechaInicio}
+      AND t.createdAt <= ${fechaFin}
+      ${areaFilter}
+    GROUP BY DATE(t.createdAt)
+  `;
+
+  // Merge en mapa por día
+  const map = new Map<string, { creados: number; resueltos: number }>();
+  for (const r of creadosRows) {
+    const dia = String(r.dia);
+    map.set(dia, { creados: Number(r.total), resueltos: 0 });
+  }
+  for (const r of resueltosRows) {
+    const dia = String(r.dia);
+    const existing = map.get(dia);
+    if (existing) {
+      existing.resueltos = Number(r.total);
+    } else {
+      map.set(dia, { creados: 0, resueltos: Number(r.total) });
+    }
+  }
+
+  // Ordenar por día
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dia, v]) => ({ dia, creados: v.creados, resueltos: v.resueltos }));
 }
 
 // ── Helper: tiempo promedio resolución (horas) ────────────────────────────────
@@ -126,29 +161,39 @@ export async function obtenerMetricasGlobal(
   fechaFin?: Date,
 ): Promise<MetricasGlobalResponse> {
   const dateWhere = buildDateWhere(fechaInicio, fechaFin);
+  const resolucionWhere = buildDateWhere(fechaInicio, fechaFin, "fechaResolucion");
   const baseWhere = { activo: true, ...dateWhere };
 
   const fInicio = fechaInicio ?? new Date(Date.now() - 30 * 86_400_000);
-  const fFin = fechaFin ?? new Date();
+  const fFin = (() => {
+    const d = fechaFin ?? new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  })();
 
-  const [totalTickets, ticketsActivos, ticketsResueltos, slaGlobal, tiempoPromedioHoras] =
+  const [totalTickets, ticketsActivos, ticketsResueltos, ticketsSinAsignar, slaGlobal, tiempoPromedioHoras] =
     await Promise.all([
       prisma.ticket.count({ where: baseWhere }),
       prisma.ticket.count({
         where: { activo: true, estado: { notIn: ["RESUELTO", "CANCELADO"] } },
       }),
-      prisma.ticket.count({ where: { ...baseWhere, estado: "RESUELTO" } }),
-      calcularSLA(baseWhere),
-      calcularTiempoPromedio(baseWhere),
+      prisma.ticket.count({
+        where: { ...baseWhere, estado: "RESUELTO" },
+      }),
+      prisma.ticket.count({
+        where: { activo: true, tecnicoId: null },
+      }),
+      calcularSLA({ activo: true, ...resolucionWhere }),
+      calcularTiempoPromedio({ activo: true, ...resolucionWhere }),
     ]);
 
   // Tendencia diaria
   const tendenciaDiaria = await calcularTendencia(fInicio, fFin);
 
-  // Distribución por categoría
+  // Distribución por categoría (todos los activos, sin filtro temporal)
   const catRaw = await prisma.ticket.groupBy({
     by: ["categoria"],
-    where: baseWhere,
+    where: { activo: true },
     _count: { _all: true },
   });
   const distribucionCategoria: DistribucionCategoria[] = catRaw.map((r) => ({
@@ -156,30 +201,62 @@ export async function obtenerMetricasGlobal(
     total: r._count._all,
   }));
 
+  // Distribución por estado
+  const estadoRaw = await prisma.ticket.groupBy({
+    by: ["estado"],
+    where: { activo: true },
+    _count: { _all: true },
+  });
+  const distribucionEstado: DistribucionCategoria[] = estadoRaw.map((r) => ({
+    categoria: r.estado as string,
+    total: r._count._all,
+  }));
+
   // Comparativo por área: join tickets → tecnico → areaSoporte
   const areas = await prisma.areaSoporte.findMany({
     where: { activo: true },
-    select: { id: true, nombre: true },
+    select: { id: true, nombre: true, subcategorias: true },
   });
   const comparativoPorArea = await Promise.all(
     areas.map(async (a) => {
-      type AreaRow = { total: bigint; resueltos: bigint };
-      const rows = await prisma.$queryRaw<AreaRow[]>`
-        SELECT COUNT(*) AS total,
-               SUM(CASE WHEN t.estado = 'RESUELTO' THEN 1 ELSE 0 END) AS resueltos
+      // Total: tickets creados en el período
+      type TotalRow = { total: bigint };
+      const totalRows = await prisma.$queryRaw<TotalRow[]>`
+        SELECT COUNT(*) AS total
         FROM tickets t
-        JOIN usuarios u ON t.tecnico_id = u.id
+        JOIN usuarios u ON t.tecnicoId = u.id
         WHERE t.activo = true
           AND u.area_soporte_id = ${a.id}
           ${dateWhere.createdAt?.gte ? Prisma.sql`AND t.createdAt >= ${dateWhere.createdAt.gte}` : Prisma.empty}
           ${dateWhere.createdAt?.lte ? Prisma.sql`AND t.createdAt <= ${dateWhere.createdAt.lte}` : Prisma.empty}
       `;
-      const row = rows[0];
+      // Resueltos: tickets creados en el período que están resueltos
+      type ResueltoRow = { total: bigint };
+      const resueltosRows = await prisma.$queryRaw<ResueltoRow[]>`
+        SELECT COUNT(*) AS total
+        FROM tickets t
+        JOIN usuarios u ON t.tecnicoId = u.id
+        WHERE t.activo = true
+          AND t.estado = 'RESUELTO'
+          AND u.area_soporte_id = ${a.id}
+          ${dateWhere.createdAt?.gte ? Prisma.sql`AND t.createdAt >= ${dateWhere.createdAt.gte}` : Prisma.empty}
+          ${dateWhere.createdAt?.lte ? Prisma.sql`AND t.createdAt <= ${dateWhere.createdAt.lte}` : Prisma.empty}
+      `;
+      const subcategoriasArea = (a.subcategorias as string[]) ?? [];
+      const sinAsignar = await prisma.ticket.count({
+        where: {
+          activo: true,
+          tecnicoId: null,
+          subcategoria: { in: subcategoriasArea },
+          ...dateWhere,
+        },
+      });
       return {
         areaNombre: a.nombre,
         areaSoporteId: a.id,
-        total: Number(row?.total ?? 0),
-        resueltos: Number(row?.resueltos ?? 0),
+        total: Number(totalRows[0]?.total ?? 0),
+        resueltos: Number(resueltosRows[0]?.total ?? 0),
+        sinAsignar,
       };
     }),
   );
@@ -210,7 +287,7 @@ export async function obtenerMetricasGlobal(
     responsables.map(async (r) => {
       const areaWhere = {
         activo: true,
-        ...dateWhere,
+        ...resolucionWhere,
         tecnico: { areaSoporteId: r.areaSoporteId! },
       };
       const [resueltos, sla, tiempo] = await Promise.all([
@@ -236,10 +313,12 @@ export async function obtenerMetricasGlobal(
     totalTickets,
     ticketsActivos,
     ticketsResueltos,
+    ticketsSinAsignar,
     slaGlobal,
     tiempoPromedioHoras,
     tendenciaDiaria,
     distribucionCategoria,
+    distribucionEstado,
     comparativoPorArea,
     eficienciaResponsables,
   };
@@ -252,17 +331,34 @@ export async function obtenerMetricasPorArea(
   fechaFin?: Date,
 ): Promise<MetricasPorAreaResponse> {
   const dateWhere = buildDateWhere(fechaInicio, fechaFin);
-  const areaWhere = { activo: true, ...dateWhere, tecnico: { areaSoporteId: areaId } };
+  const resolucionWhere = buildDateWhere(fechaInicio, fechaFin, "fechaResolucion");
 
   const fInicio = fechaInicio ?? new Date(Date.now() - 30 * 86_400_000);
-  const fFin = fechaFin ?? new Date();
+  const fFin = (() => {
+    const d = fechaFin ?? new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  })();
 
   const area = await prisma.areaSoporte.findUnique({
     where: { id: areaId },
-    select: { nombre: true },
+    select: { nombre: true, subcategorias: true },
   });
 
-  const [ticketsActivos, slaGlobal, tiempoPromedioHoras] = await Promise.all([
+  const subcategoriasArea = (area?.subcategorias as SubcategoriaTicket[]) ?? [];
+  const sinAsignarWhere = {
+    activo: true,
+    tecnicoId: null,
+    subcategoria: { in: subcategoriasArea },
+    ...dateWhere,
+  };
+  const areaResueltoWhere = {
+    activo: true,
+    ...resolucionWhere,
+    tecnico: { areaSoporteId: areaId },
+  };
+
+  const [ticketsActivos, ticketsSinAsignar, slaGlobal, tiempoPromedioHoras] = await Promise.all([
     prisma.ticket.count({
       where: {
         activo: true,
@@ -270,33 +366,44 @@ export async function obtenerMetricasPorArea(
         tecnico: { areaSoporteId: areaId },
       },
     }),
-    calcularSLA(areaWhere),
-    calcularTiempoPromedio(areaWhere),
+    prisma.ticket.count({ where: sinAsignarWhere }),
+    calcularSLA(areaResueltoWhere),
+    calcularTiempoPromedio(areaResueltoWhere),
   ]);
 
   // Tickets reabiertos: transiciones a ABIERTO desde RESUELTO/CANCELADO
   type ReabiertosRow = { total: bigint };
   const reabiertosRows = await prisma.$queryRaw<ReabiertosRow[]>`
-    SELECT COUNT(DISTINCT ht.ticket_id) AS total
+    SELECT COUNT(DISTINCT ht.ticketId) AS total
     FROM historial_tickets ht
-    JOIN tickets t ON ht.ticket_id = t.id
-    JOIN usuarios u ON t.tecnico_id = u.id
+    JOIN tickets t ON ht.ticketId = t.id
+    JOIN usuarios u ON t.tecnicoId = u.id
     WHERE t.activo = true
       AND u.area_soporte_id = ${areaId}
-      AND ht.estado_nuevo = 'ABIERTO'
-      AND ht.estado_anterior IN ('RESUELTO', 'CANCELADO')
+      AND ht.estadoNuevo = 'ABIERTO'
+      AND ht.estadoAnterior IN ('RESUELTO', 'CANCELADO')
   `;
   const ticketsReabiertos = Number(reabiertosRows[0]?.total ?? 0);
 
   // Tendencia, distribución subcategoría
-  const [tendenciaDiaria, subCatRaw] = await Promise.all([
+  const [tendenciaDiaria, subCatRaw, estadoAreaRaw] = await Promise.all([
     calcularTendencia(fInicio, fFin, areaId),
     prisma.ticket.groupBy({
       by: ["subcategoria"],
-      where: areaWhere,
+      where: { activo: true, subcategoria: { in: subcategoriasArea } },
+      _count: { _all: true },
+    }),
+    prisma.ticket.groupBy({
+      by: ["estado"],
+      where: { activo: true, subcategoria: { in: subcategoriasArea } },
       _count: { _all: true },
     }),
   ]);
+
+  const distribucionEstado: DistribucionCategoria[] = estadoAreaRaw.map((r) => ({
+    categoria: r.estado as string,
+    total: r._count._all,
+  }));
 
   const distribucionSubcategoria: DistribucionCategoria[] = subCatRaw.map((r) => ({
     categoria: r.subcategoria as string,
@@ -331,21 +438,22 @@ export async function obtenerMetricasPorArea(
           where: { tecnicoId: t.id, activo: true, estado: { notIn: ["RESUELTO", "CANCELADO"] } },
         }),
         completados: await prisma.ticket.count({
-          where: { tecnicoId: t.id, activo: true, estado: "RESUELTO", ...dateWhere },
+          where: { tecnicoId: t.id, activo: true, estado: "RESUELTO", fechaResolucion: { not: null }, ...resolucionWhere },
         }),
       })),
     ),
     Promise.all(
       tecnicos.map(async (t): Promise<RendimientoTecnico> => {
-        const tecWhere = { tecnicoId: t.id, activo: true, ...dateWhere };
+        const tecWhereCreated = { tecnicoId: t.id, activo: true, ...dateWhere };
+        const tecWhereResuelto = { tecnicoId: t.id, activo: true, ...resolucionWhere };
         const [activos, completados, cancelados, tiempo, primeraResp] = await Promise.all([
           prisma.ticket.count({
             where: { tecnicoId: t.id, activo: true, estado: { notIn: ["RESUELTO", "CANCELADO"] } },
           }),
-          prisma.ticket.count({ where: { ...tecWhere, estado: "RESUELTO" } }),
-          prisma.ticket.count({ where: { ...tecWhere, estado: "CANCELADO" } }),
-          calcularTiempoPromedio(tecWhere),
-          calcularTiemprimeraRespuesta(t.id, tecWhere),
+          prisma.ticket.count({ where: { ...tecWhereResuelto, estado: "RESUELTO" } }),
+          prisma.ticket.count({ where: { ...tecWhereCreated, estado: "CANCELADO" } }),
+          calcularTiempoPromedio(tecWhereResuelto),
+          calcularTiemprimeraRespuesta(t.id, tecWhereCreated),
         ]);
         return {
           id: t.id,
@@ -370,11 +478,13 @@ export async function obtenerMetricasPorArea(
     areaId,
     areaNombre: area?.nombre ?? "",
     ticketsActivos,
+    ticketsSinAsignar,
     tiempoPromedioHoras,
     slaGlobal,
     ticketsReabiertos,
     tendenciaDiaria,
     distribucionSubcategoria,
+    distribucionEstado,
     cargaTecnicos,
     rendimientoTecnicos,
   };
@@ -387,10 +497,16 @@ export async function obtenerMetricasPorTecnico(
   fechaFin?: Date,
 ): Promise<MetricasPorTecnicoResponse> {
   const dateWhere = buildDateWhere(fechaInicio, fechaFin);
+  const resolucionWhere = buildDateWhere(fechaInicio, fechaFin, "fechaResolucion");
   const tecWhere = { tecnicoId, activo: true, ...dateWhere };
+  const tecResueltoWhere = { tecnicoId, activo: true, ...resolucionWhere };
 
   const fInicio = fechaInicio ?? new Date(Date.now() - 30 * 86_400_000);
-  const fFin = fechaFin ?? new Date();
+  const fFin = (() => {
+    const d = fechaFin ?? new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  })();
 
   const ROLES_TECNICOS_VALIDOS = [
     "TECNICO_TI",
@@ -412,27 +528,38 @@ export async function obtenerMetricasPorTecnico(
     throw Object.assign(new Error("El usuario no es un técnico"), { status: 400 });
   }
 
-  const [ticketsCompletados, cancelados, tiempoPromedioHoras, tiemprimeraRespuestaHoras] =
+  const [ticketsCompletados, cancelados, tiempoPromedioHoras, tiemprimeraRespuestaHoras, estadoTecRaw] =
     await Promise.all([
-      prisma.ticket.count({ where: { ...tecWhere, estado: "RESUELTO" } }),
+      prisma.ticket.count({ where: { ...tecResueltoWhere, estado: "RESUELTO" } }),
       prisma.ticket.count({ where: { ...tecWhere, estado: "CANCELADO" } }),
-      calcularTiempoPromedio(tecWhere),
+      calcularTiempoPromedio(tecResueltoWhere),
       calcularTiemprimeraRespuesta(tecnicoId, tecWhere),
+      prisma.ticket.groupBy({
+        by: ["estado"],
+        where: { activo: true, tecnicoId },
+        _count: { _all: true },
+      }),
     ]);
+
+  const distribucionEstado: DistribucionCategoria[] = estadoTecRaw.map((r) => ({
+    categoria: r.estado as string,
+    total: r._count._all,
+  }));
 
   const ratioResueltosCancelados =
     ticketsCompletados + cancelados > 0
       ? Math.round((ticketsCompletados / (ticketsCompletados + cancelados)) * 100) / 100
       : null;
 
-  // Tendencia productividad personal
+  // Tendencia productividad personal (por fechaResolucion)
   type ProdRow = { dia: string; completados: bigint };
   const prodRows = await prisma.$queryRaw<ProdRow[]>`
-    SELECT DATE(createdAt) AS dia, COUNT(*) AS completados
+    SELECT DATE(fechaResolucion) AS dia, COUNT(*) AS completados
     FROM tickets
-    WHERE activo = true AND tecnico_id = ${tecnicoId} AND estado = 'RESUELTO'
-      AND createdAt >= ${fInicio} AND createdAt <= ${fFin}
-    GROUP BY DATE(createdAt) ORDER BY dia ASC
+    WHERE activo = true AND tecnicoId = ${tecnicoId} AND estado = 'RESUELTO'
+      AND fechaResolucion IS NOT NULL
+      AND fechaResolucion >= ${fInicio} AND fechaResolucion <= ${fFin}
+    GROUP BY DATE(fechaResolucion) ORDER BY dia ASC
   `;
   const tendenciaProductividad: TendenciaDia[] = prodRows.map((r) => ({
     dia: String(r.dia),
@@ -444,7 +571,7 @@ export async function obtenerMetricasPorTecnico(
   const promedioAreaHoras = tecnico?.areaSoporteId
     ? await calcularTiempoPromedio({
         activo: true,
-        ...dateWhere,
+        ...resolucionWhere,
         tecnico: { areaSoporteId: tecnico.areaSoporteId },
       })
     : null;
@@ -473,5 +600,6 @@ export async function obtenerMetricasPorTecnico(
     tendenciaProductividad,
     comparativaVsArea,
     distribucionResultado,
+    distribucionEstado,
   };
 }

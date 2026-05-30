@@ -42,6 +42,13 @@ const ROL_LABEL = {
   TECNICO_SERVICIOS: "Técnico en Servicios Generales",
   MESA_AYUDA: "Mesa de Ayuda",
   GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",
+  GESTOR_SALAS_JUNTA: "Gestor de Salas de Junta",
+  GESTOR_RECURSOS: "Gestor de Recursos",
+  GESTOR_INVENTARIO: "Gestor de Inventario",
+  RESPONSABLE_TI: "Responsable TI",
+  RESPONSABLE_REDES: "Responsable de Redes",
+  RESPONSABLE_MANTENIMIENTO: "Responsable de Mantenimiento",
+  RESPONSABLE_RECURSOS_MATERIALES: "Responsable de Recursos Materiales",
   EMPLEADO: "Empleado",
 };
 
@@ -514,6 +521,10 @@ export const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
 
   const isGestor = rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES";
+  const esSupervisor = [
+    "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO",
+    "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO",
+  ].includes(rol);
   const esTecnico = [
     "TECNICO_TI",
     "TECNICO_REDES",
@@ -580,6 +591,7 @@ export const DashboardPage = () => {
           {(rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES") && (
             <MetricasGestor recursos={recursos} asignaciones={asignaciones} />
           )}
+          {esSupervisor && <MetricasMesaAyuda tickets={tickets} />}
           {rol === "EMPLEADO" && <MetricasEmpleado tickets={tickets} navigate={navigate} />}
         </>
       )}

@@ -74,14 +74,18 @@ export const listarTickets = async (
   } else if (
     user.rol === "TECNICO_TI" ||
     user.rol === "TECNICO_REDES" ||
-    user.rol === "TECNICO_SERVICIOS" ||
     user.rol === "TECNICO_ELECTRICISTA" ||
     user.rol === "TECNICO_PLOMERO" ||
     user.rol === "TECNICO_MOVILIDAD"
   ) {
     where.tecnicoId = user.id;
-    where.estado = { notIn: ["RESUELTO", "CANCELADO"] };
-  } else if (user.rol === "GESTOR_RECURSOS_MATERIALES") {
+  } else if (
+    user.rol === "GESTOR_RECURSOS_MATERIALES" ||
+    user.rol === "GESTOR_SALAS_JUNTA" ||
+    user.rol === "GESTOR_RECURSOS" ||
+    user.rol === "GESTOR_INVENTARIO" ||
+    user.rol === "RESPONSABLE_RECURSOS_MATERIALES"
+  ) {
     where.categoria = "RECURSOS_MATERIALES";
   } else if (ROLES_RESPONSABLE.includes(user.rol as any)) {
     const usuarioDb = await prisma.usuario.findUnique({
@@ -305,7 +309,7 @@ export const crearTicket = async (
       return enviarNotifTicketCreado({
         telefono: emp.telefono,
         nombre: emp.nombreCompleto,
-        ticketId: ticket.id,
+        folio: ticket.folio,
         asunto: ticket.asunto,
         prioridad: ticket.prioridad,
         url: `${frontendUrl}/solicitudes/${ticket.id}`,
@@ -336,8 +340,8 @@ export const obtenerTicket = async (id: number, user: JwtPayload) => {
 
 const CATEGORIA_ROL_MAP: Record<string, string[]> = {
   TECNOLOGIAS: ["TECNICO_TI", "TECNICO_REDES"],
-  SERVICIOS: ["TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD", "TECNICO_SERVICIOS"],
-  RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES"],
+  SERVICIOS: ["TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"],
+  RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO", "RESPONSABLE_RECURSOS_MATERIALES"],
 };
 
 const ROLES_RESPONSABLE = [
@@ -420,6 +424,7 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
 
   await notif.emitirTicketAsignado({
     ticketId: id,
+    folio: ticket.folio,
     asunto: ticket.asunto,
     prioridad: ticket.prioridad,
     tecnicoId,
@@ -553,6 +558,13 @@ export const completarPaso = async (
     where: { id: pasoId, ticketId },
   });
   if (!paso) throw Object.assign(new Error("Paso no encontrado"), { status: 404 });
+  const ticketActual = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: { estado: true },
+  });
+  if (ticketActual?.estado === "CANCELADO") {
+    throw Object.assign(new Error("No se puede completar un paso de una solicitud cancelada"), { status: 400 });
+  }
   if (paso.estado === "COMPLETADO") {
     throw Object.assign(new Error("El paso ya fue completado"), { status: 400 });
   }

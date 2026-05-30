@@ -2,7 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Box } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import PropTypes from "prop-types";
 
 const TICK_STYLE = { fontFamily: "'Inter', 'Roboto', sans-serif", fontSize: 12 };
@@ -12,6 +12,14 @@ const TICK_STYLE = { fontFamily: "'Inter', 'Roboto', sans-serif", fontSize: 12 }
  * @param {{ data: object[], xKey: string, bars: Array<{key:string, label:string, color:string}> }} props
  */
 export function RechartsBarChart({ data, xKey, bars }) {
+  if (!data || data.length === 0) {
+    return (
+      <Box sx={{ width: "100%", height: 260, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Typography variant="body2" color="text.secondary">Sin datos para este período</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ width: "100%", height: 260 }}>
       <ResponsiveContainer width="100%" height="100%">

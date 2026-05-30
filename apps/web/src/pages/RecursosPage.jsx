@@ -261,6 +261,7 @@ export const RecursosPage = () => {
   const navigate = useNavigate();
   const isGestor = user?.rol === "GESTOR_RECURSOS_MATERIALES";
   const isAdmin = user?.rol === "ADMIN";
+  const isResponsable = user?.rol === "RESPONSABLE_RECURSOS_MATERIALES";
   const puedeGestionar = isGestor || isAdmin;
 
   const [tab, setTab] = useState(0);
@@ -324,6 +325,13 @@ export const RecursosPage = () => {
   const [ordenSalidaData, setOrdenSalidaData] = useState(null);
   const [dialogOrden, setDialogOrden] = useState(false);
 
+  // ── Asignaciones (Tab 2) ──────────────────────────────────────────────────
+  const [asignacionesAll, setAsignacionesAll] = useState([]);
+  const [loadingAsignacionesAll, setLoadingAsignacionesAll] = useState(false);
+  const [errorAsignacionesAll, setErrorAsignacionesAll] = useState("");
+  const [filtroAsigEstado, setFiltroAsigEstado] = useState("TODOS");
+  const [filtroAsigTipo, setFiltroAsigTipo] = useState("TODOS");
+
   // ── Scanner de código de barras ───────────────────────────────────────────
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerMode, setScannerMode] = useState("buscar"); // "buscar" | "nueva_unidad"
@@ -356,7 +364,20 @@ export const RecursosPage = () => {
     }
   }, []);
 
-  // Cargar catálogos siempre (necesarios en ambos tabs para el selector de asignación)
+  const loadAsignacionesAll = useCallback(async () => {
+    setLoadingAsignacionesAll(true);
+    setErrorAsignacionesAll("");
+    try {
+      const res = await getAsignaciones();
+      setAsignacionesAll(res.data ?? []);
+    } catch {
+      setErrorAsignacionesAll("Error al cargar asignaciones");
+    } finally {
+      setLoadingAsignacionesAll(false);
+    }
+  }, []);
+
+  // Cargar catálogos siempre (necesarios en todos los tabs)
   useEffect(() => {
     loadCatalogos();
   }, [loadCatalogos]);
@@ -364,6 +385,10 @@ export const RecursosPage = () => {
   useEffect(() => {
     if (tab === 0) loadTickets();
   }, [tab, loadTickets]);
+
+  useEffect(() => {
+    if (tab === 2) loadAsignacionesAll();
+  }, [tab, loadAsignacionesAll]);
 
   // ── CRUD Catálogo ─────────────────────────────────────────────────────────
 
@@ -484,8 +509,11 @@ export const RecursosPage = () => {
     if (!window.confirm("¿Marcar esta asignación como devuelta y liberar la unidad?")) return;
     try {
       await updateAsignacion(asignacion.id, { estado: "DEVUELTA" });
-      const res = await getAsignaciones({ unidadId: dialogHistorial.id });
-      setAsignaciones(res.data ?? []);
+      if (dialogHistorial) {
+        const res = await getAsignaciones({ unidadId: dialogHistorial.id });
+        setAsignaciones(res.data ?? []);
+      }
+      if (tab === 2) loadAsignacionesAll();
       loadCatalogos();
     } catch (err) {
       alert(err?.response?.data?.error ?? "Error al registrar la devolución.");
@@ -695,6 +723,9 @@ export const RecursosPage = () => {
         <Typography variant="h5" fontWeight={700}>
           Recursos Materiales
         </Typography>
+        {isResponsable && (
+          <Chip label="Vista de Responsable" size="small" color="warning" variant="outlined" />
+        )}
       </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
@@ -705,7 +736,12 @@ export const RecursosPage = () => {
         />
         <Tab
           label="Inventario"
-          icon={<AssignmentIcon fontSize="small" />}
+          icon={<InventoryIcon fontSize="small" />}
+          iconPosition="start"
+        />
+        <Tab
+          label="Asignaciones"
+          icon={<HandshakeIcon fontSize="small" />}
           iconPosition="start"
         />
       </Tabs>
@@ -960,6 +996,148 @@ export const RecursosPage = () => {
             {catalogosFiltrados.length} tipo{catalogosFiltrados.length !== 1 ? "s" : ""} mostrado
             {catalogosFiltrados.length !== 1 ? "s" : ""}
           </Typography>
+        </Box>
+      )}
+
+      {/* ── TAB 2: Asignaciones ────────────────────────────────────────────── */}
+      {tab === 2 && (
+        <Box>
+          <Box sx={{ display: "flex", gap: 1.5, mb: 2, flexWrap: "wrap", alignItems: "center" }}>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Estado</InputLabel>
+              <Select
+                value={filtroAsigEstado}
+                label="Estado"
+                onChange={(e) => setFiltroAsigEstado(e.target.value)}
+              >
+                <MenuItem value="TODOS">Todos</MenuItem>
+                {Object.entries(ESTADO_ASIG_LABEL).map(([k, v]) => (
+                  <MenuItem key={k} value={k}>{v}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Tipo</InputLabel>
+              <Select
+                value={filtroAsigTipo}
+                label="Tipo"
+                onChange={(e) => setFiltroAsigTipo(e.target.value)}
+              >
+                <MenuItem value="TODOS">Todos</MenuItem>
+                <MenuItem value="TECNOLOGICO">
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <LaptopIcon fontSize="small" /> Equipos
+                  </Box>
+                </MenuItem>
+                <MenuItem value="INMOBILIARIO">
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <MeetingRoomIcon fontSize="small" /> Salas
+                  </Box>
+                </MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+
+          <Paper sx={{ p: 0 }}>
+            {loadingAsignacionesAll ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : errorAsignacionesAll ? (
+              <Alert severity="error" sx={{ m: 2 }}>{errorAsignacionesAll}</Alert>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Recurso</TableCell>
+                      <TableCell>Tipo</TableCell>
+                      <TableCell>Empleado</TableCell>
+                      <TableCell>Estado</TableCell>
+                      <TableCell>Periodo</TableCell>
+                      <TableCell>Folio OS</TableCell>
+                      <TableCell align="right">Acciones</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {asignacionesAll
+                      .filter((a) => filtroAsigEstado === "TODOS" || a.estado === filtroAsigEstado)
+                      .filter((a) => filtroAsigTipo === "TODOS" || a.unidad?.catalogo?.tipo === filtroAsigTipo)
+                      .length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            No hay asignaciones registradas.
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      asignacionesAll
+                        .filter((a) => filtroAsigEstado === "TODOS" || a.estado === filtroAsigEstado)
+                        .filter((a) => filtroAsigTipo === "TODOS" || a.unidad?.catalogo?.tipo === filtroAsigTipo)
+                        .map((a) => (
+                          <TableRow key={a.id} hover>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight={600}>
+                                {a.unidad?.catalogo?.nombre ?? "—"}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                                {a.unidad?.numSerie ?? `#${a.unidadId}`}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                label={a.unidad?.catalogo?.tipo === "TECNOLOGICO" ? "Equipo" : "Sala"}
+                                size="small"
+                                color={a.unidad?.catalogo?.tipo === "TECNOLOGICO" ? "primary" : "info"}
+                                variant="outlined"
+                                sx={{ height: 20, fontSize: 11 }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {a.empleado?.nombreCompleto ?? a.empleadoRfc ?? "—"}
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                label={ESTADO_ASIG_LABEL[a.estado]}
+                                size="small"
+                                color={ESTADO_ASIG_COLOR[a.estado] ?? "default"}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption">
+                                {a.fechaInicio ? fmtFecha(a.fechaInicio) : "—"} → {a.fechaFin ? fmtFecha(a.fechaFin) : "—"}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption" fontFamily="monospace">
+                                {a.ordenSalidaFolio ?? "—"}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              {a.estado === "APROBADA" && puedeGestionar && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="warning"
+                                  onClick={() => handleDevolver(a)}
+                                  sx={{ fontSize: 11, py: 0.25, px: 1 }}
+                                >
+                                  Devolver
+                                </Button>
+                              )}
+                              {a.estado === "PENDIENTE" && puedeGestionar && (
+                                <Chip label="Sin gestionar" size="small" color="warning" variant="outlined" />
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Paper>
         </Box>
       )}
 

@@ -187,9 +187,9 @@ export const SolicitudDetailPage = () => {
   if (error) return <Alert severity="error">{error}</Alert>;
   if (!solicitud) return null;
 
-  const canActuar = ["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "GESTOR_RECURSOS_MATERIALES"].includes(user?.rol);
+  const canActuar = ["ADMIN", "MESA_AYUDA", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "GESTOR_RECURSOS_MATERIALES"].includes(user?.rol);
   const canComentar = canActuar || user?.rol === "MESA_AYUDA";
-  const esAdminOMesa = ["ADMIN", "MESA_AYUDA"].includes(user?.rol);
+  const puedeAsignarPaso = ["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES"].includes(user?.rol);
   const transiciones = TRANSICIONES[solicitud.estado] ?? [];
   const { pasos, labels } = getPasosYLabels(solicitud.categoria);
   const activeStep = getActiveStep(solicitud.estado, pasos);
@@ -363,7 +363,7 @@ export const SolicitudDetailPage = () => {
                           )}
 
                           {/* Botón asignar técnico — Admin/Mesa para pasos PENDIENTE */}
-                          {esAdminOMesa && paso.estado === "PENDIENTE" && !paso.tecnicoId && (
+                          {puedeAsignarPaso && paso.estado === "PENDIENTE" && !paso.tecnicoId && (
                             <Button
                               size="small"
                               variant="outlined"
@@ -384,7 +384,7 @@ export const SolicitudDetailPage = () => {
               {/* Acciones */}
               {canActuar && (
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
-                  {user?.rol === "ADMIN" && (
+                  {["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES"].includes(user?.rol) && (
                     <Button size="small" variant="outlined" onClick={() => setDialogTecnico(true)}>
                       Asignar técnico
                     </Button>

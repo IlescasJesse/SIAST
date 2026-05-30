@@ -12,7 +12,7 @@ router.post("/", requireRol("EMPLEADO", "MESA_AYUDA", "ADMIN"), ctrl.crear);
 router.get(
   "/mis-pasos",
   requireRol(
-    "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS",
+    "TECNICO_TI", "TECNICO_REDES",
     "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
   ),
   ctrl.misPasos,
@@ -23,7 +23,7 @@ router.delete("/:id", requireRol("ADMIN", "MESA_AYUDA"), ctrl.eliminar);
 router.patch(
   "/:id/asignar",
   requireRol(
-    "ADMIN",
+    "ADMIN", "MESA_AYUDA",
     "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
   ),
   ctrl.asignar,
@@ -31,10 +31,11 @@ router.patch(
 router.patch(
   "/:id/estado",
   requireRol(
-    "ADMIN",
-    "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS",
+    "ADMIN", "MESA_AYUDA",
+    "TECNICO_TI", "TECNICO_REDES",
     "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
     "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+    "GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO",
     "EMPLEADO",
   ),
   ctrl.cambiarEstado,
@@ -43,16 +44,17 @@ router.post(
   "/:id/comentarios",
   requireRol(
     "ADMIN", "MESA_AYUDA",
-    "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS",
+    "TECNICO_TI", "TECNICO_REDES",
     "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
     "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+    "GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO",
   ),
   ctrl.comentar,
 );
 router.patch(
   "/:id/pasos/:pasoId/completar",
   requireRol(
-    "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS",
+    "TECNICO_TI", "TECNICO_REDES",
     "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD",
   ),
   ctrl.completarPaso,

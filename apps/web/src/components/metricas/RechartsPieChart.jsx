@@ -1,7 +1,7 @@
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Box } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import PropTypes from "prop-types";
 
 const TICK_STYLE = { fontFamily: "'Inter', 'Roboto', sans-serif", fontSize: 12 };
@@ -11,6 +11,16 @@ const TICK_STYLE = { fontFamily: "'Inter', 'Roboto', sans-serif", fontSize: 12 }
  * @param {{ data: Array<{name:string, value:number, color:string}> }} props
  */
 export function RechartsPieChart({ data }) {
+  const filtered = data.filter(d => d.value > 0);
+
+  if (filtered.length === 0) {
+    return (
+      <Box sx={{ width: "100%", height: 220, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Typography variant="body2" color="text.secondary">Sin datos</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ width: "100%", height: 220 }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -26,14 +36,14 @@ export function RechartsPieChart({ data }) {
           />
           <Legend wrapperStyle={TICK_STYLE} />
           <Pie
-            data={data}
+            data={filtered}
             dataKey="value"
             nameKey="name"
             innerRadius={50}
             outerRadius={90}
             paddingAngle={2}
           >
-            {data.map((entry, i) => (
+            {filtered.map((entry, i) => (
               <Cell key={i} fill={entry.color} />
             ))}
           </Pie>

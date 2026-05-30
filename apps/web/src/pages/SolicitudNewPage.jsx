@@ -13,6 +13,10 @@ import { TimePicker } from "@mui/x-date-pickers/TimePicker";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import StorageIcon from "@mui/icons-material/Storage";
 import LaptopIcon from "@mui/icons-material/Laptop";
 import WifiIcon from "@mui/icons-material/Wifi";
@@ -32,7 +36,7 @@ import { createSolicitud } from "../api/solicitudes.js";
 import { getAreas } from "../api/catalogos.js";
 import { useAuthStore } from "../store/auth.js";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
-import { SUBCATEGORIAS_POR_CATEGORIA, LABEL_SUBCATEGORIA, LABEL_CATEGORIA, DESCRIPCION_SUBCATEGORIA, LABEL_PISO, SUB_TIPO_EQUIPOS, SUB_TIPO_SISTEMAS, SUB_TIPO_RED } from "@stf/shared";
+import { SUBCATEGORIAS_POR_CATEGORIA, LABEL_SUBCATEGORIA, LABEL_CATEGORIA, DESCRIPCION_SUBCATEGORIA, LABEL_PISO, SUB_TIPO_EQUIPOS, SUB_TIPO_SISTEMAS, SUB_TIPO_RED, SUB_TIPO_CUENTAS } from "@stf/shared";
 
 const CATEGORIA_STYLE = {
   "Tecnologías de la Información": { border: "#1565c0", bg: "#e3f0fd" },
@@ -155,9 +159,7 @@ export const SolicitudNewPage = () => {
 
   // Al cambiar subcategoría, limpiar los campos adicionales
   const handleSubcategoriaChange = (val) => {
-    // CUENTAS_DOMINIO solo tiene un subTipo posible — auto-seleccionar
-    const autoSubTipo = val === "CUENTAS_DOMINIO" ? "CREACION_USUARIO" : "";
-    setForm((prev) => ({ ...prev, subcategoria: val, subTipo: autoSubTipo }));
+    setForm((prev) => ({ ...prev, subcategoria: val, subTipo: "" }));
     setSalaJuntasEquipo({});
     setSalaJuntasAsistentes("");
     setPrestamoEquipo("");
@@ -434,6 +436,24 @@ export const SolicitudNewPage = () => {
                   >
                     <MenuItem value="">General / Otro</MenuItem>
                     {SUB_TIPO_RED.map((s) => (
+                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              {form.subcategoria === "CUENTAS_DOMINIO" && (
+                <FormControl fullWidth>
+                  <InputLabel shrink>Tipo de solicitud</InputLabel>
+                  <Select
+                    value={form.subTipo}
+                    label="Tipo de solicitud"
+                    notched
+                    displayEmpty
+                    onChange={(e) => set("subTipo", e.target.value)}
+                  >
+                    <MenuItem value="">General / Otro</MenuItem>
+                    {SUB_TIPO_CUENTAS.map((s) => (
                       <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
                     ))}
                   </Select>

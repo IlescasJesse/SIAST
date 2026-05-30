@@ -651,12 +651,14 @@ export interface MetricasGlobalResponse {
   totalTickets: number;
   ticketsActivos: number;
   ticketsResueltos: number;
+  ticketsSinAsignar: number;
   slaGlobal: number | null; // %, null = sin datos en el período
   tiempoPromedioHoras: number | null;
   // Charts
   tendenciaDiaria: TendenciaDia[];
   distribucionCategoria: DistribucionCategoria[];
-  comparativoPorArea: Array<{ areaNombre: string; areaSoporteId: number; total: number; resueltos: number }>;
+  distribucionEstado: DistribucionCategoria[];
+  comparativoPorArea: Array<{ areaNombre: string; areaSoporteId: number; total: number; resueltos: number; sinAsignar: number }>;
   // Tabla
   eficienciaResponsables: EficienciaResponsable[];
 }
@@ -668,12 +670,14 @@ export interface MetricasPorAreaResponse {
   areaNombre: string;
   // KPIs tarjetas
   ticketsActivos: number;
+  ticketsSinAsignar: number;
   tiempoPromedioHoras: number | null;
   slaGlobal: number | null; // null = sin datos en el período
   ticketsReabiertos: number;
   // Charts
   tendenciaDiaria: TendenciaDia[];
   distribucionSubcategoria: DistribucionCategoria[];
+  distribucionEstado: DistribucionCategoria[];
   cargaTecnicos: Array<{ tecnicoNombre: string; tecnicoId: number; activos: number; completados: number }>;
   // Tabla
   rendimientoTecnicos: RendimientoTecnico[];
@@ -693,6 +697,7 @@ export interface MetricasPorTecnicoResponse {
   tendenciaProductividad: TendenciaDia[];
   comparativaVsArea: Array<{ label: string; tecnico: number; promedioArea: number }>;
   distribucionResultado: Array<{ name: string; value: number; color: string }>;
+  distribucionEstado: DistribucionCategoria[];
 }
 
 export type MetricasResponse =

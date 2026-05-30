@@ -3,6 +3,7 @@ import {
   Paper, Typography, Box, Tooltip,
 } from "@mui/material";
 import { SlaIndicator } from "./SlaIndicator.jsx";
+import { formatLabel } from "./utils.js";
 import PropTypes from "prop-types";
 
 /**
@@ -48,7 +49,7 @@ export function EficienciaTable({ rows, onRowClick }) {
                       {row.nombre} {row.apellidos}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {row.areaNombre}
+                      {formatLabel(row.areaNombre)}
                     </Typography>
                   </Box>
                 </TableCell>

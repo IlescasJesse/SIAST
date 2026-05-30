@@ -5,7 +5,16 @@ import BalanceIcon from "@mui/icons-material/Balance";
 import { RechartsBarChart } from "./RechartsBarChart.jsx";
 import { RechartsLineChart } from "./RechartsLineChart.jsx";
 import { RechartsPieChart } from "./RechartsPieChart.jsx";
+import { formatLabel } from "./utils.js";
 import PropTypes from "prop-types";
+
+const ESTADO_COLORS = {
+  ABIERTO: "#ea580c",
+  ASIGNADO: "#1565c0",
+  EN_PROGRESO: "#ca8a04",
+  RESUELTO: "#2e7d32",
+  CANCELADO: "#9e9e9e",
+};
 
 const StatCard = ({ icon, label, value, color }) => (
   <Card sx={{ height: "100%" }}>
@@ -53,6 +62,12 @@ export function MetricasTabTecnico({ data, loading }) {
     Completados: d.resueltos,
   }));
 
+  const estadoPieData = (data.distribucionEstado ?? []).map((c) => ({
+    name: formatLabel(c.categoria),
+    value: c.total,
+    color: ESTADO_COLORS[c.categoria] ?? "#9e9e9e",
+  }));
+
   return (
     <Box>
       <Typography variant="h6" fontWeight={700} color="primary.main" sx={{ mb: 2 }}>
@@ -64,7 +79,7 @@ export function MetricasTabTecnico({ data, loading }) {
         <Grid item xs={6} sm={4}>
           <StatCard
             icon={<CheckCircleIcon />}
-            label="Completados (período)"
+            label="Completados"
             value={data.ticketsCompletados}
             color="#2e7d32"
           />
@@ -105,9 +120,9 @@ export function MetricasTabTecnico({ data, loading }) {
         </Grid>
         <Grid item xs={12} md={6}>
           <Typography variant="subtitle2" fontWeight={700} color="primary.main" sx={{ mb: 1 }}>
-            RESUELTOS VS CANCELADOS
+            DISTRIBUCIÓN POR ESTADO
           </Typography>
-          <RechartsPieChart data={data.distribucionResultado} />
+          <RechartsPieChart data={estadoPieData} />
         </Grid>
         {data.comparativaVsArea?.length > 0 && (
           <Grid item xs={12} md={6}>

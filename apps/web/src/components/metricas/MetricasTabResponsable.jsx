@@ -7,10 +7,19 @@ import { RechartsLineChart } from "./RechartsLineChart.jsx";
 import { RechartsPieChart } from "./RechartsPieChart.jsx";
 import { SlaIndicator } from "./SlaIndicator.jsx";
 import { RendimientoTecnicoTable } from "./RendimientoTecnicoTable.jsx";
+import { formatLabel } from "./utils.js";
 import PropTypes from "prop-types";
 
 // Recharts palette para subcategorías (UI-SPEC)
 const PALETTE = ["#9d2449", "#b56e85", "#742035", "#c8a0b0", "#a83e6a", "#1565c0", "#2e7d32", "#e65100"];
+
+const ESTADO_COLORS = {
+  ABIERTO: "#ea580c",
+  ASIGNADO: "#1565c0",
+  EN_PROGRESO: "#ca8a04",
+  RESUELTO: "#2e7d32",
+  CANCELADO: "#9e9e9e",
+};
 
 const StatCard = ({ icon, label, value, color }) => (
   <Card sx={{ height: "100%" }}>
@@ -66,20 +75,26 @@ export function MetricasTabResponsable({ data, loading, onTecnicoClick }) {
   }));
 
   const pieData = data.distribucionSubcategoria.map((c, i) => ({
-    name: c.categoria,
+    name: formatLabel(c.categoria),
     value: c.total,
     color: PALETTE[i % PALETTE.length],
+  }));
+
+  const estadoPieData = (data.distribucionEstado ?? []).map((c) => ({
+    name: formatLabel(c.categoria),
+    value: c.total,
+    color: ESTADO_COLORS[c.categoria] ?? "#9e9e9e",
   }));
 
   return (
     <Box>
       <Typography variant="h6" fontWeight={700} color="primary.main" sx={{ mb: 2 }}>
-        {data.areaNombre}
+        {formatLabel(data.areaNombre)}
       </Typography>
 
       {/* KPI Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={4} md={3}>
+        <Grid item xs={6} sm={4} md={2.4}>
           <StatCard
             icon={<HourglassEmptyIcon />}
             label="Tickets activos"
@@ -87,7 +102,7 @@ export function MetricasTabResponsable({ data, loading, onTecnicoClick }) {
             color="#ea580c"
           />
         </Grid>
-        <Grid item xs={6} sm={4} md={3}>
+        <Grid item xs={6} sm={4} md={2.4}>
           <StatCard
             icon={<UpdateIcon />}
             label="Tiempo promedio resolución"
@@ -95,7 +110,7 @@ export function MetricasTabResponsable({ data, loading, onTecnicoClick }) {
             color="#9d2449"
           />
         </Grid>
-        <Grid item xs={6} sm={4} md={3}>
+        <Grid item xs={6} sm={4} md={2.4}>
           <Card sx={{ height: "100%" }}>
             <CardContent sx={{ py: "16px !important" }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -105,12 +120,20 @@ export function MetricasTabResponsable({ data, loading, onTecnicoClick }) {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={4} md={3}>
+        <Grid item xs={6} sm={4} md={2.4}>
           <StatCard
             icon={<ReplayIcon />}
             label="Tickets reabiertos"
             value={data.ticketsReabiertos}
             color="#ca8a04"
+          />
+        </Grid>
+        <Grid item xs={6} sm={4} md={2.4}>
+          <StatCard
+            icon={<HourglassEmptyIcon />}
+            label="Sin asignar"
+            value={data.ticketsSinAsignar ?? 0}
+            color="#1565c0"
           />
         </Grid>
       </Grid>
@@ -125,20 +148,20 @@ export function MetricasTabResponsable({ data, loading, onTecnicoClick }) {
             data={barCarga}
             xKey="tecnico"
             bars={[
-              { key: "Activos", label: "Activos", color: "#ea580c" },
-              { key: "Completados", label: "Completados", color: "#2e7d32" },
+              { key: "Activos", label: "En curso", color: "#ea580c" },
+              { key: "Completados", label: "Resueltos", color: "#2e7d32" },
             ]}
           />
         </Grid>
         <Grid item xs={12} md={6}>
           <Typography variant="subtitle2" fontWeight={700} color="primary.main" sx={{ mb: 1 }}>
-            TENDENCIA DIARIA (CREADOS VS RESUELTOS)
+            TENDENCIA DIARIA (RECIBIDOS VS RESUELTOS)
           </Typography>
           <RechartsLineChart
             data={lineData}
             xKey="dia"
             lines={[
-              { key: "Creados", label: "Creados", color: "#9d2449" },
+              { key: "Creados", label: "Recibidos", color: "#9d2449" },
               { key: "Resueltos", label: "Resueltos", color: "#2e7d32" },
             ]}
           />
@@ -148,6 +171,12 @@ export function MetricasTabResponsable({ data, loading, onTecnicoClick }) {
             DISTRIBUCIÓN SUBCATEGORÍAS
           </Typography>
           <RechartsPieChart data={pieData} />
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Typography variant="subtitle2" fontWeight={700} color="primary.main" sx={{ mb: 1 }}>
+            DISTRIBUCIÓN POR ESTADO
+          </Typography>
+          <RechartsPieChart data={estadoPieData} />
         </Grid>
       </Grid>
 

@@ -2,6 +2,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Typography, Tooltip,
 } from "@mui/material";
+import { formatLabel } from "./utils.js";
 import PropTypes from "prop-types";
 
 /**
@@ -46,7 +47,7 @@ export function RendimientoTecnicoTable({ rows, onRowClick }) {
                     {row.nombre} {row.apellidos}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {row.rol}
+                    {formatLabel(row.rol)}
                   </Typography>
                 </TableCell>
                 <TableCell>{row.ticketsCompletados}</TableCell>

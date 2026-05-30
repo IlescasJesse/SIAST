@@ -114,27 +114,28 @@ httpServer.listen(port, "0.0.0.0", () => {
       const hoy = new Date();
       hoy.setHours(0, 0, 0, 0); // inicio del día
 
-      // Snapshot global (sin área)
+      // Snapshot global (sin área) — findFirst+upsert porque Prisma no soporta null en unique compuesto
       const global = await metricasService.obtenerMetricasGlobal();
-      await prisma.metricasHistorial.upsert({
-        where: { fecha_areaSoporteId: { fecha: hoy, areaSoporteId: null as any } },
-        create: {
-          fecha: hoy,
-          areaSoporteId: null,
-          totalTickets: global.totalTickets,
-          ticketsResueltos: global.ticketsResueltos,
-          ticketsActivos: global.ticketsActivos,
-          slaGlobal: global.slaGlobal ?? 0,
-          tiempoPromedioHoras: global.tiempoPromedioHoras,
-        },
-        update: {
-          totalTickets: global.totalTickets,
-          ticketsResueltos: global.ticketsResueltos,
-          ticketsActivos: global.ticketsActivos,
-          slaGlobal: global.slaGlobal ?? 0,
-          tiempoPromedioHoras: global.tiempoPromedioHoras,
-        },
+      const globalExistente = await prisma.metricasHistorial.findFirst({
+        where: { fecha: hoy, areaSoporteId: null },
       });
+      const globalData = {
+        totalTickets: global.totalTickets,
+        ticketsResueltos: global.ticketsResueltos,
+        ticketsActivos: global.ticketsActivos,
+        slaGlobal: global.slaGlobal ?? 0,
+        tiempoPromedioHoras: global.tiempoPromedioHoras,
+      };
+      if (globalExistente) {
+        await prisma.metricasHistorial.update({
+          where: { id: globalExistente.id },
+          data: globalData,
+        });
+      } else {
+        await prisma.metricasHistorial.create({
+          data: { fecha: hoy, areaSoporteId: null, ...globalData },
+        });
+      }
 
       // Snapshot por área
       const areas = await prisma.areaSoporte.findMany({

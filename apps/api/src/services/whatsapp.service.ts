@@ -182,7 +182,7 @@ async function enviarMensaje(telefono: string, mensaje: string): Promise<void> {
 export async function enviarNotifTicketCreado(params: {
   telefono: string;
   nombre: string;
-  ticketId: number;
+  folio: string;
   asunto: string;
   prioridad: string;
   url: string;
@@ -197,7 +197,7 @@ export async function enviarNotifTicketCreado(params: {
   const mensaje =
     `*SIAST* — Secretaría de Finanzas Oaxaca\n\n` +
     `Hola ${params.nombre.split(" ")[0]}, tu solicitud de soporte fue registrada.\n\n` +
-    `${emoji} *Solicitud #${params.ticketId}*\n` +
+    `${emoji} *Solicitud No. ${params.folio}*\n` +
     `${params.asunto}\n` +
     `Prioridad: *${params.prioridad}*\n\n` +
     `Sigue el estado de tu solicitud aquí:\n` +
@@ -213,7 +213,7 @@ export async function enviarNotifTicketCreado(params: {
 export async function enviarNotifTicketAsignado(params: {
   telefono: string;
   nombreTecnico: string;
-  ticketId: number;
+  folio: string;
   asunto: string;
   prioridad: string;
   empleadoNombre: string;
@@ -230,7 +230,7 @@ export async function enviarNotifTicketAsignado(params: {
   const mensaje =
     `*SIAST* — Secretaría de Finanzas Oaxaca\n\n` +
     `Hola ${params.nombreTecnico.split(" ")[0]}, se te asignó una solicitud.\n\n` +
-    `${emoji} *Solicitud #${params.ticketId}*\n` +
+    `${emoji} *Solicitud No. ${params.folio}*\n` +
     `${params.asunto}\n` +
     `Prioridad: *${params.prioridad}*\n` +
     `Solicitante: ${params.empleadoNombre}\n` +
