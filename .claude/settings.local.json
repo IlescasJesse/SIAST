@@ -33,7 +33,15 @@
       "Bash(Select-Object -First 30)",
       "Bash(Get-ChildItem *)",
       "Skill(gsd-code-review)",
-      "Skill(gsd-progress)"
+      "Skill(gsd-progress)",
+      "Bash(exist *)",
+      "PowerShell(Get-ChildItem *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers', {}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/c/Users/ilesm/.claude/settings.json'\\)\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); mcp=d.get\\('mcpServers',{}\\); print\\('MCP servers:', list\\(mcp.keys\\(\\)\\)\\)\")",
+      "Bash(claude --version)",
+      "Bash(claude doctor *)",
+      "PowerShell(Get-Content *)"
     ]
   },
   "prefersReducedMotion": true
