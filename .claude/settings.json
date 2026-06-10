@@ -9,5 +9,20 @@
       "Read(*.lock)",
       "Read(**/*.lock)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git pull origin main 2>$null; exit 0",
+            "shell": "powershell",
+            "timeout": 30,
+            "statusMessage": "Sincronizando con remoto (git pull)..."
+          }
+        ]
+      }
+    ]
   }
 }

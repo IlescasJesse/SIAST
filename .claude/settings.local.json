@@ -33,7 +33,24 @@
       "Bash(Select-Object -First 30)",
       "Bash(Get-ChildItem *)",
       "Bash(tail -15 /Users/ilescas/DevVault/Decisions/DECISIONS.md)",
-      "Workflow(analisis-alcance)"
+      "Workflow(analisis-alcance)",
+      "Skill(gsd-code-review)",
+      "Skill(gsd-progress)",
+      "Bash(exist *)",
+      "PowerShell(Get-ChildItem *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers', {}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/c/Users/ilesm/.claude/settings.json'\\)\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); mcp=d.get\\('mcpServers',{}\\); print\\('MCP servers:', list\\(mcp.keys\\(\\)\\)\\)\")",
+      "Bash(claude --version)",
+      "Bash(claude doctor *)",
+      "PowerShell(Get-Content *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(powershell -Command \"git pull origin main; exit 0\")",
+      "PowerShell($json = Get-Content \".claude/settings.json\" | ConvertFrom-Json; $json.hooks.SessionStart[0].hooks[0].command)"
     ]
   },
   "prefersReducedMotion": true
