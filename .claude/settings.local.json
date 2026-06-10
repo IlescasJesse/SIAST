@@ -36,7 +36,8 @@
       "Workflow(analisis-alcance)",
       "Bash(/usr/bin/head -120)",
       "Bash(cat >> *)",
-      "Bash(/usr/bin/head -50)"
+      "Bash(/usr/bin/head -50)",
+      "Bash(echo \"exit: $?\")"
     ]
   },
   "prefersReducedMotion": true
