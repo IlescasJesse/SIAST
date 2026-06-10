@@ -39,7 +39,9 @@
       "Bash(/usr/bin/head -50)",
       "Bash(echo \"exit: $?\")",
       "Bash(git push *)",
-      "Bash(/usr/bin/tail -2)"
+      "Bash(/usr/bin/tail -2)",
+      "Bash(/usr/bin/head -3)",
+      "Bash(/usr/bin/tail -1)"
     ]
   },
   "prefersReducedMotion": true
