@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Response, NextFunction } from "express";
 import type { AuthRequest } from "../types/index.js";
 import { ROLES_RESPONSABLE } from "../middleware/roles.middleware.js";
+import { prisma } from "../config/database.js";
 import * as metricasService from "../services/metricas.service.js";
 
 // ── Validación de query params (Zod — seguridad D-threat Fechas malformadas) ──
@@ -92,10 +93,29 @@ export const obtener = async (
       areaId = user.areaSoporteId;
     }
 
-    // 3. TECNICO_*: para tipo=proceso, forzar su propio tecnicoId (T-04-02-04)
+    // 3. RESPONSABLE_*: para tipo=proceso, validar que el técnico solicitado
+    //    pertenezca a su propia área de soporte (evita fuga cross-área).
+    //    MESA_AYUDA y ADMIN conservan scope global (consistente con el resto
+    //    del controller, donde no están en ROLES_TECNICO ni ROLES_RESPONSABLE).
+    if (
+      (ROLES_RESPONSABLE as readonly string[]).includes(user.rol) &&
+      tipo === "proceso" &&
+      tecnicoId !== undefined
+    ) {
+      const tecnico = await prisma.usuario.findUnique({
+        where: { id: tecnicoId },
+        select: { areaSoporteId: true },
+      });
+      if (!tecnico || tecnico.areaSoporteId !== user.areaSoporteId) {
+        res.status(403).json({ error: "Técnico fuera del área de soporte asignada" });
+        return;
+      }
+    }
+
+    // 4. TECNICO_*: para tipo=proceso, forzar su propio tecnicoId (T-04-02-04)
     const tecnicoIdEfectivo = ROLES_TECNICO.includes(user.rol) ? user.id : (tecnicoId ?? undefined);
 
-    // 4. Delegar al servicio según tipo
+    // 5. Delegar al servicio según tipo
     let data;
     if (tipo === "area") {
       data = await metricasService.obtenerMetricasGlobal(fechaInicio, fechaFin);
