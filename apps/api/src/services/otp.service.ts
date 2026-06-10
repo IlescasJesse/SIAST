@@ -1,16 +1,17 @@
 import { randomInt } from "crypto";
+import bcrypt from "bcrypt";
 import { prisma } from "../config/database.js";
-import { enviarOtp, type EnvioOtpResult } from "./whatsapp.service.js";
+import { enviarOtp } from "./whatsapp.service.js";
 import { fetchEmpleadoByRfc, updateTelefonoEnSirh } from "./sirh.service.js";
 
 const OTP_TTL_MINUTOS = 10;
+const OTP_BCRYPT_ROUNDS = 10;
 
 /** Genera un código numérico de 6 dígitos usando CSPRNG */
 const generarCodigo = (): string => randomInt(100000, 999999).toString();
 
 /** Enmascara el teléfono: "9512345678" → "******5678" */
-export const maskTelefono = (tel: string): string =>
-  tel.slice(-4).padStart(tel.length, "*");
+export const maskTelefono = (tel: string): string => tel.slice(-4).padStart(tel.length, "*");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos de respuesta
@@ -19,7 +20,6 @@ export const maskTelefono = (tel: string): string =>
 export interface SolicitarOtpResult {
   ok: true;
   hint: string;
-  devCodigo?: string;
 }
 
 /** Primer acceso: empleado SÍ tiene teléfono en DB → pedir confirmación */
@@ -51,14 +51,16 @@ async function generarYEnviarOtp(
   const codigo = generarCodigo();
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTOS * 60 * 1000);
 
-  await prisma.otpToken.create({ data: { rfc, codigo, expiresAt } });
+  // SEC: solo se persiste el hash — el código en claro vive únicamente
+  // el tiempo del envío por WhatsApp y nunca regresa en la respuesta HTTP.
+  const codigoHash = await bcrypt.hash(codigo, OTP_BCRYPT_ROUNDS);
+  await prisma.otpToken.create({ data: { rfc, codigo: codigoHash, expiresAt } });
 
-  const envio: EnvioOtpResult = await enviarOtp(telefono, codigo, nombreCompleto);
+  await enviarOtp(telefono, codigo, nombreCompleto);
 
   return {
     ok: true,
     hint: maskTelefono(telefono),
-    ...(envio.devCodigo ? { devCodigo: envio.devCodigo } : {}),
   };
 }
 
@@ -180,21 +182,23 @@ export const solicitarOtp = async (
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const verificarOtp = async (rfc: string, codigo: string): Promise<void> => {
+  // Solo puede existir un token vigente por RFC (se invalidan al generar uno nuevo)
   const otp = await prisma.otpToken.findFirst({
     where: {
       rfc,
-      codigo,
       usado: false,
       expiresAt: { gt: new Date() },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  if (!otp) {
-    throw Object.assign(
-      new Error("Código incorrecto o expirado"),
-      { status: 401 },
-    );
+  // bcrypt.compare es timing-safe; el hash dummy evita revelar si existe token vigente
+  const hashAComparar =
+    otp?.codigo ?? "$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv";
+  const coincide = await bcrypt.compare(codigo, hashAComparar);
+
+  if (!otp || !coincide) {
+    throw Object.assign(new Error("Código incorrecto o expirado"), { status: 401 });
   }
 
   await prisma.otpToken.update({ where: { id: otp.id }, data: { usado: true } });

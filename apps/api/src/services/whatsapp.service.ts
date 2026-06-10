@@ -60,7 +60,7 @@ export function initWhatsApp(): void {
 
   // WA_SESSION_ID en .env → cambiar su valor fuerza una sesión nueva
   const sessionId = process.env.WA_SESSION_ID ?? "siast-v1";
-  const authPath  = path.resolve(__dirname, "../../../../.wwebjs_auth");
+  const authPath = path.resolve(__dirname, "../../../../.wwebjs_auth");
   console.log(`[WhatsApp] Usando sesión: "${sessionId}" en ${authPath}`);
 
   // Rutas comunes de Chrome en Windows — usa el que encuentre primero
@@ -72,7 +72,11 @@ export function initWhatsApp(): void {
   ].filter(Boolean);
 
   const executablePath = chromePaths.find((p) => {
-    try { return require("fs").existsSync(p); } catch { return false; }
+    try {
+      return require("fs").existsSync(p);
+    } catch {
+      return false;
+    }
   });
 
   if (executablePath) {
@@ -160,8 +164,6 @@ export function initWhatsApp(): void {
 
 export interface EnvioOtpResult {
   ok: boolean;
-  /** Solo cuando WhatsApp no está disponible — el código en claro para consola */
-  devCodigo?: string;
 }
 
 // ── Envío ─────────────────────────────────────────────────────────────────────
@@ -249,9 +251,9 @@ export async function enviarNotifTicketAsignado(params: {
  *   2. WhatsApp conectado pero número no encontrado → cae a consola (no lanza error).
  *   3. WhatsApp no conectado → modo consola.
  *
- * En cualquiera de los casos de fallback devuelve `devCodigo` para que el admin
- * pueda ver el código en consola y en el panel. En producción sin WA el empleado
- * deberá contactar al admin para obtener el código.
+ * En los casos de fallback el código solo se imprime en la consola del servidor —
+ * NUNCA viaja en la respuesta HTTP. En producción sin WA el empleado deberá
+ * contactar al admin para obtener el código.
  */
 export async function enviarOtp(
   telefono: string,
@@ -274,7 +276,9 @@ export async function enviarOtp(
         return { ok: true };
       }
       // Número no encontrado en WA → advertencia + modo consola
-      console.warn(`[WhatsApp] getNumberId nulo para ******${telefono.slice(-4)} — cayendo a modo consola`);
+      console.warn(
+        `[WhatsApp] getNumberId nulo para ******${telefono.slice(-4)} — cayendo a modo consola`,
+      );
     } catch (err: any) {
       // Error al enviar (p.ej. sesión expiró en medio) → modo consola
       console.error(`[WhatsApp] Error al enviar OTP: ${err.message} — cayendo a modo consola`);
@@ -285,10 +289,9 @@ export async function enviarOtp(
 
   // ── Modo consola (fallback) ───────────────────────────────────────────────
   if (process.env.NODE_ENV === "production") {
-    throw Object.assign(
-      new Error("Servicio OTP no disponible. Contacte soporte."),
-      { status: 503 },
-    );
+    throw Object.assign(new Error("Servicio OTP no disponible. Contacte soporte."), {
+      status: 503,
+    });
   }
 
   // DEV: imprimir en consola únicamente, NUNCA en response body

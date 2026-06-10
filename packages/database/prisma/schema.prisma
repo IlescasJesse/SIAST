@@ -223,7 +223,7 @@ model Empleado {
 model OtpToken {
   id        Int      @id @default(autoincrement())
   rfc       String   @db.VarChar(13)
-  codigo    String   @db.VarChar(6)
+  codigo    String   @db.VarChar(72) // hash bcrypt del código — nunca en claro
   usado     Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
