@@ -38,9 +38,17 @@ const PRIORIDAD_COLOR = TICKET_PRIORIDAD_COLOR;
 const ROL_LABEL = {
   ADMIN: "Administrador",
   TECNICO_TI: "Técnico TI",
+  TECNICO_REDES: "Técnico de Redes",
   TECNICO_SERVICIOS: "Técnico en Servicios Generales",
   MESA_AYUDA: "Mesa de Ayuda",
   GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",
+  GESTOR_SALAS_JUNTA: "Gestor de Salas de Junta",
+  GESTOR_RECURSOS: "Gestor de Recursos",
+  GESTOR_INVENTARIO: "Gestor de Inventario",
+  RESPONSABLE_TI: "Responsable TI",
+  RESPONSABLE_REDES: "Responsable de Redes",
+  RESPONSABLE_MANTENIMIENTO: "Responsable de Mantenimiento",
+  RESPONSABLE_RECURSOS_MATERIALES: "Responsable de Recursos Materiales",
   EMPLEADO: "Empleado",
 };
 
@@ -383,7 +391,7 @@ function MetricasMesaAyuda({ tickets }) {
 function MetricasGestor({ recursos, asignaciones }) {
   const totalCatalogos = recursos.length;
   const totalUnidades = recursos.reduce((s, r) => s + (r._count?.unidades ?? r.unidades?.length ?? 0), 0);
-  const asignacionesActivas = asignaciones.filter((a) => a.estado === "ACTIVA" || !a.fechaDevolucion).length;
+  const asignacionesActivas = asignaciones.filter((a) => a.estado === "APROBADA" || a.estado === "PENDIENTE").length;
 
   const porTipo = {};
   recursos.forEach((r) => {
@@ -512,8 +520,18 @@ export const DashboardPage = () => {
   const [misPasos, setMisPasos] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const isGestor = rol === "GESTOR_RECURSOS_MATERIALES";
-  const esTecnico = ["TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS"].includes(rol);
+  const isGestor = rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES";
+  const esSupervisor = [
+    "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO",
+    "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO",
+  ].includes(rol);
+  const esTecnico = [
+    "TECNICO_TI",
+    "TECNICO_REDES",
+    "TECNICO_ELECTRICISTA",
+    "TECNICO_PLOMERO",
+    "TECNICO_MOVILIDAD",
+  ].includes(rol);
 
   useEffect(() => {
     (async () => {
@@ -526,11 +544,11 @@ export const DashboardPage = () => {
 
         if (isGestor) {
           const [rec, asig] = await Promise.all([
-            getCatalogos().catch(() => ({ catalogos: [] })),
-            getAsignaciones().catch(() => ({ asignaciones: [] })),
+            getCatalogos().catch(() => ({ data: [] })),
+            getAsignaciones().catch(() => ({ data: [] })),
           ]);
-          setRecursos(rec?.catalogos ?? rec ?? []);
-          setAsignaciones(asig?.asignaciones ?? asig ?? []);
+          setRecursos(rec?.data ?? []);
+          setAsignaciones(asig?.data ?? []);
         }
 
         if (esTecnico) {
@@ -570,9 +588,10 @@ export const DashboardPage = () => {
             <MetricasTecnico tickets={tickets} user={user} misPasos={misPasos} navigate={navigate} />
           )}
           {rol === "MESA_AYUDA" && <MetricasMesaAyuda tickets={tickets} />}
-          {rol === "GESTOR_RECURSOS_MATERIALES" && (
+          {(rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES") && (
             <MetricasGestor recursos={recursos} asignaciones={asignaciones} />
           )}
+          {esSupervisor && <MetricasMesaAyuda tickets={tickets} />}
           {rol === "EMPLEADO" && <MetricasEmpleado tickets={tickets} navigate={navigate} />}
         </>
       )}

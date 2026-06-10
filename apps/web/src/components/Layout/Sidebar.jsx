@@ -5,6 +5,7 @@ import {
 } from "@mui/material";
 import siastLogo from "../../img/siast-logo.png";
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import BarChartIcon from "@mui/icons-material/BarChart";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import PersonIcon from "@mui/icons-material/Person";
@@ -17,14 +18,15 @@ const DRAWER_W = 220;
 
 const menuItems = (rol) => {
   const items = [
-    { label: "Estadísticas", icon: <DashboardIcon />, to: "/dashboard", roles: ["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"] },
-    { label: "Solicitudes", icon: <ConfirmationNumberIcon />, to: "/solicitudes", roles: ["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES"] },
+    { label: "Estadísticas", icon: <DashboardIcon />, to: "/dashboard", roles: ["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
+    { label: "Métricas", icon: <BarChartIcon />, to: "/metricas", roles: ["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_TI", "TECNICO_REDES", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
+    { label: "Solicitudes", icon: <ConfirmationNumberIcon />, to: "/solicitudes", roles: ["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
     { label: "Mis Solicitudes", icon: <ConfirmationNumberIcon />, to: "/solicitudes", roles: ["EMPLEADO"] },
     { label: "Nueva Solicitud", icon: <AddCircleOutlineIcon />, to: "/solicitudes/nueva", roles: ["ADMIN", "MESA_AYUDA", "EMPLEADO"] },
     { label: "Mapa de Áreas", icon: <EditLocationAltIcon />, to: "/admin/areas", roles: ["ADMIN"] },
-    { label: "Recursos", icon: <Inventory2Icon />, to: "/recursos", roles: ["ADMIN", "GESTOR_RECURSOS_MATERIALES"] },
+    { label: "Recursos", icon: <Inventory2Icon />, to: "/recursos", roles: ["ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"] },
     { label: "Administración", icon: <AdminPanelSettingsIcon />, to: "/admin", roles: ["ADMIN"] },
-    { label: "Perfil", icon: <PersonIcon />, to: "/perfil", roles: ["ADMIN", "TECNICO_TI", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "EMPLEADO"] },
+    { label: "Perfil", icon: <PersonIcon />, to: "/perfil", roles: ["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD", "EMPLEADO"] },
   ];
   return items.filter((i) => i.roles.includes(rol));
 };

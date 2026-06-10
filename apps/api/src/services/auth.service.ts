@@ -110,13 +110,18 @@ export const loginStaff = async (usuario: string, password: string, meta: Reques
   const expiresInMs = msFromExpiry(STAFF_JWT_EXPIRES_IN);
   const jti = await crearSesion({ usuarioId: user.id, expiresInMs, ...meta });
 
-  const token = signToken({
+  // Incluir areaSoporteId en JWT para RESPONSABLE_* — permite scoping sin DB lookup en controladores
+  const jwtPayload: Parameters<typeof signToken>[0] = {
     id: user.id,
-    rol: user.rol,
+    rol: user.rol as import("@stf/shared").Rol,
     usuario: user.usuario,
     nombre: `${user.nombre} ${user.apellidos}`,
     jti,
-  });
+  };
+  if (user.areaSoporteId != null) {
+    jwtPayload.areaSoporteId = user.areaSoporteId;
+  }
+  const token = signToken(jwtPayload);
 
   await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "OK", usuarioId: user.id, ...meta });
 

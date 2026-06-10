@@ -62,6 +62,7 @@ export const emitirTicketNuevo = async (ticket: {
 
 export const emitirTicketAsignado = async (params: {
   ticketId: number;
+  folio: string;
   asunto: string;
   prioridad: string;
   tecnicoId: number;
@@ -111,7 +112,7 @@ export const emitirTicketAsignado = async (params: {
       return enviarNotifTicketAsignado({
         telefono: tec.telefono,
         nombreTecnico: params.tecnicoNombre,
-        ticketId: params.ticketId,
+        folio: params.folio,
         asunto: params.asunto,
         prioridad: params.prioridad,
         empleadoNombre: params.empleadoNombre,

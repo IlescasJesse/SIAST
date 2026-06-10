@@ -14,6 +14,8 @@ import catalogosRoutes from "./routes/catalogos.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import recursosRoutes from "./routes/recursos.routes.js";
 import metricasRoutes from "./routes/metricas.routes.js";
+import * as metricasService from "./services/metricas.service.js";
+import { prisma } from "./config/database.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { configurarSockets } from "./sockets/tickets.socket.js";
 import { setIo } from "./services/notificaciones.service.js";
@@ -105,6 +107,97 @@ httpServer.listen(port, "0.0.0.0", () => {
       console.error("[SIRH] Error en sync periódico:", err);
     });
   }, SYNC_INTERVAL_MS).unref(); // .unref() para no bloquear el cierre del proceso
+
+  // ── Job diario: snapshot de métricas en MetricasHistorial (Phase 4, D-20) ─────
+  async function ejecutarSnapshotMetricas(): Promise<void> {
+    try {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0); // inicio del día
+
+      // Snapshot global (sin área) — findFirst+upsert porque Prisma no soporta null en unique compuesto
+      const global = await metricasService.obtenerMetricasGlobal();
+      const globalExistente = await prisma.metricasHistorial.findFirst({
+        where: { fecha: hoy, areaSoporteId: null },
+      });
+      const globalData = {
+        totalTickets: global.totalTickets,
+        ticketsResueltos: global.ticketsResueltos,
+        ticketsActivos: global.ticketsActivos,
+        slaGlobal: global.slaGlobal ?? 0,
+        tiempoPromedioHoras: global.tiempoPromedioHoras,
+      };
+      if (globalExistente) {
+        await prisma.metricasHistorial.update({
+          where: { id: globalExistente.id },
+          data: globalData,
+        });
+      } else {
+        await prisma.metricasHistorial.create({
+          data: { fecha: hoy, areaSoporteId: null, ...globalData },
+        });
+      }
+
+      // Snapshot por área
+      const areas = await prisma.areaSoporte.findMany({
+        where: { activo: true },
+        select: { id: true },
+      });
+      for (const area of areas) {
+        const areaData = await metricasService.obtenerMetricasPorArea(area.id);
+        // Contar el total real de tickets del área (activos + resueltos en el período)
+        const [totalArea, resueltosArea] = await Promise.all([
+          prisma.ticket.count({
+            where: { activo: true, tecnico: { areaSoporteId: area.id } },
+          }),
+          prisma.ticket.count({
+            where: { activo: true, estado: "RESUELTO", tecnico: { areaSoporteId: area.id } },
+          }),
+        ]);
+        await prisma.metricasHistorial.upsert({
+          where: { fecha_areaSoporteId: { fecha: hoy, areaSoporteId: area.id } },
+          create: {
+            fecha: hoy,
+            areaSoporteId: area.id,
+            totalTickets: totalArea,
+            ticketsResueltos: resueltosArea,
+            ticketsActivos: areaData.ticketsActivos,
+            slaGlobal: areaData.slaGlobal ?? 0,
+            tiempoPromedioHoras: areaData.tiempoPromedioHoras,
+          },
+          update: {
+            totalTickets: totalArea,
+            ticketsResueltos: resueltosArea,
+            ticketsActivos: areaData.ticketsActivos,
+            slaGlobal: areaData.slaGlobal ?? 0,
+            tiempoPromedioHoras: areaData.tiempoPromedioHoras,
+          },
+        });
+      }
+
+      console.log(`[MetricasHistorial] Snapshot guardado — ${hoy.toISOString().slice(0, 10)}`);
+    } catch (err) {
+      console.error("[MetricasHistorial] Error al guardar snapshot:", err);
+    }
+  }
+
+  // Solo ejecutar al arrancar si no existe ya un snapshot de hoy (WR-04)
+  // Luego repetir cada 24h para actualizar el snapshot diario
+  const VEINTICUATRO_HORAS = 24 * 60 * 60 * 1000;
+  (async () => {
+    try {
+      const hoyStr = new Date().toISOString().slice(0, 10);
+      const existeHoy = await prisma.metricasHistorial.findFirst({
+        where: { fecha: new Date(hoyStr) },
+      });
+      if (!existeHoy) {
+        // Delay 30s para que el servidor se estabilice antes del primer snapshot
+        setTimeout(ejecutarSnapshotMetricas, 30_000);
+      }
+    } catch (err) {
+      console.error("[MetricasHistorial] Error al verificar snapshot existente:", err);
+    }
+  })();
+  setInterval(ejecutarSnapshotMetricas, VEINTICUATRO_HORAS).unref();
 });
 
 // ============================================================

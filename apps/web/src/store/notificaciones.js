@@ -59,7 +59,14 @@ export const useNotifStore = create((set, get) => ({
     socket = io(API_BASE, { transports: ["websocket"] });
 
     socket.on("connect", () => {
-      if (user.rol === "ADMIN" || user.rol === "MESA_AYUDA") socket.emit("join:admin");
+      if (
+        user.rol === "ADMIN" ||
+        user.rol === "MESA_AYUDA" ||
+        user.rol === "RESPONSABLE_TI" ||
+        user.rol === "RESPONSABLE_REDES" ||
+        user.rol === "RESPONSABLE_MANTENIMIENTO" ||
+        user.rol === "RESPONSABLE_RECURSOS_MATERIALES"
+      ) socket.emit("join:admin");
       if (user.rol !== "EMPLEADO") socket.emit("join:user", String(user.id));
       if (user.rfc) socket.emit("join:empleado", user.rfc);
     });

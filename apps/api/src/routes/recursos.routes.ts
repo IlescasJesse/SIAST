@@ -11,7 +11,7 @@ router.use(authMiddleware);
 // ── Asignaciones (antes de /:id para evitar conflictos) ──────────────────────
 router.get(
   "/asignaciones",
-  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
+  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"),
   ctrl.listarAsignaciones,
 );
 
@@ -29,7 +29,7 @@ router.patch(
 
 router.get(
   "/asignaciones/:id/orden-salida",
-  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
+  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"),
   ctrl.ordenSalida,
 );
 
@@ -37,7 +37,7 @@ router.get(
 // IMPORTANTE: /unidades/by-serie/:serie debe ir ANTES de /unidades/:id
 router.get(
   "/unidades/by-serie/:serie",
-  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
+  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"),
   ctrl.buscarUnidadPorSerie,
 );
 
@@ -56,20 +56,27 @@ router.delete(
 // ── Catálogo (CRUD de tipos de recurso) ──────────────────────────────────────
 router.get(
   "/",
-  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
+  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"),
   ctrl.listarCatalogos,
-);
-
-router.post(
-  "/",
-  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
-  ctrl.crearCatalogo,
 );
 
 router.get(
   "/:id",
-  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
+  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"),
   ctrl.obtenerCatalogo,
+);
+
+router.get(
+  "/:catalogoId/unidades",
+  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"),
+  ctrl.listarUnidades,
+);
+
+// ── Catálogo (solo escritura para ADMIN y GESTOR) ─────────────────────────────
+router.post(
+  "/",
+  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
+  ctrl.crearCatalogo,
 );
 
 router.patch(
@@ -82,13 +89,6 @@ router.delete(
   "/:id",
   requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
   ctrl.eliminarCatalogo,
-);
-
-// ── Unidades por catálogo ─────────────────────────────────────────────────────
-router.get(
-  "/:catalogoId/unidades",
-  requireRol("ADMIN", "GESTOR_RECURSOS_MATERIALES"),
-  ctrl.listarUnidades,
 );
 
 router.post(

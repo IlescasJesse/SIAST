@@ -416,8 +416,8 @@ export const listarAsignaciones = async (req: AuthRequest, res: Response, next: 
     if (unidadId) where["unidadId"] = parseInt(unidadId, 10);
     if (ticketId) where["ticketId"] = parseInt(ticketId, 10);
 
-    // Si es GESTOR_RECURSOS_MATERIALES, filtrar solo sus asignaciones
-    if (req.user?.rol === "GESTOR_RECURSOS_MATERIALES") {
+    // Si es GESTOR_RECURSOS_MATERIALES o RESPONSABLE_*, filtrar solo sus asignaciones
+    if (req.user?.rol === "GESTOR_RECURSOS_MATERIALES" || req.user?.rol === "RESPONSABLE_RECURSOS_MATERIALES") {
       where["gestorId"] = req.user.id;
     }
 

@@ -6,12 +6,25 @@ import { z } from "zod";
 
 export const RolSchema = z.enum([
   "ADMIN",
-  "TECNICO_TI",
-  "TECNICO_REDES",
-  "TECNICO_SERVICIOS",
   "MESA_AYUDA",
-  "GESTOR_RECURSOS_MATERIALES",
   "EMPLEADO",
+  // Área TI
+  "RESPONSABLE_TI",
+  "TECNICO_TI",
+  // Área Redes
+  "RESPONSABLE_REDES",
+  "TECNICO_REDES",
+  // Área Mantenimiento
+  "RESPONSABLE_MANTENIMIENTO",
+  "TECNICO_ELECTRICISTA",
+  "TECNICO_PLOMERO",
+  "TECNICO_MOVILIDAD",
+  // Área Recursos Materiales
+  "RESPONSABLE_RECURSOS_MATERIALES",
+  "GESTOR_RECURSOS_MATERIALES",
+  "GESTOR_SALAS_JUNTA",
+  "GESTOR_RECURSOS",
+  "GESTOR_INVENTARIO",
 ]);
 
 export const CategoriaTicketSchema = z.enum(["TECNOLOGIAS", "SERVICIOS", "RECURSOS_MATERIALES"]);
@@ -300,20 +313,29 @@ export const LABEL_PRIORIDAD: Record<PrioridadTicket, string> = {
 };
 
 export const LABEL_PISO: Record<PisoEdificio, string> = {
-  PB: "Planta Baja",
-  NIVEL_1: "Nivel 1",
-  NIVEL_2: "Nivel 2",
-  NIVEL_3: "Nivel 3",
+  PB: "PLANTA BAJA",
+  NIVEL_1: "NIVEL 2",
+  NIVEL_2: "NIVEL 3",
+  NIVEL_3: "NIVEL 4",
 };
 
 export const LABEL_ROL: Record<string, string> = {
   ADMIN: "Administrador",
-  TECNICO_TI: "Técnico TI",
-  TECNICO_REDES: "Técnico de Redes",
-  TECNICO_SERVICIOS: "Técnico de Servicios",
   MESA_AYUDA: "Mesa de Ayuda",
-  GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",
   EMPLEADO: "Empleado",
+  RESPONSABLE_TI: "Responsable de TI",
+  TECNICO_TI: "Técnico TI",
+  RESPONSABLE_REDES: "Responsable de Redes",
+  TECNICO_REDES: "Técnico de Redes",
+  RESPONSABLE_MANTENIMIENTO: "Responsable de Mantenimiento",
+  TECNICO_ELECTRICISTA: "Técnico Electricista",
+  TECNICO_PLOMERO: "Técnico Plomero",
+  TECNICO_MOVILIDAD: "Técnico de Movilidad",
+  RESPONSABLE_RECURSOS_MATERIALES: "Responsable de Recursos Materiales",
+  GESTOR_RECURSOS_MATERIALES: "Gestor de Recursos Materiales",
+  GESTOR_SALAS_JUNTA: "Gestor de Salas de Junta",
+  GESTOR_RECURSOS: "Gestor de Recursos",
+  GESTOR_INVENTARIO: "Gestor de Inventario",
 };
 
 // Subtipos para EQUIPOS_DISPOSITIVOS — usados en el formulario de nueva solicitud
@@ -324,8 +346,8 @@ export const SUB_TIPO_EQUIPOS = [
   { value: "FALLA_IMPRESORA", label: "Falla de impresora o periférico" },
   { value: "INSTALAR_SOFTWARE", label: "Instalar software" },
   { value: "IMPRESORA_NUEVA_EN_RED", label: "Impresora nueva (configurar en red)" },
-  { value: "MANTENIMIENTO_PREVENTIVO", label: "Mantenimiento preventivo" },
-  { value: "MANTENIMIENTO_CORRECTIVO", label: "Mantenimiento correctivo" },
+  { value: "MANTENIMIENTO_PREVENTIVO", label: "Mantenimiento preventivo (Antivirus, revisión periódica)" },
+  { value: "MANTENIMIENTO_CORRECTIVO", label: "Mantenimiento correctivo (Reparación de fallas)" },
 ];
 
 // ============================================================
@@ -436,12 +458,12 @@ export const SUBTIPO_EQUIPOS = {
 export const SUBTIPO_RED = {
   SIN_ACCESO_INTERNET: "SIN_ACCESO_INTERNET",
   SOLICITUD_ACCESO_INTERNET: "SOLICITUD_ACCESO_INTERNET",
-  SOPORTE_DOMINIO: "SOPORTE_DOMINIO",
 } as const;
 
 // Sub-tipos para CUENTAS_DOMINIO
 export const SUBTIPO_CUENTAS = {
   CREACION_USUARIO: "CREACION_USUARIO",
+  SOPORTE_DOMINIO: "SOPORTE_DOMINIO",
 } as const;
 
 // Sub-tipos para SISTEMAS_INSTITUCIONALES
@@ -459,6 +481,10 @@ export const SUB_TIPO_SISTEMAS = [
 export const SUB_TIPO_RED = [
   { value: "SIN_ACCESO_INTERNET", label: "Sin acceso a internet" },
   { value: "SOLICITUD_ACCESO_INTERNET", label: "Solicitud de acceso a internet" },
+];
+
+export const SUB_TIPO_CUENTAS = [
+  { value: "CREACION_USUARIO", label: "Creación de usuario" },
   { value: "SOPORTE_DOMINIO", label: "Soporte de dominio" },
 ];
 
@@ -536,11 +562,20 @@ export const PERMISOS_DEFAULT: Record<Rol, Permiso[]> = {
     "pasos.asignar",
     "metricas.ver",
   ],
-  TECNICO_TI: ["solicitudes.ver_todas", "metricas.ver"],
-  TECNICO_REDES: ["solicitudes.ver_todas"],
-  TECNICO_SERVICIOS: ["solicitudes.ver_todas"],
-  GESTOR_RECURSOS_MATERIALES: ["solicitudes.ver_todas", "recursos.gestionar", "metricas.ver"],
   EMPLEADO: [],
+  RESPONSABLE_TI: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  TECNICO_TI: ["solicitudes.ver_todas", "metricas.ver"],
+  RESPONSABLE_REDES: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  TECNICO_REDES: ["solicitudes.ver_todas"],
+  RESPONSABLE_MANTENIMIENTO: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  TECNICO_ELECTRICISTA: ["solicitudes.ver_todas"],
+  TECNICO_PLOMERO: ["solicitudes.ver_todas"],
+  TECNICO_MOVILIDAD: ["solicitudes.ver_todas"],
+  RESPONSABLE_RECURSOS_MATERIALES: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  GESTOR_RECURSOS_MATERIALES: ["solicitudes.ver_todas", "recursos.gestionar", "metricas.ver"],
+  GESTOR_SALAS_JUNTA: ["solicitudes.ver_todas", "recursos.gestionar"],
+  GESTOR_RECURSOS: ["solicitudes.ver_todas", "recursos.gestionar"],
+  GESTOR_INVENTARIO: ["solicitudes.ver_todas", "recursos.gestionar", "metricas.ver"],
 };
 
 export function tienePermiso(
@@ -552,3 +587,120 @@ export function tienePermiso(
   if (permisosExtra?.includes(perm)) return true;
   return false;
 }
+
+// ============================================================
+// MÉTRICAS OPERACIONALES — Phase 4 (endpoint unificado)
+// ============================================================
+
+/** Rango de fechas para filtrado */
+export interface MetricasDateRange {
+  fechaInicio?: string; // YYYY-MM-DD
+  fechaFin?: string; // YYYY-MM-DD
+}
+
+/** Parámetros de consulta del endpoint unificado */
+export interface MetricasQueryParams extends MetricasDateRange {
+  tipo: "area" | "tecnico" | "proceso";
+  areaId?: string;
+  tecnicoId?: string;
+}
+
+/** Un punto de la tendencia diaria (para gráficas de línea) */
+export interface TendenciaDia {
+  dia: string; // "YYYY-MM-DD"
+  creados: number;
+  resueltos: number;
+}
+
+/** Resumen de eficiencia de un responsable (para tabla Tab Global) */
+export interface EficienciaResponsable {
+  id: number;
+  nombre: string;
+  apellidos: string;
+  areaNombre: string;
+  areaSoporteId: number;
+  ticketsResueltos: number;
+  tiempoPromedioHoras: number | null;
+  slaGlobal: number | null; // porcentaje 0-100, null = sin datos en el período
+}
+
+/** Rendimiento de un técnico (para tabla Tab Por Responsable) */
+export interface RendimientoTecnico {
+  id: number;
+  nombre: string;
+  apellidos: string;
+  rol: string;
+  ticketsActivos: number;
+  ticketsCompletados: number;
+  tiempoPromedioHoras: number | null;
+  tiemprimeraRespuestaHoras: number | null;
+  ratioResueltosCancelados: number | null; // resueltos / (resueltos + cancelados)
+}
+
+/** Distribución de tickets por categoría (para gráfica de pastel) */
+export interface DistribucionCategoria {
+  categoria: string;
+  total: number;
+  color?: string;
+}
+
+/** Respuesta del endpoint unificado cuando tipo=area (Tab Global) */
+export interface MetricasGlobalResponse {
+  tipo: "area";
+  // KPIs tarjetas
+  totalTickets: number;
+  ticketsActivos: number;
+  ticketsResueltos: number;
+  ticketsSinAsignar: number;
+  slaGlobal: number | null; // %, null = sin datos en el período
+  tiempoPromedioHoras: number | null;
+  // Charts
+  tendenciaDiaria: TendenciaDia[];
+  distribucionCategoria: DistribucionCategoria[];
+  distribucionEstado: DistribucionCategoria[];
+  comparativoPorArea: Array<{ areaNombre: string; areaSoporteId: number; total: number; resueltos: number; sinAsignar: number }>;
+  // Tabla
+  eficienciaResponsables: EficienciaResponsable[];
+}
+
+/** Respuesta cuando tipo=tecnico (Tab Por Responsable) */
+export interface MetricasPorAreaResponse {
+  tipo: "tecnico";
+  areaId: number;
+  areaNombre: string;
+  // KPIs tarjetas
+  ticketsActivos: number;
+  ticketsSinAsignar: number;
+  tiempoPromedioHoras: number | null;
+  slaGlobal: number | null; // null = sin datos en el período
+  ticketsReabiertos: number;
+  // Charts
+  tendenciaDiaria: TendenciaDia[];
+  distribucionSubcategoria: DistribucionCategoria[];
+  distribucionEstado: DistribucionCategoria[];
+  cargaTecnicos: Array<{ tecnicoNombre: string; tecnicoId: number; activos: number; completados: number }>;
+  // Tabla
+  rendimientoTecnicos: RendimientoTecnico[];
+}
+
+/** Respuesta cuando tipo=proceso (Tab Por Técnico) */
+export interface MetricasPorTecnicoResponse {
+  tipo: "proceso";
+  tecnicoId: number;
+  tecnicoNombre: string;
+  // KPIs tarjetas
+  ticketsCompletados: number;
+  tiempoPromedioHoras: number | null;
+  tiemprimeraRespuestaHoras: number | null;
+  ratioResueltosCancelados: number | null;
+  // Charts
+  tendenciaProductividad: TendenciaDia[];
+  comparativaVsArea: Array<{ label: string; tecnico: number; promedioArea: number }>;
+  distribucionResultado: Array<{ name: string; value: number; color: string }>;
+  distribucionEstado: DistribucionCategoria[];
+}
+
+export type MetricasResponse =
+  | MetricasGlobalResponse
+  | MetricasPorAreaResponse
+  | MetricasPorTecnicoResponse;

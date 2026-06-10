@@ -74,14 +74,32 @@ export const listarTickets = async (
   } else if (
     user.rol === "TECNICO_TI" ||
     user.rol === "TECNICO_REDES" ||
-    user.rol === "TECNICO_SERVICIOS"
+    user.rol === "TECNICO_ELECTRICISTA" ||
+    user.rol === "TECNICO_PLOMERO" ||
+    user.rol === "TECNICO_MOVILIDAD"
   ) {
     where.tecnicoId = user.id;
-    where.estado = { notIn: ["RESUELTO", "CANCELADO"] };
-  } else if (user.rol === "GESTOR_RECURSOS_MATERIALES") {
-    // El gestor ve todos los tickets de su categoría (RECURSOS_MATERIALES),
-    // incluyendo los nuevos sin asignar
+  } else if (
+    user.rol === "GESTOR_RECURSOS_MATERIALES" ||
+    user.rol === "GESTOR_SALAS_JUNTA" ||
+    user.rol === "GESTOR_RECURSOS" ||
+    user.rol === "GESTOR_INVENTARIO" ||
+    user.rol === "RESPONSABLE_RECURSOS_MATERIALES"
+  ) {
     where.categoria = "RECURSOS_MATERIALES";
+  } else if (ROLES_RESPONSABLE.includes(user.rol as any)) {
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      select: { areaSoporteId: true },
+    });
+    if (usuarioDb?.areaSoporteId) {
+      const areaSoporte = await prisma.areaSoporte.findUnique({
+        where: { id: usuarioDb.areaSoporteId },
+      });
+      if (areaSoporte) {
+        where.subcategoria = { in: areaSoporte.subcategorias as string[] };
+      }
+    }
   }
 
   if (query.estado) where.estado = query.estado;
@@ -243,8 +261,8 @@ export const crearTicket = async (
     include: ticketInclude,
   });
 
-  // Generar pasos del flujo de trabajo para TECNOLOGIAS según el proceso definido
-  if (categoriaVal === "TECNOLOGIAS") {
+  // Generar pasos del flujo de trabajo según el proceso definido
+  if (["TECNOLOGIAS", "SERVICIOS"].includes(categoriaVal)) {
     const proceso = await prisma.procesoDefinicion.findFirst({
       where: { subcategoria: subcategoriaVal as never, subTipo: body.subTipo ?? null, activo: true },
       include: { pasos: { orderBy: { orden: "asc" } } },
@@ -291,7 +309,7 @@ export const crearTicket = async (
       return enviarNotifTicketCreado({
         telefono: emp.telefono,
         nombre: emp.nombreCompleto,
-        ticketId: ticket.id,
+        folio: ticket.folio,
         asunto: ticket.asunto,
         prioridad: ticket.prioridad,
         url: `${frontendUrl}/solicitudes/${ticket.id}`,
@@ -322,9 +340,14 @@ export const obtenerTicket = async (id: number, user: JwtPayload) => {
 
 const CATEGORIA_ROL_MAP: Record<string, string[]> = {
   TECNOLOGIAS: ["TECNICO_TI", "TECNICO_REDES"],
-  SERVICIOS: ["TECNICO_SERVICIOS"],
-  RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES"],
+  SERVICIOS: ["TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"],
+  RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO", "RESPONSABLE_RECURSOS_MATERIALES"],
 };
+
+const ROLES_RESPONSABLE = [
+  "RESPONSABLE_TI", "RESPONSABLE_REDES",
+  "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+] as const;
 
 export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayload) => {
   const ticket = await prisma.ticket.findFirst({ where: { id, activo: true } });
@@ -356,6 +379,27 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
     );
   }
 
+  // Guard: si el usuario es RESPONSABLE_*, verificar que el técnico pertenece a su área
+  if (ROLES_RESPONSABLE.includes(user.rol as any)) {
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      select: { areaSoporteId: true },
+    });
+    const areaSoporte = usuarioDb?.areaSoporteId
+      ? await prisma.areaSoporte.findUnique({ where: { id: usuarioDb.areaSoporteId } })
+      : null;
+    if (!areaSoporte) {
+      throw Object.assign(new Error("Responsable sin área asignada"), { status: 403 });
+    }
+    const rolesArea = areaSoporte.rolesIncluidos as string[];
+    if (!rolesArea.includes(tecnico.rol)) {
+      throw Object.assign(
+        new Error("El técnico no pertenece al área de soporte del responsable"),
+        { status: 403 },
+      );
+    }
+  }
+
   const updated = await prisma.ticket.update({
     where: { id },
     data: { tecnicoId, estado: "ASIGNADO", fechaAsignacion: new Date() },
@@ -380,6 +424,7 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
 
   await notif.emitirTicketAsignado({
     ticketId: id,
+    folio: ticket.folio,
     asunto: ticket.asunto,
     prioridad: ticket.prioridad,
     tecnicoId,
@@ -407,6 +452,24 @@ export const cambiarEstado = async (
       new Error(`Transición no permitida: ${ticket.estado} → ${body.estado}`),
       { status: 400 },
     );
+  }
+
+  // Guard: si el usuario es RESPONSABLE_*, verificar que el ticket pertenece a su área
+  if (ROLES_RESPONSABLE.includes(user.rol as any)) {
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      select: { areaSoporteId: true },
+    });
+    const areaSoporte = usuarioDb?.areaSoporteId
+      ? await prisma.areaSoporte.findUnique({ where: { id: usuarioDb.areaSoporteId } })
+      : null;
+    const subcategorias = (areaSoporte?.subcategorias as string[]) ?? [];
+    if (!subcategorias.includes(ticket.subcategoria)) {
+      throw Object.assign(
+        new Error("Solicitud fuera del área de soporte asignada"),
+        { status: 403 },
+      );
+    }
   }
 
   // Guard: no resolver ticket con pasos pendientes (D-10)
@@ -495,6 +558,13 @@ export const completarPaso = async (
     where: { id: pasoId, ticketId },
   });
   if (!paso) throw Object.assign(new Error("Paso no encontrado"), { status: 404 });
+  const ticketActual = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: { estado: true },
+  });
+  if (ticketActual?.estado === "CANCELADO") {
+    throw Object.assign(new Error("No se puede completar un paso de una solicitud cancelada"), { status: 400 });
+  }
   if (paso.estado === "COMPLETADO") {
     throw Object.assign(new Error("El paso ya fue completado"), { status: 400 });
   }
@@ -610,6 +680,17 @@ export const asignarPaso = async (
       fechaInicio: new Date(),
     },
     include: ticketInclude,
+  });
+
+  // Audit trail — NOT-02: registrar asignación de técnico a paso en historialTicket
+  await prisma.historialTicket.create({
+    data: {
+      ticketId,
+      estadoAnterior: estadoAnteriorTicket as never,
+      estadoNuevo: "EN_PROGRESO",
+      usuarioId: user.id,
+      comentario: `Paso ${paso.orden} — ${paso.nombre ?? `Paso ${paso.orden}`}: asignado a ${tecnico.nombre} ${tecnico.apellidos}`,
+    },
   });
 
   // Notificar al técnico que tiene un nuevo paso asignado

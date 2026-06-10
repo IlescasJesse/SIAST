@@ -35,19 +35,20 @@
 
 ---
 
-## Phase 2: Features Pendientes — Procesos y Flujos
+## Phase 2: Features Pendientes — Procesos y Flujos ✅ Complete (2026-05-13)
 
 **Goal:** ProcesoDefinicion DB operativa; flujos SIRH/SIAST activos; audit trail completo en pasos.
 **Requirements:** PRO-01 a PRO-03, NOT-01 a NOT-02
 **Depends on:** Phase 1 complete
 **Plans:** 5 planes (4 base + 1 gap closure)
+**Verification:** 14/14 must-haves passed
 
 ### Plans
-- [ ] 02-01-PLAN.md — Seed ProcesoDefinicion: SIRH y SIAST como flujos DIRECTO en DB
-- [ ] 02-02-PLAN.md — tickets.service.ts: migrar a DB + 6 bug fixes de flujo de pasos
-- [ ] 02-03-PLAN.md — metricas.controller.ts: migrar a DB, eliminar PROCESO_MAP import
-- [ ] 02-04-PLAN.md — Limpieza final: eliminar PROCESO_MAP de @stf/shared + seed autónomo
-- [ ] 02-05-PLAN.md — Gap closure: PRO-04 al backlog + historialTicket en asignarPaso (NOT-02)
+- [x] 02-01-PLAN.md — Seed ProcesoDefinicion: SIRH y SIAST como flujos DIRECTO en DB
+- [x] 02-02-PLAN.md — tickets.service.ts: migrar a DB + 6 bug fixes de flujo de pasos
+- [x] 02-03-PLAN.md — metricas.controller.ts: migrar a DB, eliminar PROCESO_MAP import
+- [x] 02-04-PLAN.md — Limpieza final: eliminar PROCESO_MAP de @stf/shared + seed autónomo
+- [x] 02-05-PLAN.md — Gap closure: PRO-04 al backlog + historialTicket en asignarPaso (NOT-02)
 
 ### Deliverables
 - Tickets leen proceso desde DB (`ProcesoDefinicion`) en lugar de `PROCESO_MAP` hardcodeado
@@ -64,30 +65,71 @@
 
 ---
 
-## Phase 3: Métricas Operacionales
+## Phase 3: Roles y Áreas de Soporte ✅ Complete (2026-05-25, gap closure)
 
-**Goal:** Dashboard de métricas en tiempo real para administradores y jefes de área.
-**Requirements:** MET-01 a MET-04
+**Goal:** Reestructurar el sistema de roles para reflejar la organización real de soporte: 4 áreas (TI, REDES, MANTENIMIENTO, RECURSOS MATERIALES) con responsables y técnicos especializados.
+**Requirements:** ROL-01 a ROL-05
 **Depends on:** Phase 2 complete
+**Plans:** 4 planes
+
+### Plans
+- [x] 03-01-PLAN.md — Schema + shared types: enum Rol extendido (14 valores), modelo AreaSoporte, PERMISOS_DEFAULT actualizado
+- [x] 03-02-PLAN.md — Migración DB + seed: migrate dev, 4 AreaSoporte seeds, 3 ProcesoDefinicion MANTENIMIENTO
+- [x] 03-03-PLAN.md — Backend guards: requireResponsableDeArea(), asignarTicket/cambiarEstado/listarTickets, bug fix crearTicket, endpoint GET /areas-soporte
+- [x] 03-04-PLAN.md — Frontend: selector AreaSoporte condicional en UsuariosPage + AdminUsuariosPage, getAreasSoporte API helpers
+- [x] 03-05-PLAN.md — Gap closure: validación campos requeridos backend (400 antes de Prisma) + fieldErrors por campo en formularios usuario
 
 ### Deliverables
-- Endpoints GET /api/metricas/{area,tecnico,proceso} funcionales
-- Dashboard /metricas con cards: solicitudes activas, tiempo promedio resolución, carga por técnico
-- Métricas por área con filtro de rango de fechas
-- Actualización en tiempo real via Socket.IO (mismo ticketsVersion pattern)
+- 4 nuevos roles RESPONSABLE_*: RESPONSABLE_TI, RESPONSABLE_REDES, RESPONSABLE_MANTENIMIENTO, RESPONSABLE_RECURSOS_MATERIALES
+- 3 nuevos roles técnicos de MANTENIMIENTO: TECNICO_ELECTRICISTA, TECNICO_PLOMERO, TECNICO_MOVILIDAD (reemplazan TECNICO_SERVICIOS)
+- Entidad `AreaSoporte` en DB con subcategorías y roles mapeados por área
+- Campo `areaSoporteId` en `Usuario` para vincular RESPONSABLE_* a su área
+- RESPONSABLE_* puede: reasignar solicitudes entre técnicos de su área, cerrar/cancelar solicitudes de su área, ver métricas de su área
+- Panel de usuarios actualizado: asignación de área al crear/editar RESPONSABLE_*
+- TECNICO_SERVICIOS marcado deprecated — admin reasigna manualmente a subroles específicos
 
 ### UAT
-- Admin ve dashboard con datos reales de los últimos 30 días
-- Métricas se actualizan sin recargar cuando se completa una solicitud
-- Filtro por área muestra solo solicitudes de esa área
+- Admin crea usuario RESPONSABLE_TI asignado al AreaSoporte TI
+- RESPONSABLE_TI ve solo tickets de subcategorías TI (SISTEMAS_INSTITUCIONALES, EQUIPOS_DISPOSITIVOS, CUENTAS_DOMINIO, CORREO_OUTLOOK)
+- RESPONSABLE_TI reasigna un ticket de TECNICO_TI_A a TECNICO_TI_B sin pasar por admin
+- RESPONSABLE_MANTENIMIENTO ve tickets SANITARIOS, ILUMINACION, MOVILIDAD pero NO tickets de TI
 
 ---
 
-## Phase 4: Reportes Exportables
+## Phase 4: Métricas Operacionales ✅ Complete (2026-05-26)
+
+**Goal:** Dashboard de métricas en tiempo real para administradores y responsables de área.
+**Requirements:** MET-01 a MET-04
+**Depends on:** Phase 3 complete
+**Plans:** 4 planes
+
+### Plans
+- [x] 04-01-PLAN.md — Schema MetricasHistorial + migración + tipos @stf/shared para endpoint unificado
+- [x] 04-02-PLAN.md — Backend: metricas.service.ts (aggregation real), controlador endpoint único, ruta roles Phase 3+
+- [x] 04-03-PLAN.md — Frontend atoms: recharts install, SlaIndicator, 3 chart wrappers, DateRangeFilter, EficienciaTable, RendimientoTecnicoTable
+- [x] 04-04-PLAN.md — Integración: 3 tabs + MetricasOperacionalesSection + DashboardPage + job diario snapshots
+
+### Deliverables
+- Endpoints GET /api/metricas/{area,tecnico,proceso} funcionales con AreaSoporte
+- Sección métricas en DashboardPage (visible para ADMIN y RESPONSABLE_*)
+- ADMIN: métricas globales de todas las áreas + índice de solvencia comparativo + gráficas
+- RESPONSABLE_*: métricas filtradas a su área: solicitudes, carga de técnicos, tiempo resolución
+- Filtro de rango de fechas en todas las vistas de métricas
+- Actualización en tiempo real via Socket.IO (ticketsVersion pattern)
+
+### UAT
+- Admin ve dashboard con datos reales de los últimos 30 días de todas las áreas
+- RESPONSABLE_TI ve solo métricas de tickets TI y sus técnicos TI
+- Métricas se actualizan sin recargar cuando se completa una solicitud
+- Filtro por fecha muestra solo solicitudes del rango seleccionado
+
+---
+
+## Phase 5: Reportes Exportables
 
 **Goal:** Generación de reportes PDF/Excel para informes gubernamentales.
 **Requirements:** REP-01 a REP-03
-**Depends on:** Phase 3 complete
+**Depends on:** Phase 4 complete
 
 ### Deliverables
 - Endpoint POST /api/reportes con parámetros de filtro (fecha, área, técnico)
@@ -117,6 +159,7 @@
 ```
 Phase 1 (Seguridad)
     └── Phase 2 (Procesos)
-            └── Phase 3 (Métricas)
-                    └── Phase 4 (Reportes)
+            └── Phase 3 (Roles y Áreas de Soporte)
+                    └── Phase 4 (Métricas Operacionales)
+                            └── Phase 5 (Reportes)
 ```

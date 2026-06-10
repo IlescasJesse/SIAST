@@ -1,14 +1,28 @@
 import { Router } from "express";
+import type { Request, Response, NextFunction } from "express";
 import * as adminCtrl from "../controllers/admin.controller.js";
 import * as procesosCtrl from "../controllers/admin-procesos.controller.js";
 import * as usuariosCtrl from "../controllers/usuarios.controller.js";
 import * as seguridadCtrl from "../controllers/admin-seguridad.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { requireRol } from "../middleware/roles.middleware.js";
+import { prisma } from "../config/database.js";
 
 const router = Router();
 
 router.use(authMiddleware, requireRol("ADMIN"));
+
+const listarAreasSoporte = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await prisma.areaSoporte.findMany({
+      where: { activo: true },
+      orderBy: { nombre: "asc" },
+    });
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
 
 // ── SIRH ─────────────────────────────────────────────────────────────────────
 router.get("/sirh/status",    adminCtrl.sirhSyncStatus);
@@ -28,6 +42,9 @@ router.post("/usuarios", usuariosCtrl.crear);
 router.get("/usuarios/:id", usuariosCtrl.obtener);
 router.patch("/usuarios/:id", usuariosCtrl.actualizar);
 router.delete("/usuarios/:id", usuariosCtrl.desactivar);
+
+// ── Áreas de Soporte ──────────────────────────────────────────────────────────
+router.get("/areas-soporte", listarAreasSoporte);
 
 // ── Seguridad: logs de acceso y sesiones activas ──────────────────────────────
 router.get("/logs-acceso", seguridadCtrl.listarLogs);

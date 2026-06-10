@@ -17,10 +17,22 @@ enum Rol {
   ADMIN
   TECNICO_TI
   TECNICO_REDES
-  TECNICO_SERVICIOS
+  TECNICO_SERVICIOS       // deprecated en Phase 3 — mantener para filas existentes
   MESA_AYUDA
   GESTOR_RECURSOS_MATERIALES
   EMPLEADO
+  // ── Phase 3: nuevos roles ──
+  RESPONSABLE_TI
+  RESPONSABLE_REDES
+  RESPONSABLE_MANTENIMIENTO
+  RESPONSABLE_RECURSOS_MATERIALES
+  TECNICO_ELECTRICISTA
+  TECNICO_PLOMERO
+  TECNICO_MOVILIDAD
+  // ── Phase 3+: gestores Recursos Materiales ──
+  GESTOR_SALAS_JUNTA
+  GESTOR_RECURSOS
+  GESTOR_INVENTARIO
 }
 
 enum CategoriaTicket {
@@ -111,6 +123,8 @@ model Usuario {
   esEmpleadoEstructura Boolean @default(false)
   empleadoId           String? @unique @db.VarChar(24) // _id de MongoDB en SIRH
   rfc                  String? @unique @db.VarChar(13) // RFC del empleado en SIRH
+  areaSoporteId        Int?         @map("area_soporte_id")
+  areaSoporte          AreaSoporte? @relation(fields: [areaSoporteId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,6 +143,22 @@ model Usuario {
   @@index([rol])
   @@index([activo])
   @@map("usuarios")
+}
+
+// ============================================================
+// ÁREAS DE SOPORTE (Phase 3)
+// ============================================================
+
+model AreaSoporte {
+  id             Int      @id @default(autoincrement())
+  nombre         String   @unique @db.VarChar(50)
+  subcategorias  Json
+  rolesIncluidos Json
+  activo         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  usuarios       Usuario[]
+
+  @@map("areas_soporte")
 }
 
 // ============================================================
@@ -569,4 +599,25 @@ model PasoDefinicion {
 
   @@index([procesoId])
   @@map("pasos_definicion")
+}
+
+// ============================================================
+// MÉTRICAS HISTORIAL (Phase 4 — daily snapshots)
+// ============================================================
+
+model MetricasHistorial {
+  id                  Int       @id @default(autoincrement())
+  fecha               DateTime  @db.Date
+  areaSoporteId       Int?      @map("area_soporte_id")
+  totalTickets        Int       @map("total_tickets")
+  ticketsResueltos    Int       @map("tickets_resueltos")
+  ticketsActivos      Int       @map("tickets_activos")
+  slaGlobal           Float     @map("sla_global")
+  tiempoPromedioHoras Float?    @map("tiempo_promedio_horas")
+  extras              Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@unique([fecha, areaSoporteId])
+  @@index([fecha])
+  @@map("metricas_historial")
 }

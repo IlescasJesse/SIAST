@@ -7,11 +7,28 @@
 
 ## Current Phase
 
-**Phase 2: Features Pendientes — Procesos y Flujos** — Context gathered, ready for planning
-- Status: Context captured (2026-05-08)
-- Resume: `.planning/phases/02-features-pendientes-procesos-y-flujos/02-CONTEXT.md`
+**Phase 4: Métricas Operacionales** — COMPLETE (4/4 plans executed 2026-05-26)
+- Status: Complete (Plan 04 executed 2026-05-26)
+- Decisions: Recharts, SLA fijo, endpoint único, tabs en DashboardPage, ticketsVersion pattern
+- Plan 01 decisions: areaSoporteId nullable sin @relation (integridad histórica), columnas tipadas sobre JSON monolítico, tipos legacy conservados para retrocompatibilidad
+- Plan 02 decisions: JWT de staff incluye areaSoporteId para RESPONSABLE_* scoping; TECNICO_SERVICIOS excluido (no en enum Rol); RESPONSABLE_* areaId siempre del JWT; funciones legacy eliminadas del controlador
+- Plan 03 decisions: recharts hoisted monorepo root (npm workspaces), AdapterDateFns sobre AdapterDayjs, Box height=260 Bar/Line + 220 Pie, Tooltip antes Legend z-order obligatorio
+- Plan 04 decisions: tipoFromTab area/tecnico/proceso, userId fallback para TECNICO_* en tab inicial, setInterval .unref() para job diario, upsert idempotente via @@unique([fecha, areaSoporteId])
+- Next: Phase 5 — Reportes Exportables
 
-## Phase 1 (Completed)
+## Completed Phases
+
+**Phase 3: Roles y Áreas de Soporte** — COMPLETE (incl. gap closure)
+- Status: Complete (2026-05-25, gap closure 03-05 ejecutado)
+- Plans: 5 (03-01 a 03-05) — schema, seed, backend, frontend + gap closure validaciones
+- All 5 plans executed on main. API + Web build verified.
+- Decisions: 14 roles, 4 AreaSoporte, areaSoporteId en Usuario, guards RESPONSABLE_*, fieldErrors por campo en formularios usuario, validación 400 antes de Prisma
+
+**Phase 2: Features Pendientes — Procesos y Flujos** — COMPLETE
+- Status: Complete (2026-05-13)
+- Plans: 5 (02-01 a 02-05) — 4 base + 1 gap closure
+- Verification: 14/14 must-haves passed
+- Decisions: ProcesoDefinicion DB operativa, PROCESO_MAP eliminado, historialTicket audit trail completo
 
 **Phase 1: Seguridad y Estabilidad** — COMPLETE
 - Status: Complete
@@ -25,9 +42,10 @@
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | Seguridad y Estabilidad | ✅ Complete (3/3 plans) |
-| 2 | Features Pendientes — Procesos y Flujos | 📋 Context captured |
-| 3 | Métricas Operacionales | 🔲 Pending |
-| 4 | Reportes Exportables | 🔲 Pending |
+| 2 | Features Pendientes — Procesos y Flujos | ✅ Complete (5/5 plans, 14/14 verified) |
+| 3 | Roles y Áreas de Soporte | ✅ Complete (5/5 plans, incl. gap closure 03-05) |
+| 4 | Métricas Operacionales | ✅ Complete (4/4 plans) |
+| 5 | Reportes Exportables | 🔲 Pending |
 
 ## Key Context
 

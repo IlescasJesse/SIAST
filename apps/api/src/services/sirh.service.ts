@@ -383,7 +383,7 @@ export async function fetchEmpleadoByRfc(rfc: string): Promise<boolean> {
   if (!emp) {
     try {
       const todos = await fetchAllEmployees();
-      emp = todos.find((e) => e.RFC?.toUpperCase().trim() === rfcUp && e.status === 1) ?? null;
+      emp = todos.find((e) => e.RFC?.toUpperCase().trim() === rfcUp) ?? null;
     } catch (err) {
       console.warn(`[SIRH] No se pudo consultar SIRH para RFC ${rfcUp}:`, (err as Error).message);
       return false;
