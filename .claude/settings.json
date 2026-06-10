@@ -40,13 +40,40 @@
         "hooks": [
           {
             "type": "command",
-            "command": "git pull origin main 2>$null; exit 0",
-            "shell": "powershell",
+            "command": "git pull origin main 2>/dev/null || true",
+            "shell": "bash",
             "timeout": 30,
             "statusMessage": "Sincronizando con remoto (git pull)..."
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/prettier-on-edit.js",
+            "timeout": 30,
+            "statusMessage": "Formateando con Prettier..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-unpushed.js",
+            "timeout": 10
+          }
+        ]
+      }
     ]
+  },
+  "worktree": {
+    "symlinkDirectories": ["node_modules"]
   }
 }

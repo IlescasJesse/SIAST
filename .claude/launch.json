@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:api"],
+      "port": 5101
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:web"],
+      "port": 5173
+    },
+    {
+      "name": "modelado-3d",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:3d"],
+      "port": 5174
+    },
+    {
+      "name": "prisma-studio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "db:studio", "-w", "./packages/database"],
+      "port": 5555
+    }
+  ]
+}
