@@ -33,7 +33,10 @@
       "Bash(Select-Object -First 30)",
       "Bash(Get-ChildItem *)",
       "Bash(tail -15 /Users/ilescas/DevVault/Decisions/DECISIONS.md)",
-      "Workflow(analisis-alcance)"
+      "Workflow(analisis-alcance)",
+      "Bash(/usr/bin/head -120)",
+      "Bash(cat >> *)",
+      "Bash(/usr/bin/head -50)"
     ]
   },
   "prefersReducedMotion": true
