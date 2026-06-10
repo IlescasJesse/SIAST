@@ -1,5 +1,29 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(npx vite:*)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(npm show *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Bash(mysql *)",
+      "Bash(curl *)",
+      "Bash(xargs grep *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git merge *)",
+      "Bash(git branch *)",
+      "Bash(git worktree *)",
+      "Bash(git push *)",
+      "Skill(gsd-execute-phase)",
+      "Skill(gsd-discuss-phase)",
+      "Skill(gsd-progress)",
+      "Skill(gsd-code-review)",
+      "Workflow(analisis-alcance)",
+      "Workflow(revision-completa)"
+    ],
     "deny": [
       "Read(.claude/worktrees/**)",
       "Read(**/node_modules/**)",
