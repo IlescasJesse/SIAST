@@ -42,6 +42,8 @@ Usa `/agent` para invocar un agente especializado según la tarea:
 | `modelado-3d` | `/agent modelado-3d` | Three.js, GLB, raycasting, pins, visor edificio |
 | `senior-programacion` | `/agent senior-programacion` | Arquitectura, features fullstack, revisión de código |
 | `analizador-db` | `/agent analizador-db` | Esquema DB, migraciones, queries, análisis de datos |
+| `revisor-seguridad` | `/agent revisor-seguridad` | Auditoría de seguridad: OTP, JWT, CORS, roles, soft delete — antes de deploy o tras tocar auth |
+| `orquestador` | `/agent orquestador` | Inicio de sesión o alcance no claro — mapa de alcance + plan de delegación |
 
 ---
 
