@@ -476,7 +476,7 @@ window.SIAST3D = {
 // ════════════════════════════════════════════════════════════
 window.addEventListener("message", (e) => {
   const allowed = ["http://localhost:5173", "http://localhost:5101", window.location.origin];
-  if (e.origin && !allowed.includes(e.origin)) return;
+  if (!allowed.includes(e.origin)) return;
   const { type, payload } = e.data ?? {};
   if (!type) return;
 
@@ -526,6 +526,8 @@ window.addEventListener("message", (e) => {
 //   { type: 'siast:updateAreaLabel',    areaId, label }
 //   { type: 'siast:updateAreaGeometry', areaId, gridX1, gridY1, gridX2, gridY2, floor }
 window.addEventListener("message", (event) => {
+  const allowedOrigins = ["http://localhost:5173", "http://localhost:5101", window.location.origin];
+  if (!allowedOrigins.includes(event.origin)) return;
   const msg = event.data ?? {};
 
   if (msg.type === "siast:updateAreaLabel" && msg.areaId && msg.label) {

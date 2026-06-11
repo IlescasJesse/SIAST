@@ -188,6 +188,23 @@ const CreateAreaSchema = z.object({
   gridX2: z.number().int().min(0).optional(),
   gridY2: z.number().int().min(0).optional(),
   esSalaJuntas: z.boolean().optional(),
+  esComun: z.boolean().optional(),
+  tipoComun: z
+    .enum([
+      "SALA_JUNTAS",
+      "SALA_CONFERENCIAS",
+      "BANO",
+      "LACTANCIA",
+      "COPIADO",
+      "COMEDOR",
+      "RECEPCION",
+      "ARCHIVO",
+      "BODEGA",
+      "OTRO",
+    ])
+    .nullable()
+    .optional(),
+  nombrePropio: z.string().max(150).nullable().optional(),
 });
 
 const UpdateAreaSchema = z.object({
@@ -308,11 +325,14 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
       nombrePropio,
     } = parse.data;
 
+    // piso (enum) siempre se deriva de floor para evitar inconsistencias
+    const FLOOR_TO_PISO = ["PB", "NIVEL_1", "NIVEL_2", "NIVEL_3"] as const;
+
     const area = await prisma.areaEdificio.update({
       where: { id },
       data: {
         ...(label !== undefined && { label }),
-        ...(floor !== undefined && { floor }),
+        ...(floor !== undefined && { floor, piso: FLOOR_TO_PISO[floor] }),
         ...(gridX1 !== undefined && { gridX1 }),
         ...(gridY1 !== undefined && { gridY1 }),
         ...(gridX2 !== undefined && { gridX2 }),

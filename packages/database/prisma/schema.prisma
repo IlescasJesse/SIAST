@@ -335,7 +335,7 @@ model Ticket {
   piso   PisoEdificio
 
   // Ubicación fina dentro del área (mueble específico) — opcional
-  muebleId Int?
+  muebleId Int?    @map("mueble_id")
   mueble   Mueble? @relation("TicketMueble", fields: [muebleId], references: [id], onDelete: SetNull)
 
   // Usuario del sistema que creó (puede ser MESA_AYUDA creando por empleado)

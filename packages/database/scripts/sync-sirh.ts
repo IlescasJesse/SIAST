@@ -78,17 +78,17 @@ const DEPT_TO_AREA: Record<string, AreaMapping> = {
   },
 
   // ─── NIVEL 1 ────────────────────────────────────────────────
-  "OFICINA DEL SECRETARIO": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_1 },
-  "SECRETARIO DE FINANZAS": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_1 },
-  ASESORÍA: { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_1 },
-  "COORDINACIÓN DE GIRAS Y PROTOCOLO": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_1 },
-  "DEPARTAMENTO DE PLANEACIÓN DE GIRAS": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_1 },
-  "DEPARTAMENTO DE PROTOCOLO Y LOGÍSTICA": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_1 },
+  "OFICINA DEL SECRETARIO": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 },
+  "SECRETARIO DE FINANZAS": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 },
+  ASESORÍA: { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 },
+  "COORDINACIÓN DE GIRAS Y PROTOCOLO": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 },
+  "DEPARTAMENTO DE PLANEACIÓN DE GIRAS": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 },
+  "DEPARTAMENTO DE PROTOCOLO Y LOGÍSTICA": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 },
   "PERSONAL ADSCRITO A LA SECRETARÍA DE FINANZAS (HANGAR)": {
     areaId: "n3_secretaria",
-    piso: PisoEdificio.NIVEL_1,
+    piso: PisoEdificio.NIVEL_3,
   },
-  "CASA OFICIAL DE GOBIERNO": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_1 },
+  "CASA OFICIAL DE GOBIERNO": { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 },
   "SUBSECRETARÍA DE PLANEACIÓN E INVERSIÓN PÚBLICA": {
     areaId: "n1_subsec_planeacion",
     piso: PisoEdificio.NIVEL_1,
@@ -134,7 +134,7 @@ const DEPT_TO_AREA: Record<string, AreaMapping> = {
   },
   "SUBSECRETARÍA DE EGRESOS, CONTABILIDAD Y TESORERÍA": {
     areaId: "n3_secretaria",
-    piso: PisoEdificio.NIVEL_1,
+    piso: PisoEdificio.NIVEL_3,
   },
   "UNIDAD TÉCNICA": { areaId: "n1_oficina_alterna", piso: PisoEdificio.NIVEL_1 },
   "UNIDAD DE INFORMES SOBRE EL ESTADO DE LA GESTIÓN PÚBLICA": {

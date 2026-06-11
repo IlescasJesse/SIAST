@@ -2,8 +2,7 @@ import { useEffect, useRef } from "react";
 import { Box } from "@mui/material";
 import { useAuthStore } from "../../store/auth.js";
 
-const VIEWER_URL =
-  import.meta.env.VITE_VIEWER_URL ?? `http://${window.location.hostname}:5174`;
+const VIEWER_URL = import.meta.env.VITE_VIEWER_URL ?? `http://${window.location.hostname}:5174`;
 
 /**
  * Wrapper del iframe 3D con helpers postMessage.
@@ -17,7 +16,7 @@ export const BuildingViewer = ({ onRoomClick, autoHighlight, loginMode = false, 
   const token = useAuthStore((s) => s.token);
 
   const send = (type, payload) => {
-    ref.current?.contentWindow?.postMessage({ type, payload }, "*");
+    ref.current?.contentWindow?.postMessage({ type, payload }, new URL(VIEWER_URL).origin);
   };
 
   // Escuchar mensajes desde el viewer
