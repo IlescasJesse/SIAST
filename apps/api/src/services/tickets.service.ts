@@ -6,13 +6,13 @@ import { enviarNotifTicketCreado } from "./whatsapp.service.js";
 import { FOLIO_PREFIX } from "@stf/shared";
 
 const SUBCATEGORIAS_VALIDAS = new Set(Object.values(SubcategoriaTicket));
-const CATEGORIAS_VALIDAS    = new Set(Object.values(CategoriaTicket));
+const CATEGORIAS_VALIDAS = new Set(Object.values(CategoriaTicket));
 
 function computeAutoPriority(ticket: { createdAt: Date | string; estado: string }): string {
   if (["RESUELTO", "CANCELADO"].includes(ticket.estado)) return "BAJA";
   const hours = (Date.now() - new Date(ticket.createdAt).getTime()) / 3_600_000;
   if (hours > 24) return "URGENTE";
-  if (hours > 6)  return "MEDIA";
+  if (hours > 6) return "MEDIA";
   return "BAJA";
 }
 
@@ -162,7 +162,7 @@ export const crearTicket = async (
     areaId?: string; // alias alternativo
     piso?: string; // opcional — se deriva del área
     rfcSolicitante?: string;
-    recursosAdicionales?: string; // JSON string con equipamiento/materiales extra
+    recursosAdicionales?: string | Record<string, unknown>; // objeto del frontend o JSON string — se serializa antes de persistir
     subTipo?: string; // subtipo dentro de EQUIPOS_DISPOSITIVOS
   },
 ) => {
@@ -170,10 +170,7 @@ export const crearTicket = async (
   const empleadoRfc = user.rol === "EMPLEADO" ? user.rfc! : body.rfcSolicitante;
 
   if (!empleadoRfc) {
-    throw Object.assign(
-      new Error("El RFC del solicitante es obligatorio"),
-      { status: 400 },
-    );
+    throw Object.assign(new Error("El RFC del solicitante es obligatorio"), { status: 400 });
   }
 
   if (user.rol === "EMPLEADO") {
@@ -185,10 +182,9 @@ export const crearTicket = async (
       },
     });
     if (activos >= 2) {
-      throw Object.assign(
-        new Error("Límite de solicitudes activas alcanzado (máximo 2)"),
-        { status: 403 },
-      );
+      throw Object.assign(new Error("Límite de solicitudes activas alcanzado (máximo 2)"), {
+        status: 403,
+      });
     }
   }
 
@@ -206,24 +202,20 @@ export const crearTicket = async (
   // El piso se deriva siempre del área para evitar inconsistencias
   const pisoResuelto = area.piso;
 
-  const categoriaVal    = (body.categoria    ?? "").toString().trim();
+  const categoriaVal = (body.categoria ?? "").toString().trim();
   const subcategoriaVal = (body.subcategoria ?? "").toString().trim();
 
   if (!categoriaVal || !subcategoriaVal) {
-    throw Object.assign(
-      new Error("Categoría y subcategoría son obligatorias"),
-      { status: 400 },
-    );
+    throw Object.assign(new Error("Categoría y subcategoría son obligatorias"), { status: 400 });
   }
   if (!CATEGORIAS_VALIDAS.has(categoriaVal as CategoriaTicket)) {
-    throw Object.assign(
-      new Error(`Categoría inválida: "${categoriaVal}"`),
-      { status: 400 },
-    );
+    throw Object.assign(new Error(`Categoría inválida: "${categoriaVal}"`), { status: 400 });
   }
   if (!SUBCATEGORIAS_VALIDAS.has(subcategoriaVal as SubcategoriaTicket)) {
     throw Object.assign(
-      new Error(`Subcategoría inválida: "${subcategoriaVal}". Valores aceptados: ${[...SUBCATEGORIAS_VALIDAS].join(", ")}`),
+      new Error(
+        `Subcategoría inválida: "${subcategoriaVal}". Valores aceptados: ${[...SUBCATEGORIAS_VALIDAS].join(", ")}`,
+      ),
       { status: 400 },
     );
   }
@@ -233,7 +225,10 @@ export const crearTicket = async (
   // Verificar que el usuario staff existe en DB (JWT puede ser stale si se re-seeded)
   let creadoPorId: number | undefined;
   if (user.rol !== "EMPLEADO") {
-    const existe = await prisma.usuario.findUnique({ where: { id: user.id }, select: { id: true } });
+    const existe = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      select: { id: true },
+    });
     if (!existe) {
       throw Object.assign(
         new Error("Sesión expirada — por favor cierra sesión y vuelve a ingresar"),
@@ -242,6 +237,14 @@ export const crearTicket = async (
     }
     creadoPorId = existe.id;
   }
+
+  // El frontend envía recursosAdicionales como objeto; la columna es JSON string (Text)
+  const recursosAdicionales =
+    body.recursosAdicionales == null
+      ? null
+      : typeof body.recursosAdicionales === "string"
+        ? body.recursosAdicionales
+        : JSON.stringify(body.recursosAdicionales);
 
   const ticket = await prisma.ticket.create({
     data: {
@@ -255,7 +258,7 @@ export const crearTicket = async (
       areaId: areaIdResuelto,
       piso: pisoResuelto,
       creadoPorId,
-      recursosAdicionales: body.recursosAdicionales ?? null,
+      recursosAdicionales,
       subTipo: body.subTipo ?? null,
     },
     include: ticketInclude,
@@ -264,7 +267,11 @@ export const crearTicket = async (
   // Generar pasos del flujo de trabajo según el proceso definido
   if (["TECNOLOGIAS", "SERVICIOS"].includes(categoriaVal)) {
     const proceso = await prisma.procesoDefinicion.findFirst({
-      where: { subcategoria: subcategoriaVal as never, subTipo: body.subTipo ?? null, activo: true },
+      where: {
+        subcategoria: subcategoriaVal as never,
+        subTipo: body.subTipo ?? null,
+        activo: true,
+      },
       include: { pasos: { orderBy: { orden: "asc" } } },
     });
     if (proceso && proceso.tipoFlujo !== "PENDIENTE" && proceso.pasos.length > 0) {
@@ -341,12 +348,20 @@ export const obtenerTicket = async (id: number, user: JwtPayload) => {
 const CATEGORIA_ROL_MAP: Record<string, string[]> = {
   TECNOLOGIAS: ["TECNICO_TI", "TECNICO_REDES"],
   SERVICIOS: ["TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"],
-  RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO", "RESPONSABLE_RECURSOS_MATERIALES"],
+  RECURSOS_MATERIALES: [
+    "GESTOR_RECURSOS_MATERIALES",
+    "GESTOR_SALAS_JUNTA",
+    "GESTOR_RECURSOS",
+    "GESTOR_INVENTARIO",
+    "RESPONSABLE_RECURSOS_MATERIALES",
+  ],
 };
 
 const ROLES_RESPONSABLE = [
-  "RESPONSABLE_TI", "RESPONSABLE_REDES",
-  "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES",
+  "RESPONSABLE_TI",
+  "RESPONSABLE_REDES",
+  "RESPONSABLE_MANTENIMIENTO",
+  "RESPONSABLE_RECURSOS_MATERIALES",
 ] as const;
 
 export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayload) => {
@@ -393,10 +408,9 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
     }
     const rolesArea = areaSoporte.rolesIncluidos as string[];
     if (!rolesArea.includes(tecnico.rol)) {
-      throw Object.assign(
-        new Error("El técnico no pertenece al área de soporte del responsable"),
-        { status: 403 },
-      );
+      throw Object.assign(new Error("El técnico no pertenece al área de soporte del responsable"), {
+        status: 403,
+      });
     }
   }
 
@@ -448,10 +462,9 @@ export const cambiarEstado = async (
 
   const permitidos = TRANSICIONES[ticket.estado] ?? [];
   if (!permitidos.includes(body.estado)) {
-    throw Object.assign(
-      new Error(`Transición no permitida: ${ticket.estado} → ${body.estado}`),
-      { status: 400 },
-    );
+    throw Object.assign(new Error(`Transición no permitida: ${ticket.estado} → ${body.estado}`), {
+      status: 400,
+    });
   }
 
   // Guard: si el usuario es RESPONSABLE_*, verificar que el ticket pertenece a su área
@@ -465,10 +478,9 @@ export const cambiarEstado = async (
       : null;
     const subcategorias = (areaSoporte?.subcategorias as string[]) ?? [];
     if (!subcategorias.includes(ticket.subcategoria)) {
-      throw Object.assign(
-        new Error("Solicitud fuera del área de soporte asignada"),
-        { status: 403 },
-      );
+      throw Object.assign(new Error("Solicitud fuera del área de soporte asignada"), {
+        status: 403,
+      });
     }
   }
 
@@ -563,23 +575,23 @@ export const completarPaso = async (
     select: { estado: true },
   });
   if (ticketActual?.estado === "CANCELADO") {
-    throw Object.assign(new Error("No se puede completar un paso de una solicitud cancelada"), { status: 400 });
+    throw Object.assign(new Error("No se puede completar un paso de una solicitud cancelada"), {
+      status: 400,
+    });
   }
   if (paso.estado === "COMPLETADO") {
     throw Object.assign(new Error("El paso ya fue completado"), { status: 400 });
   }
   // Validar identidad del técnico, no solo el rol (D-09)
   if (paso.tecnicoId !== null && paso.tecnicoId !== user.id) {
-    throw Object.assign(
-      new Error("Solo el técnico asignado puede completar este paso"),
-      { status: 403 },
-    );
+    throw Object.assign(new Error("Solo el técnico asignado puede completar este paso"), {
+      status: 403,
+    });
   }
   if (paso.rolRequerido !== user.rol) {
-    throw Object.assign(
-      new Error("No tienes el rol requerido para completar este paso"),
-      { status: 403 },
-    );
+    throw Object.assign(new Error("No tienes el rol requerido para completar este paso"), {
+      status: 403,
+    });
   }
 
   await prisma.pasoTicket.update({
@@ -631,7 +643,10 @@ export const completarPaso = async (
     return ticket;
   } else {
     // Hay siguiente paso → notificar a admins y mesa de ayuda para asignar
-    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, include: ticketInclude });
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: ticketInclude,
+    });
     await notif.emitirPasoListo({
       ticketId,
       pasoOrden: siguientePaso.orden,
@@ -656,15 +671,12 @@ export const asignarPaso = async (
   const tecnico = await prisma.usuario.findUnique({ where: { id: tecnicoId } });
   if (!tecnico) throw Object.assign(new Error("Técnico no encontrado"), { status: 404 });
   if (tecnico.rol !== paso.rolRequerido) {
-    throw Object.assign(
-      new Error(`Este paso requiere un ${paso.rolRequerido}`),
-      { status: 400 },
-    );
+    throw Object.assign(new Error(`Este paso requiere un ${paso.rolRequerido}`), { status: 400 });
   }
 
-  const estadoAnteriorTicket = (
-    await prisma.ticket.findUnique({ where: { id: ticketId }, select: { estado: true } })
-  )?.estado ?? "ASIGNADO";
+  const estadoAnteriorTicket =
+    (await prisma.ticket.findUnique({ where: { id: ticketId }, select: { estado: true } }))
+      ?.estado ?? "ASIGNADO";
 
   await prisma.pasoTicket.update({
     where: { id: pasoId },
