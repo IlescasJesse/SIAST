@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIAST — MISSION CONTROL</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #06060f;
+  --panel:    #0d0d22;
+  --border:   #22228a;
+  --bright:   #4040cc;
+  --cyan:     #00e5ff;
+  --green:    #00ff88;
+  --yellow:   #ffd700;
+  --red:      #ff3c3c;
+  --purple:   #cc44ff;
+  --orange:   #ff8800;
+  --text:     #b0c8e8;
+  --dim:      #445588;
+  --pf:       'Press Start 2P', monospace;
+  --mf:       'Share Tech Mono', monospace;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text);
+  font-family: var(--mf); font-size: 13px; overflow: hidden; }
+
+/* Scanlines */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  background: repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px);
+}
+/* CRT vignette */
+body::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+  background: radial-gradient(ellipse 90% 90% at 50% 50%, transparent 60%, rgba(0,0,0,.7) 100%);
+}
+
+/* ─── Layout ─────────────────────────────────────────────── */
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 58px 1fr 36px;
+  grid-template-columns: 200px 1fr 260px;
+  grid-template-areas:
+    "hd hd hd"
+    "ag tk lg"
+    "ft ft ft";
+  gap: 4px;
+  padding: 6px;
+}
+
+/* ─── Panel base ─────────────────────────────────────────── */
+.panel {
+  background: var(--panel);
+  border: 2px solid var(--border);
+  padding: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.panel::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--bright), transparent);
+}
+.panel-title {
+  font-family: var(--pf); font-size: 6px; color: var(--cyan);
+  letter-spacing: 1px; margin-bottom: 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border); text-transform: uppercase;
+}
+
+/* ─── Header ────────────────────────────────────────────── */
+.header {
+  grid-area: hd;
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(135deg, #08082a 0%, #101034 100%);
+  border: 2px solid var(--bright);
+  padding: 0 16px;
+}
+.hd-left {}
+.hd-title {
+  font-family: var(--pf); font-size: 10px; color: var(--cyan);
+  text-shadow: 0 0 14px rgba(0,229,255,.6); letter-spacing: 2px;
+}
+.hd-title b { color: var(--yellow); }
+.hd-sub {
+  font-family: var(--pf); font-size: 5px; color: var(--dim);
+  margin-top: 5px; letter-spacing: 1px;
+}
+.hd-right { display: flex; align-items: center; gap: 20px; }
+.live-badge { display: flex; align-items: center; gap: 7px;
+  font-family: var(--pf); font-size: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 10px var(--green); }
+.dot.off { background: var(--dim); box-shadow: none; animation: none !important; }
+.dot.sim { background: var(--yellow); box-shadow: 0 0 10px var(--yellow); animation: blink 1s infinite; }
+.dot.live { animation: pulse-dot 1.5s infinite; }
+#liveLabel { color: var(--green); }
+#liveLabel.sim-mode { color: var(--yellow); }
+.hd-stats { display: flex; gap: 14px; font-family: var(--pf); font-size: 6px; color: var(--dim); }
+.hd-stats span { color: var(--cyan); }
+
+/* ─── Agents ─────────────────────────────────────────────── */
+.agents { grid-area: ag; overflow-y: auto; }
+
+.agent-card {
+  border: 1px solid var(--border); padding: 8px; margin-bottom: 6px;
+  position: relative; transition: border-color .3s, background .3s;
+}
+.agent-card.busy { border-color: var(--yellow); background: rgba(255,215,0,.03); }
+.agent-card.done { border-color: var(--green); }
+
+.agent-sprite { font-size: 22px; text-align: center; display: block; margin-bottom: 4px; }
+.agent-name {
+  font-family: var(--pf); font-size: 5px; text-align: center;
+  margin-bottom: 3px; letter-spacing: .5px;
+}
+.agent-model { font-size: 10px; color: var(--dim); text-align: center; margin-bottom: 5px; }
+
+.agent-status-badge {
+  font-family: var(--pf); font-size: 5px; text-align: center;
+  padding: 2px 4px; background: var(--bg); border: 1px solid currentColor;
+  margin-bottom: 5px;
+}
+.badge-idle { color: var(--dim); }
+.badge-busy { color: var(--yellow); animation: blink 1.2s infinite; }
+.badge-done { color: var(--green); }
+
+.agent-bar { height: 4px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; margin-bottom: 3px; }
+.agent-bar-fill { height: 100%; transition: width .6s ease; }
+
+.agent-tasks-ct { font-size: 9px; color: var(--dim); text-align: center; }
+
+/* ─── Tasks ──────────────────────────────────────────────── */
+.tasks { grid-area: tk; overflow-y: auto; }
+
+.task-row {
+  display: grid; grid-template-columns: 22px 1fr auto;
+  gap: 6px; align-items: start;
+  padding: 5px 3px; border-bottom: 1px solid rgba(34,34,138,.25);
+  transition: background .2s;
+}
+.task-row:hover { background: rgba(255,255,255,.02); }
+.task-row.active  { background: rgba(255,215,0,.04); }
+.task-row.complete { opacity: .55; }
+
+.task-num {
+  font-family: var(--pf); font-size: 6px; color: var(--dim);
+  padding-top: 3px; text-align: right;
+}
+.task-row.active   .task-num { color: var(--yellow); }
+.task-row.complete .task-num { color: var(--green); }
+.task-row.blocked  .task-num { color: var(--red); }
+
+.task-name { font-size: 11px; color: var(--text); margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-row.active   .task-name { color: var(--yellow); }
+.task-row.complete .task-name { color: var(--green); text-decoration: line-through; }
+.task-row.blocked  .task-name { color: var(--red); }
+
+.task-meta { font-size: 9px; color: var(--dim); margin-bottom: 3px; }
+.task-pb { height: 5px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
+.task-pb-fill { height: 100%; background: var(--dim); transition: width .8s ease; }
+.task-row.active   .task-pb-fill { background: linear-gradient(90deg,var(--yellow),var(--orange)); animation: shimmer 2s infinite; background-size: 200% 100%; }
+.task-row.complete .task-pb-fill { background: var(--green); }
+.task-row.blocked  .task-pb-fill { background: var(--red); }
+
+.task-action { font-size: 9px; color: var(--cyan); margin-top: 2px; min-height: 14px; }
+.task-action::before { content: '▸ '; }
+.cursor { animation: blink .85s infinite; }
+
+.task-badge {
+  font-family: var(--pf); font-size: 5px; padding: 3px 5px;
+  border: 1px solid currentColor; white-space: nowrap; align-self: center;
+}
+.task-badge.pending  { color: var(--dim); }
+.task-badge.active   { color: var(--yellow); animation: blink 1.2s infinite; }
+.task-badge.complete { color: var(--green); }
+.task-badge.blocked  { color: var(--red); }
+
+/* ─── Log ────────────────────────────────────────────────── */
+.log { grid-area: lg; overflow: hidden; display: flex; flex-direction: column; }
+.log-body { flex: 1; overflow-y: auto; }
+.log-line { padding: 2px 0; border-bottom: 1px solid rgba(34,34,138,.2);
+  font-size: 10px; line-height: 1.5; word-break: break-word; }
+.log-ts { color: var(--dim); }
+.log-line.info    .log-msg { color: var(--cyan); }
+.log-line.success .log-msg { color: var(--green); }
+.log-line.warn    .log-msg { color: var(--yellow); }
+.log-line.error   .log-msg { color: var(--red); }
+.log-line.default .log-msg { color: var(--text); }
+.log-line.new { animation: slideIn .3s ease; }
+
+/* ─── Footer ─────────────────────────────────────────────── */
+.footer {
+  grid-area: ft; display: flex; justify-content: space-between; align-items: center;
+  background: var(--panel); border: 1px solid var(--border);
+  padding: 0 12px; font-family: var(--pf); font-size: 6px; color: var(--dim);
+}
+.footer span { color: var(--cyan); }
+#progressBar { flex: 0 0 200px; height: 8px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
+#progressFill { height: 100%; background: linear-gradient(90deg,var(--cyan),var(--purple)); transition: width 1s ease; }
+
+/* ─── Animations ─────────────────────────────────────────── */
+@keyframes blink   { 0%,100%{opacity:1}  50%{opacity:0} }
+@keyframes pulse-dot { 0%,100%{box-shadow:0 0 5px var(--green)} 50%{box-shadow:0 0 14px var(--green)} }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+@keyframes slideIn { from{opacity:0;transform:translateX(8px)} to{opacity:1;transform:none} }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); }
+::-webkit-scrollbar-thumb:hover { background: var(--bright); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── HEADER ── -->
+  <div class="header">
+    <div class="hd-left">
+      <div class="hd-title">⚡ SIAST <b>MISSION CONTROL</b></div>
+      <div class="hd-sub">OP: MAPA DE ÁREAS v2.0 · SECRETARÍA DE FINANZAS OAXACA</div>
+    </div>
+    <div class="hd-right">
+      <div class="hd-stats">
+        TOTAL <span id="stTotal">8</span> &nbsp;|&nbsp;
+        DONE <span id="stDone">0</span> &nbsp;|&nbsp;
+        ACTIVE <span id="stActive">0</span>
+      </div>
+      <div class="live-badge">
+        <div class="dot sim" id="liveDot"></div>
+        <span id="liveLabel" class="sim-mode">SIMULANDO</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── AGENTS ── -->
+  <div class="panel agents">
+    <div class="panel-title">▪ SQUAD</div>
+    <div id="agentsList"></div>
+  </div>
+
+  <!-- ── TASKS ── -->
+  <div class="panel tasks">
+    <div class="panel-title">▪ QUEST LOG — MISIONES ACTIVAS</div>
+    <div id="tasksList"></div>
+  </div>
+
+  <!-- ── LOG ── -->
+  <div class="panel log">
+    <div class="panel-title">▪ TERMINAL OUTPUT</div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <div class="footer">
+    <span id="clockEl">--:--:--</span>
+    <div id="progressBar"><div id="progressFill" style="width:0%"></div></div>
+    <span>SIAST v2.0 © 2026 SFEO</span>
+  </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  MISSION DATA
+// ══════════════════════════════════════════════════════════
+const AGENTS_DEF = [
+  { id:'analizador-db',       name:'ANALIZADOR DB', sprite:'🗄️',  model:'OPUS-4',  tasks:[1,2] },
+  { id:'modelado-3d',         name:'MODELADO 3D',   sprite:'🎮',  model:'SONNET',  tasks:[4,5] },
+  { id:'senior-programacion', name:'SENIOR PROG',   sprite:'💻',  model:'SONNET',  tasks:[3,6,7] },
+  { id:'workflow',            name:'WORKFLOW',      sprite:'⚙️',   model:'——',      tasks:[8] },
+];
+const AGENT_COLORS = {
+  'analizador-db':       'var(--green)',
+  'modelado-3d':         'var(--purple)',
+  'senior-programacion': 'var(--cyan)',
+  'workflow':            'var(--yellow)',
+};
+const TASKS_DEF = [
+  { id:1, name:'Schema: TipoAreaComun + Mueble',    agent:'analizador-db',       model:'opus',    depends:[],  actions:['Leyendo schema.prisma…','Analizando FKs de AreaEdificio…','Diseñando enum TipoAreaComun…','Modelando entidad Mueble/Cubiculo…','Plan de migración no-destructivo…'] },
+  { id:2, name:'Seed/reset no-destructivo',          agent:'analizador-db',       model:'sonnet',  depends:[1], actions:['Detectando 1994 FKs activas…','Generando script de reasignación…','Escribiendo seed PB/N1/N2/N3…'] },
+  { id:3, name:'Backend: endpoints + fix PUT floor', agent:'senior-programacion', model:'sonnet',  depends:[1], actions:['Fix: floor faltaba en PUT /areas:267…','Endpoints para Área Común…','Tipos en @stf/shared…'] },
+  { id:4, name:'Visor 3D: nomenclatura + render',    agent:'modelado-3d',         model:'sonnet',  depends:[],  actions:['Corrigiendo FLOOR_LABELS → PB/N1/N2/N3…','Pausando render loop en segundo plano…','Optimizando setPixelRatio…','Mejorando fluidez de cámara…'] },
+  { id:5, name:'Visor 3D: muebles/cubículos LOD',    agent:'modelado-3d',         model:'opus',    depends:[1,3], actions:['Diseñando LOD para muebles…','Creando geometría de cubículos…','Pins de ticket sobre mueble…','Integrando postMessage ↔ frontend…'] },
+  { id:6, name:'Frontend: fix estado + Área Común',  agent:'senior-programacion', model:'sonnet',  depends:[3], actions:['Unificando escritura a localStorage…','Reconciliando pendingChanges con API…','Añadiendo floor al guardar…','UI de subtipo Área Común…'] },
+  { id:7, name:'Frontend: editor muebles + estilos', agent:'senior-programacion', model:'sonnet',  depends:[6], actions:['Capa de muebles en AreaGridEditor…','Retoque visual profesional…','Optimizando transiciones…'] },
+  { id:8, name:'Gate pre-deploy',                    agent:'workflow',            model:'—',       depends:[5,7], actions:['Auditoría de seguridad…','Verificando integridad FK post-migración…','Validando build completo…','Generando reporte final…'] },
+];
+
+// ══════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════
+let tasks = TASKS_DEF.map(t => ({ ...t, status:'pending', progress:0, action:'' }));
+let logLines = [];
+let isLive = false;
+
+// ══════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════
+function renderAgents() {
+  const el = document.getElementById('agentsList');
+  el.innerHTML = AGENTS_DEF.map(ag => {
+    const agTasks = tasks.filter(t => t.agent === ag.id);
+    const active  = agTasks.filter(t => t.status === 'active');
+    const done    = agTasks.filter(t => t.status === 'complete');
+    const progress = agTasks.reduce((s,t) => s + t.progress, 0) / (agTasks.length || 1);
+    const stClass  = active.length ? 'busy' : done.length === agTasks.length && agTasks.length > 0 ? 'done' : '';
+    const stBadge  = active.length ? 'badge-busy' : done.length === agTasks.length && agTasks.length > 0 ? 'badge-done' : 'badge-idle';
+    const stLabel  = active.length ? 'EN MISIÓN' : done.length === agTasks.length && agTasks.length > 0 ? 'COMPLETADO' : 'EN ESPERA';
+    const color    = AGENT_COLORS[ag.id];
+    return `
+<div class="agent-card ${stClass}">
+  <span class="agent-sprite">${ag.sprite}</span>
+  <div class="agent-name" style="color:${color}">${ag.name}</div>
+  <div class="agent-model">[${ag.model}]</div>
+  <div class="agent-status-badge ${stBadge}">${stLabel}</div>
+  <div class="agent-bar"><div class="agent-bar-fill" style="width:${progress.toFixed(1)}%;background:${color}"></div></div>
+  <div class="agent-tasks-ct">${done.length}/${agTasks.length} misiones</div>
+</div>`;
+  }).join('');
+}
+
+function renderTasks() {
+  const el = document.getElementById('tasksList');
+  el.innerHTML = tasks.map(t => {
+    const depStr  = t.depends.length ? ` · deps: ${t.depends.map(d=>'#'+d).join(',')}` : '';
+    const badge   = { pending:'ESPERA', active:'ACTIVO', complete:'✓ HECHO', blocked:'BLOQ' }[t.status] || t.status;
+    const actionHtml = t.status === 'active' && t.action
+      ? `<div class="task-action">${t.action}<span class="cursor">▌</span></div>` : '';
+    return `
+<div class="task-row ${t.status}">
+  <div class="task-num">${String(t.id).padStart(2,'0')}</div>
+  <div>
+    <div class="task-name">${t.name}</div>
+    <div class="task-meta">${t.agent} · ${t.model}${depStr}</div>
+    <div class="task-pb"><div class="task-pb-fill" style="width:${t.progress}%"></div></div>
+    ${actionHtml}
+  </div>
+  <div class="task-badge ${t.status}">${badge}</div>
+</div>`;
+  }).join('');
+}
+
+function addLog(msg, type = 'default') {
+  const now = new Date();
+  const ts  = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  logLines.unshift({ ts, msg, type, isNew: true });
+  if (logLines.length > 80) logLines.pop();
+  renderLog();
+  setTimeout(() => { if (logLines[logLines.length-1]) logLines.forEach(l=>l.isNew=false); }, 500);
+}
+
+function renderLog() {
+  const el = document.getElementById('logBody');
+  el.innerHTML = logLines.map((l,i) =>
+    `<div class="log-line ${l.type}${i===0?' new':''}">
+      <span class="log-ts">[${l.ts}] </span><span class="log-msg">${l.msg}</span>
+    </div>`
+  ).join('');
+}
+
+function renderStats() {
+  const done   = tasks.filter(t => t.status==='complete').length;
+  const active = tasks.filter(t => t.status==='active').length;
+  document.getElementById('stTotal').textContent  = tasks.length;
+  document.getElementById('stDone').textContent   = done;
+  document.getElementById('stActive').textContent = active;
+  const pct = (done / tasks.length) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+function render() { renderAgents(); renderTasks(); renderStats(); }
+
+function pad(n) { return String(n).padStart(2,'0'); }
+
+function renderClock() {
+  const now = new Date();
+  document.getElementById('clockEl').textContent =
+    `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} `+
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  LIVE DATA FETCH
+// ══════════════════════════════════════════════════════════
+async function fetchLive() {
+  try {
+    const r = await fetch('agent-status.json?t=' + Date.now(), { cache:'no-store' });
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    if (data.tasks) {
+      tasks = tasks.map(t => {
+        const live = data.tasks.find(d => d.id === t.id);
+        return live ? { ...t, ...live } : t;
+      });
+    }
+    if (data.log) data.log.forEach(l => addLog(l.msg, l.type));
+    if (!isLive) {
+      isLive = true;
+      const dot = document.getElementById('liveDot');
+      dot.className = 'dot live';
+      const lbl = document.getElementById('liveLabel');
+      lbl.textContent = 'EN VIVO'; lbl.className = '';
+      stopSim(); addLog('Conexión en vivo establecida ✓', 'success');
+    }
+    render();
+  } catch {
+    if (isLive) {
+      isLive = false;
+      document.getElementById('liveDot').className = 'dot sim';
+      document.getElementById('liveLabel').textContent = 'SIMULANDO';
+      document.getElementById('liveLabel').className  = 'sim-mode';
+      addLog('Conexión perdida — modo simulación', 'warn');
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  SIMULATION
+// ══════════════════════════════════════════════════════════
+let simTimer = null;
+let simIdx   = 0;
+
+function setActive(id, p=0)   { tasks = tasks.map(t => t.id===id ? {...t, status:'active',  progress:p} : t); render(); }
+function setProgress(id, p)   { tasks = tasks.map(t => t.id===id ? {...t, progress:p}    : t); render(); }
+function setAction(id, a)     { tasks = tasks.map(t => t.id===id ? {...t, action:a}      : t); render(); }
+function setComplete(id)      { tasks = tasks.map(t => t.id===id ? {...t, status:'complete', progress:100, action:''} : t); render(); }
+
+const SIM = [
+  ()=>{ addLog('SIAST Mission Control iniciado', 'success'); addLog('Esperando agentes…', 'info'); },
+  ()=>{ setActive(1); addLog('[analizador-db] ▶ Task #1 — Schema TipoAreaComun', 'info'); },
+  ()=>{ setProgress(1,15); setAction(1,'Leyendo schema.prisma…'); },
+  ()=>{ setProgress(1,30); addLog('[analizador-db] FKs: Empleado.areaId + Ticket.areaId detectadas', 'warn'); },
+  ()=>{ setActive(4); setProgress(1,45); setAction(1,'Diseñando enum TipoAreaComun…'); addLog('[modelado-3d] ▶ Task #4 — Visor 3D nomenclatura (paralelo)', 'info'); },
+  ()=>{ setProgress(1,55); setProgress(4,20); setAction(4,'Corrigiendo FLOOR_LABELS → PB/N1/N2/N3…'); },
+  ()=>{ setProgress(1,65); setProgress(4,40); setAction(1,'Modelando entidad Mueble/Cubiculo…'); },
+  ()=>{ setProgress(1,78); setProgress(4,60); setAction(4,'Pausando render loop en background…'); },
+  ()=>{ setProgress(4,80); addLog('[modelado-3d] render loop ahora pausa con visibilitychange', 'success'); },
+  ()=>{ setProgress(1,90); setProgress(4,100); setComplete(4); addLog('[modelado-3d] Task #4 COMPLETADA ✓', 'success'); },
+  ()=>{ setProgress(1,100); setComplete(1); addLog('[analizador-db] Task #1 COMPLETADA ✓ Schema diseñado', 'success'); },
+  ()=>{ setActive(2); setActive(3); addLog('[analizador-db] ▶ Task #2 — Seed/reset (paralelo)', 'info'); addLog('[senior-prog] ▶ Task #3 — Backend endpoints', 'info'); },
+  ()=>{ setProgress(2,25); setProgress(3,20); setAction(2,'Script reasignación FKs (1994 empleados)…'); setAction(3,'Fix PUT /areas:267 + campo floor…'); },
+  ()=>{ setProgress(2,50); setProgress(3,45); addLog('[senior-prog] Bug corregido: floor faltaba en handleGuardarTodo', 'success'); },
+  ()=>{ setProgress(2,70); setProgress(3,65); setAction(2,'Escribiendo seed PB/N1/N2/N3 coherente…'); },
+  ()=>{ setProgress(2,100); setComplete(2); addLog('[analizador-db] Task #2 COMPLETADA ✓', 'success'); },
+  ()=>{ setProgress(3,100); setComplete(3); addLog('[senior-prog] Task #3 COMPLETADA ✓', 'success'); },
+  ()=>{ setActive(5); setActive(6); addLog('[modelado-3d] ▶ Task #5 — Muebles/cubículos LOD', 'info'); addLog('[senior-prog] ▶ Task #6 — Frontend fix estado', 'info'); },
+  ()=>{ setProgress(5,20); setProgress(6,25); setAction(5,'Diseñando sistema LOD…'); setAction(6,'Unificando escritura localStorage…'); },
+  ()=>{ setProgress(5,40); setProgress(6,45); addLog('[senior-prog] Bug corregido: doble escritura localStorage eliminada', 'success'); },
+  ()=>{ setProgress(5,55); setProgress(6,60); setAction(5,'Creando geometría cubículos Three.js…'); setAction(6,'UI Área Común + nombre propio sala juntas…'); },
+  ()=>{ setProgress(5,72); setProgress(6,80); addLog('[modelado-3d] Pins de ticket sobre mueble específico funcionando', 'success'); },
+  ()=>{ setProgress(5,88); setProgress(6,100); setComplete(6); addLog('[senior-prog] Task #6 COMPLETADA ✓', 'success'); },
+  ()=>{ setProgress(5,100); setComplete(5); addLog('[modelado-3d] Task #5 COMPLETADA ✓ Muebles 3D listos', 'success'); },
+  ()=>{ setActive(7); addLog('[senior-prog] ▶ Task #7 — Editor muebles + estilos', 'info'); },
+  ()=>{ setProgress(7,33); setAction(7,'Capa de muebles en AreaGridEditor…'); },
+  ()=>{ setProgress(7,66); setAction(7,'Retoque visual profesional AreasPage…'); addLog('[senior-prog] Estilos mejorados aplicados', 'info'); },
+  ()=>{ setProgress(7,100); setComplete(7); addLog('[senior-prog] Task #7 COMPLETADA ✓', 'success'); },
+  ()=>{ setActive(8); addLog('[workflow] ▶ Task #8 — Gate pre-deploy', 'warn'); setAction(8,'Auditoría de seguridad…'); },
+  ()=>{ setProgress(8,40); addLog('[workflow] Verificando integridad FK post-migración…', 'info'); },
+  ()=>{ setProgress(8,75); setAction(8,'Validando build completo…'); addLog('[workflow] Build OK — cero errores TypeScript', 'success'); },
+  ()=>{ setProgress(8,100); setComplete(8); addLog('[workflow] ████ OPERACIÓN COMPLETA ✓ ████', 'success'); addLog('Todos los agentes completaron sus misiones', 'success'); },
+];
+
+function simTick() {
+  if (simIdx >= SIM.length) return;
+  SIM[simIdx]();
+  simIdx++;
+  const delay = simIdx < 3 ? 1400 : simIdx > 28 ? 1600 : 750 + Math.random()*500;
+  simTimer = setTimeout(simTick, delay);
+}
+
+function stopSim()  { if (simTimer) { clearTimeout(simTimer); simTimer = null; } }
+function startSim() {
+  addLog('MODO DEMO — sin agent-status.json en vivo', 'warn');
+  addLog('Tip: servir carpeta con http-server para datos reales', 'default');
+  simIdx = 0;
+  simTimer = setTimeout(simTick, 900);
+}
+
+// ══════════════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════════════
+render();
+setInterval(renderClock, 1000);
+renderClock();
+
+fetchLive().then(() => {
+  if (!isLive) startSim();
+  setInterval(fetchLive, 2500);
+});
+</script>
+</body>
+</html>

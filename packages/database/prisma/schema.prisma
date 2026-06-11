@@ -103,6 +103,19 @@ enum EstadoAsignacion {
   DEVUELTA
 }
 
+enum TipoAreaComun {
+  SALA_JUNTAS
+  SALA_CONFERENCIAS
+  BANO
+  LACTANCIA
+  COPIADO
+  COMEDOR
+  RECEPCION
+  ARCHIVO
+  BODEGA
+  OTRO
+}
+
 // ============================================================
 // USUARIOS DEL SISTEMA (Staff: Admin, Técnicos, Mesa de Ayuda)
 // ============================================================
@@ -252,17 +265,50 @@ model AreaEdificio {
   adscripcionNombre String? @db.VarChar(200)
   adscripcionNivel  Int?
 
+  // @deprecated — reemplazado lógicamente por `esComun` + `tipoComun = SALA_JUNTAS`.
+  // Se mantiene por retrocompatibilidad con filas/lecturas existentes; no usar en código nuevo.
   esSalaJuntas Boolean @default(false)
+
+  // Área común (no asignada a una adscripción): sala, baño, lactancia, etc.
+  esComun      Boolean        @default(false)
+  tipoComun    TipoAreaComun? // solo significativo cuando esComun = true
+  nombrePropio String?        @db.VarChar(150) // ej: "Sala Oaxaca", "Baño Nivel 2"
 
   activo Boolean @default(true)
 
   // Relaciones
   empleados Empleado[]
   tickets   Ticket[]
+  muebles   Mueble[]
 
   @@index([piso])
   @@index([floor])
   @@map("areas_edificio")
+}
+
+// ============================================================
+// MUEBLES (cubículos, escritorios, salas, impresoras dentro de un área)
+// ============================================================
+
+model Mueble {
+  id        Int      @id @default(autoincrement())
+  areaId    String   @db.VarChar(100) // FK a AreaEdificio.id
+  label     String   @db.VarChar(100)
+  tipo      String   @db.VarChar(50) // CUBICULO, ESCRITORIO, SALA, IMPRESORA, etc.
+  gridX     Float // posición relativa dentro del área (0-1)
+  gridY     Float
+  ancho     Float    @default(1.0)
+  alto      Float    @default(1.0)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  area    AreaEdificio @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  tickets Ticket[]     @relation("TicketMueble") // tickets ubicados en este mueble
+
+  @@index([areaId])
+  @@index([activo])
+  @@map("muebles")
 }
 
 // ============================================================
@@ -287,6 +333,10 @@ model Ticket {
   areaId String       @db.VarChar(100)
   area   AreaEdificio @relation(fields: [areaId], references: [id])
   piso   PisoEdificio
+
+  // Ubicación fina dentro del área (mueble específico) — opcional
+  muebleId Int?
+  mueble   Mueble? @relation("TicketMueble", fields: [muebleId], references: [id], onDelete: SetNull)
 
   // Usuario del sistema que creó (puede ser MESA_AYUDA creando por empleado)
   creadoPorId Int?
@@ -328,6 +378,7 @@ model Ticket {
   @@index([createdAt])
   @@index([activo])
   @@index([empleadoRfc, estado, activo])
+  @@index([muebleId])
   @@map("tickets")
 }
 

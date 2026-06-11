@@ -17,21 +17,21 @@
 
 export const AREA_COLORS = {
   tecnologia: 0x1565c0,
-  finanzas:   0x2e7d32,
-  directivo:  0x4a148c,
-  servicios:  0xe65100,
-  juridico:   0xb71c1c,
-  archivo:    0x546e7a,
-  reunion:    0x00695c,
-  acceso:     0xf9a825,
-  bano:       0x78909c,
-  ticket_activo:   0xff1744,
+  finanzas: 0x2e7d32,
+  directivo: 0x4a148c,
+  servicios: 0xe65100,
+  juridico: 0xb71c1c,
+  archivo: 0x546e7a,
+  reunion: 0x00695c,
+  acceso: 0xf9a825,
+  bano: 0x78909c,
+  ticket_activo: 0xff1744,
   ticket_asignado: 0xffab00,
 };
 
 // Sin cuartos estáticos — se cargan dinámicamente desde la API.
 export const ROOMS = {
-  pb:     [],
+  pb: [],
   nivel1: [],
   nivel2: [],
   nivel3: [],
@@ -43,8 +43,8 @@ export const ROOM_MAP = {};
 export const ALL_ROOMS = [];
 
 export const FLOOR_LABELS = {
-  0: "Planta Baja",
-  1: "Nivel 2",
-  2: "Nivel 3",
-  3: "Nivel 4",
+  0: "PB",
+  1: "N1",
+  2: "N2",
+  3: "N3",
 };

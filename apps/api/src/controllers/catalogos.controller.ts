@@ -41,7 +41,14 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
         activo: true,
         rol: { in: rolesPermitidos },
       },
-      select: { id: true, nombre: true, apellidos: true, rol: true, esEmpleadoEstructura: true, empleadoId: true },
+      select: {
+        id: true,
+        nombre: true,
+        apellidos: true,
+        rol: true,
+        esEmpleadoEstructura: true,
+        empleadoId: true,
+      },
       orderBy: { nombre: "asc" },
     });
     res.json({ data });
@@ -51,27 +58,40 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
 };
 
 // ── Paleta de colores institucional (misma que AreaGridEditor.jsx) ─────────────
-const PH = 342, PS = 62, PL = 38;
+const PH = 342,
+  PS = 62,
+  PL = 38;
 const PALETTE_DELTAS = [
-  [0, 0, 0], [-20, -15, 18], [20, 10, -10], [-40, -20, 28],
-  [15, -5, 12], [-60, -8, 20], [30, 15, -8], [0, 18, 22],
-  [-80, -15, 30], [40, -5, -5], [-10, -8, 38], [25, 20, 8],
+  [0, 0, 0],
+  [-20, -15, 18],
+  [20, 10, -10],
+  [-40, -20, 28],
+  [15, -5, 12],
+  [-60, -8, 20],
+  [30, 15, -8],
+  [0, 18, 22],
+  [-80, -15, 30],
+  [40, -5, -5],
+  [-10, -8, 38],
+  [25, 20, 8],
 ];
 
 function hslToHex(h: number, s: number, l: number): string {
-  s /= 100; l /= 100;
+  s /= 100;
+  l /= 100;
   const a = s * Math.min(l, 1 - l);
   const f = (n: number) => {
     const k = (n + h / 30) % 12;
     return Math.round(255 * (l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)))
-      .toString(16).padStart(2, "0");
+      .toString(16)
+      .padStart(2, "0");
   };
   return `#${f(0)}${f(8)}${f(4)}`;
 }
 
 function areaColorHex(index: number): string {
   const [dH, dS, dL] = PALETTE_DELTAS[index % PALETTE_DELTAS.length];
-  const h = ((PH + dH) % 360 + 360) % 360;
+  const h = (((PH + dH) % 360) + 360) % 360;
   const s = Math.max(0, Math.min(100, PS + dS));
   const l = Math.max(0, Math.min(100, PL + dL));
   return hslToHex(h, s, l);
@@ -82,6 +102,9 @@ export const areas = async (_req: Request, res: Response, next: NextFunction) =>
     const raw = await prisma.areaEdificio.findMany({
       where: { activo: true },
       orderBy: [{ floor: "asc" }, { label: "asc" }],
+      include: {
+        _count: { select: { muebles: { where: { activo: true } } } },
+      },
     });
     // Agregar colorHex determinístico por índice (mismo algoritmo que el editor 2D)
     const data = raw.map((area, i) => ({ ...area, colorHex: areaColorHex(i) }));
@@ -94,7 +117,7 @@ export const areas = async (_req: Request, res: Response, next: NextFunction) =>
 export const pisos = (_req: Request, res: Response) => {
   res.json({
     data: [
-      { piso: "PB",      floor: 0, label: "Planta Baja" },
+      { piso: "PB", floor: 0, label: "Planta Baja" },
       { piso: "NIVEL_1", floor: 1, label: "Nivel 2" },
       { piso: "NIVEL_2", floor: 2, label: "Nivel 3" },
       { piso: "NIVEL_3", floor: 3, label: "Nivel 4" },
@@ -170,11 +193,29 @@ const CreateAreaSchema = z.object({
 const UpdateAreaSchema = z.object({
   // label puede venir del nombre SIRH seleccionado (subsecretaría/dirección/coordinación/departamento)
   label: z.string().min(1).max(200).optional(),
+  floor: z.number().int().min(0).max(3).optional(),
   gridX1: z.number().int().min(0).optional(),
   gridY1: z.number().int().min(0).optional(),
   gridX2: z.number().int().min(0).optional(),
   gridY2: z.number().int().min(0).optional(),
   esSalaJuntas: z.boolean().optional(),
+  esComun: z.boolean().optional(),
+  tipoComun: z
+    .enum([
+      "SALA_JUNTAS",
+      "SALA_CONFERENCIAS",
+      "BANO",
+      "LACTANCIA",
+      "COPIADO",
+      "COMEDOR",
+      "RECEPCION",
+      "ARCHIVO",
+      "BODEGA",
+      "OTRO",
+    ])
+    .nullable()
+    .optional(),
+  nombrePropio: z.string().max(150).nullable().optional(),
 });
 
 /**
@@ -189,7 +230,20 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    const { id, label, piso, floor, gridX1, gridY1, gridX2, gridY2, esSalaJuntas } = parse.data;
+    const {
+      id,
+      label,
+      piso,
+      floor,
+      gridX1,
+      gridY1,
+      gridX2,
+      gridY2,
+      esSalaJuntas,
+      esComun,
+      tipoComun,
+      nombrePropio,
+    } = parse.data;
 
     const existente = await prisma.areaEdificio.findUnique({ where: { id } });
     if (existente) {
@@ -208,6 +262,9 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
         gridX2: gridX2 ?? null,
         gridY2: gridY2 ?? null,
         esSalaJuntas: esSalaJuntas ?? false,
+        esComun: esComun ?? false,
+        tipoComun: (tipoComun ?? null) as import("@prisma/client").TipoAreaComun | null,
+        nombrePropio: nombrePropio ?? null,
         activo: true,
       },
     });
@@ -238,17 +295,35 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    const { label, gridX1, gridY1, gridX2, gridY2, esSalaJuntas } = parse.data;
+    const {
+      label,
+      floor,
+      gridX1,
+      gridY1,
+      gridX2,
+      gridY2,
+      esSalaJuntas,
+      esComun,
+      tipoComun,
+      nombrePropio,
+    } = parse.data;
 
     const area = await prisma.areaEdificio.update({
       where: { id },
       data: {
         ...(label !== undefined && { label }),
+        ...(floor !== undefined && { floor }),
         ...(gridX1 !== undefined && { gridX1 }),
         ...(gridY1 !== undefined && { gridY1 }),
         ...(gridX2 !== undefined && { gridX2 }),
         ...(gridY2 !== undefined && { gridY2 }),
         ...(esSalaJuntas !== undefined && { esSalaJuntas }),
+        ...(esComun !== undefined && { esComun }),
+        // tipoComun y nombrePropio admiten null explícito para borrar el valor
+        ...(tipoComun !== undefined && {
+          tipoComun: tipoComun as import("@prisma/client").TipoAreaComun | null,
+        }),
+        ...(nombrePropio !== undefined && { nombrePropio }),
       },
     });
 
@@ -295,8 +370,12 @@ export const sirhEmpleado = async (req: Request, res: Response, next: NextFuncti
     const local = await prisma.empleado.findFirst({
       where: { rfc, activo: true },
       select: {
-        sirhId: true, rfc: true, nombre: true, apellidos: true,
-        email: true, adscripcion: true,
+        sirhId: true,
+        rfc: true,
+        nombre: true,
+        apellidos: true,
+        email: true,
+        adscripcion: true,
       },
     });
 

@@ -4,6 +4,7 @@ import * as adminCtrl from "../controllers/admin.controller.js";
 import * as procesosCtrl from "../controllers/admin-procesos.controller.js";
 import * as usuariosCtrl from "../controllers/usuarios.controller.js";
 import * as seguridadCtrl from "../controllers/admin-seguridad.controller.js";
+import * as mueblesCtrl from "../controllers/muebles.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { requireRol } from "../middleware/roles.middleware.js";
 import { prisma } from "../config/database.js";
@@ -25,8 +26,8 @@ const listarAreasSoporte = async (_req: Request, res: Response, next: NextFuncti
 };
 
 // ── SIRH ─────────────────────────────────────────────────────────────────────
-router.get("/sirh/status",    adminCtrl.sirhSyncStatus);
-router.post("/sirh/sync",     adminCtrl.sirhSyncNow);
+router.get("/sirh/status", adminCtrl.sirhSyncStatus);
+router.post("/sirh/sync", adminCtrl.sirhSyncNow);
 router.get("/sirh/empleados", adminCtrl.sirhEmpleados);
 
 // ── Procesos de flujo ─────────────────────────────────────────────────────────
@@ -45,6 +46,12 @@ router.delete("/usuarios/:id", usuariosCtrl.desactivar);
 
 // ── Áreas de Soporte ──────────────────────────────────────────────────────────
 router.get("/areas-soporte", listarAreasSoporte);
+
+// ── Muebles (cubículos, escritorios, salas dentro de un área) ─────────────────
+router.get("/areas/:areaId/muebles", mueblesCtrl.listarMuebles);
+router.post("/areas/:areaId/muebles", mueblesCtrl.crearMueble);
+router.put("/muebles/:id", mueblesCtrl.actualizarMueble);
+router.delete("/muebles/:id", mueblesCtrl.eliminarMueble);
 
 // ── Seguridad: logs de acceso y sesiones activas ──────────────────────────────
 router.get("/logs-acceso", seguridadCtrl.listarLogs);

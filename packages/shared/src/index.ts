@@ -60,6 +60,19 @@ export const PrioridadTicketSchema = z.enum(["BAJA", "MEDIA", "ALTA", "URGENTE"]
 
 export const PisoEdificioSchema = z.enum(["PB", "NIVEL_1", "NIVEL_2", "NIVEL_3"]);
 
+export const TipoAreaComunSchema = z.enum([
+  "SALA_JUNTAS",
+  "SALA_CONFERENCIAS",
+  "BANO",
+  "LACTANCIA",
+  "COPIADO",
+  "COMEDOR",
+  "RECEPCION",
+  "ARCHIVO",
+  "BODEGA",
+  "OTRO",
+]);
+
 export const TipoNotificacionSchema = z.enum([
   "TICKET_CREADO",
   "TICKET_ASIGNADO",
@@ -97,7 +110,39 @@ export const AreaEdificioSchema = z.object({
   gridY1: z.number().int().nullable().optional(),
   gridX2: z.number().int().nullable().optional(),
   gridY2: z.number().int().nullable().optional(),
+  // @deprecated — usar esComun + tipoComun = "SALA_JUNTAS"
+  esSalaJuntas: z.boolean().optional(),
+  esComun: z.boolean().optional(),
+  tipoComun: TipoAreaComunSchema.nullable().optional(),
+  nombrePropio: z.string().nullable().optional(),
   activo: z.boolean(),
+});
+
+// ============================================================
+// MUEBLES (cubículos, escritorios, salas dentro de un área)
+// ============================================================
+
+export const MuebleSchema = z.object({
+  id: z.number().int(),
+  areaId: z.string(),
+  label: z.string(),
+  tipo: z.string(),
+  gridX: z.number(),
+  gridY: z.number(),
+  ancho: z.number(),
+  alto: z.number(),
+  activo: z.boolean(),
+  createdAt: z.string(),
+});
+
+export const MuebleCreateSchema = z.object({
+  areaId: z.string().min(1),
+  label: z.string().min(1).max(100),
+  tipo: z.string().min(1).max(50),
+  gridX: z.number(),
+  gridY: z.number(),
+  ancho: z.number().positive().optional().default(1.0),
+  alto: z.number().positive().optional().default(1.0),
 });
 
 // ============================================================
@@ -145,6 +190,7 @@ export const TicketSchema = z.object({
   empleadoRfc: z.string(),
   areaId: z.string(),
   piso: PisoEdificioSchema,
+  muebleId: z.number().int().nullable().optional(),
   creadoPorId: z.number().int().nullable().optional(),
   tecnicoId: z.number().int().nullable().optional(),
   fechaAsignacion: z.string().nullable().optional(),
@@ -164,6 +210,7 @@ export const TicketCreateSchema = z.object({
   empleadoRfc: z.string().length(13),
   areaId: z.string().min(1),
   piso: PisoEdificioSchema,
+  muebleId: z.number().int().optional(),
   creadoPorId: z.number().int().optional(),
 });
 
@@ -217,11 +264,14 @@ export type SubcategoriaTicket = z.infer<typeof SubcategoriaTicketSchema>;
 export type EstadoTicket = z.infer<typeof EstadoTicketSchema>;
 export type PrioridadTicket = z.infer<typeof PrioridadTicketSchema>;
 export type PisoEdificio = z.infer<typeof PisoEdificioSchema>;
+export type TipoAreaComun = z.infer<typeof TipoAreaComunSchema>;
 export type TipoNotificacion = z.infer<typeof TipoNotificacionSchema>;
 
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type LoginEmpleadoInput = z.infer<typeof LoginEmpleadoSchema>;
 export type AreaEdificio = z.infer<typeof AreaEdificioSchema>;
+export type Mueble = z.infer<typeof MuebleSchema>;
+export type MuebleCreateInput = z.infer<typeof MuebleCreateSchema>;
 export type Empleado = z.infer<typeof EmpleadoSchema>;
 export type Ticket = z.infer<typeof TicketSchema>;
 export type TicketCreateInput = z.infer<typeof TicketCreateSchema>;
@@ -235,9 +285,21 @@ export type Notificacion = z.infer<typeof NotificacionSchema>;
 // ============================================================
 
 export const SUBCATEGORIAS_POR_CATEGORIA: Record<CategoriaTicket, SubcategoriaTicket[]> = {
-  TECNOLOGIAS: ["SISTEMAS_INSTITUCIONALES", "EQUIPOS_DISPOSITIVOS", "RED_INTERNET", "CUENTAS_DOMINIO", "CORREO_OUTLOOK"],
+  TECNOLOGIAS: [
+    "SISTEMAS_INSTITUCIONALES",
+    "EQUIPOS_DISPOSITIVOS",
+    "RED_INTERNET",
+    "CUENTAS_DOMINIO",
+    "CORREO_OUTLOOK",
+  ],
   SERVICIOS: ["SANITARIOS", "ILUMINACION", "MOVILIDAD"],
-  RECURSOS_MATERIALES: ["SALA_JUNTAS", "EQUIPO_AUDIOVISUAL", "PRESTAMO_EQUIPO", "MOBILIARIO", "PAPELERIA"],
+  RECURSOS_MATERIALES: [
+    "SALA_JUNTAS",
+    "EQUIPO_AUDIOVISUAL",
+    "PRESTAMO_EQUIPO",
+    "MOBILIARIO",
+    "PAPELERIA",
+  ],
 };
 
 export const LABEL_CATEGORIA: Record<CategoriaTicket, string> = {
@@ -346,7 +408,10 @@ export const SUB_TIPO_EQUIPOS = [
   { value: "FALLA_IMPRESORA", label: "Falla de impresora o periférico" },
   { value: "INSTALAR_SOFTWARE", label: "Instalar software" },
   { value: "IMPRESORA_NUEVA_EN_RED", label: "Impresora nueva (configurar en red)" },
-  { value: "MANTENIMIENTO_PREVENTIVO", label: "Mantenimiento preventivo (Antivirus, revisión periódica)" },
+  {
+    value: "MANTENIMIENTO_PREVENTIVO",
+    label: "Mantenimiento preventivo (Antivirus, revisión periódica)",
+  },
   { value: "MANTENIMIENTO_CORRECTIVO", label: "Mantenimiento correctivo (Reparación de fallas)" },
 ];
 
@@ -565,13 +630,28 @@ export const PERMISOS_DEFAULT: Record<Rol, Permiso[]> = {
   EMPLEADO: [],
   RESPONSABLE_TI: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
   TECNICO_TI: ["solicitudes.ver_todas", "metricas.ver"],
-  RESPONSABLE_REDES: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  RESPONSABLE_REDES: [
+    "solicitudes.ver_todas",
+    "solicitudes.asignar",
+    "pasos.asignar",
+    "metricas.ver",
+  ],
   TECNICO_REDES: ["solicitudes.ver_todas"],
-  RESPONSABLE_MANTENIMIENTO: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  RESPONSABLE_MANTENIMIENTO: [
+    "solicitudes.ver_todas",
+    "solicitudes.asignar",
+    "pasos.asignar",
+    "metricas.ver",
+  ],
   TECNICO_ELECTRICISTA: ["solicitudes.ver_todas"],
   TECNICO_PLOMERO: ["solicitudes.ver_todas"],
   TECNICO_MOVILIDAD: ["solicitudes.ver_todas"],
-  RESPONSABLE_RECURSOS_MATERIALES: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
+  RESPONSABLE_RECURSOS_MATERIALES: [
+    "solicitudes.ver_todas",
+    "solicitudes.asignar",
+    "pasos.asignar",
+    "metricas.ver",
+  ],
   GESTOR_RECURSOS_MATERIALES: ["solicitudes.ver_todas", "recursos.gestionar", "metricas.ver"],
   GESTOR_SALAS_JUNTA: ["solicitudes.ver_todas", "recursos.gestionar"],
   GESTOR_RECURSOS: ["solicitudes.ver_todas", "recursos.gestionar"],
@@ -658,7 +738,13 @@ export interface MetricasGlobalResponse {
   tendenciaDiaria: TendenciaDia[];
   distribucionCategoria: DistribucionCategoria[];
   distribucionEstado: DistribucionCategoria[];
-  comparativoPorArea: Array<{ areaNombre: string; areaSoporteId: number; total: number; resueltos: number; sinAsignar: number }>;
+  comparativoPorArea: Array<{
+    areaNombre: string;
+    areaSoporteId: number;
+    total: number;
+    resueltos: number;
+    sinAsignar: number;
+  }>;
   // Tabla
   eficienciaResponsables: EficienciaResponsable[];
 }
@@ -678,7 +764,12 @@ export interface MetricasPorAreaResponse {
   tendenciaDiaria: TendenciaDia[];
   distribucionSubcategoria: DistribucionCategoria[];
   distribucionEstado: DistribucionCategoria[];
-  cargaTecnicos: Array<{ tecnicoNombre: string; tecnicoId: number; activos: number; completados: number }>;
+  cargaTecnicos: Array<{
+    tecnicoNombre: string;
+    tecnicoId: number;
+    activos: number;
+    completados: number;
+  }>;
   // Tabla
   rendimientoTecnicos: RendimientoTecnico[];
 }

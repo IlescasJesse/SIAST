@@ -12,7 +12,8 @@ export const createUsuario = (body) => api.post("/api/usuarios", body).then((r) 
 
 // ─── Áreas CRUD (admin) ────────────────────────────────────────────────────
 export const createArea = (body) => api.post("/api/catalogos/areas", body).then((r) => r.data);
-export const updateArea = (id, body) => api.put(`/api/catalogos/areas/${id}`, body).then((r) => r.data);
+export const updateArea = (id, body) =>
+  api.put(`/api/catalogos/areas/${id}`, body).then((r) => r.data);
 export const deleteArea = (id) => api.delete(`/api/catalogos/areas/${id}`).then((r) => r.data);
 
 // ─── SIRH adscripciones ───────────────────────────────────────────────────
@@ -28,12 +29,22 @@ export const getDisponibilidadTecnico = (empleadoId) =>
   api.get(`/api/catalogos/disponibilidad-tecnico/${empleadoId}`).then((r) => r.data);
 
 // ─── Áreas de Soporte (Phase 3) ──────────────────────────────────────────
-export const getAreasSoporte = () =>
-  api.get("/api/admin/areas-soporte").then((r) => r.data.data);
+export const getAreasSoporte = () => api.get("/api/admin/areas-soporte").then((r) => r.data.data);
 
 // ─── Admin: sincronización SIRH ───────────────────────────────────────────
-export const getSirhSyncStatus = () =>
-  api.get("/api/admin/sirh/status").then((r) => r.data);
+export const getSirhSyncStatus = () => api.get("/api/admin/sirh/status").then((r) => r.data);
 
-export const postSirhSyncNow = () =>
-  api.post("/api/admin/sirh/sync").then((r) => r.data);
+export const postSirhSyncNow = () => api.post("/api/admin/sirh/sync").then((r) => r.data);
+
+// ─── Muebles / Cubículos por área ─────────────────────────────────────────
+export const getMueblesByArea = (areaId) =>
+  api.get(`/api/admin/areas/${areaId}/muebles`).then((r) => r.data);
+
+export const createMueble = (areaId, data) =>
+  api.post(`/api/admin/areas/${areaId}/muebles`, data).then((r) => r.data);
+
+export const updateMueble = (muebleId, data) =>
+  api.put(`/api/admin/muebles/${muebleId}`, data).then((r) => r.data);
+
+export const deleteMueble = (muebleId) =>
+  api.delete(`/api/admin/muebles/${muebleId}`).then((r) => r.data);

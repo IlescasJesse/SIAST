@@ -1,0 +1,15 @@
+{
+  "operation": "MAPA DE ÁREAS v2.0",
+  "started": null,
+  "tasks": [
+    { "id": 1, "status": "pending", "progress": 0, "action": "", "log": [] },
+    { "id": 2, "status": "pending", "progress": 0, "action": "", "log": [] },
+    { "id": 3, "status": "pending", "progress": 0, "action": "", "log": [] },
+    { "id": 4, "status": "pending", "progress": 0, "action": "", "log": [] },
+    { "id": 5, "status": "pending", "progress": 0, "action": "", "log": [] },
+    { "id": 6, "status": "pending", "progress": 0, "action": "", "log": [] },
+    { "id": 7, "status": "pending", "progress": 0, "action": "", "log": [] },
+    { "id": 8, "status": "pending", "progress": 0, "action": "", "log": [] }
+  ],
+  "log": []
+}

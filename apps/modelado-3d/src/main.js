@@ -1,9 +1,23 @@
 import * as THREE from "three";
-import { buildBuilding, buildBuildingFromData, setFloorVisibility, setRoomTicketState, rebuildRoomGeometry, createConnectorMesh, createBuildingFootprint } from "./building.js";
+import {
+  buildBuilding,
+  buildBuildingFromData,
+  setFloorVisibility,
+  setRoomTicketState,
+  rebuildRoomGeometry,
+  createConnectorMesh,
+  createBuildingFootprint,
+} from "./building.js";
 import { highlightRoom, updateHighlight, clearHighlight } from "./highlight.js";
-import { createCamera, flyToFloor, setLoginMode as setCameraLoginMode, updateLoginCamera } from "./camera.js";
+import {
+  createCamera,
+  flyToFloor,
+  setLoginMode as setCameraLoginMode,
+  updateLoginCamera,
+} from "./camera.js";
 import { addLabels, updateLabelVisibility, updateRoomLabel, ensureRoomLabel } from "./labels.js";
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
+import { FurnitureManager, loadMuebles } from "./furniture.js";
 
 const API_BASE = `http://${window.location.hostname}:5101`;
 
@@ -92,6 +106,29 @@ for (const group of floorGroups.values()) {
 const footprint = createBuildingFootprint();
 scene.add(footprint);
 
+// ── Muebles/cubículos dentro de las áreas (LOD) ──────────────────────────────
+const furniture = new FurnitureManager(scene);
+
+/**
+ * Carga los muebles de las áreas dadas desde la API y (re)construye sus meshes.
+ * Degradación elegante: si la API falla, el visor sigue funcionando sin muebles.
+ * @param {Array} rooms - lista de rooms con { id } presentes en liveRoomMap
+ */
+const refreshMuebles = async (rooms) => {
+  try {
+    const mueblesByArea = await loadMuebles(rooms, API_BASE, _jwtToken);
+    const total = Object.values(mueblesByArea).reduce((n, arr) => n + arr.length, 0);
+    if (total === 0) {
+      furniture.clear();
+      return;
+    }
+    furniture.build(mueblesByArea, liveRoomMap);
+    console.info(`[SIAST3D] ${total} muebles cargados en ${rooms.length} áreas`);
+  } catch (err) {
+    console.warn("[SIAST3D] No se pudieron cargar muebles:", err.message);
+  }
+};
+
 // ── Actualización asíncrona desde la API (sin bloquear el render) ────────────
 const apiAreaToRoom = (area) => ({
   id: area.id,
@@ -109,7 +146,12 @@ fetch(`${API_BASE}/api/catalogos/areas`)
   .then((r) => r.json())
   .then((json) => {
     const areas = (json.data ?? []).filter(
-      (a) => a.activo !== false && a.gridX1 != null && a.gridY1 != null && a.gridX2 != null && a.gridY2 != null,
+      (a) =>
+        a.activo !== false &&
+        a.gridX1 != null &&
+        a.gridY1 != null &&
+        a.gridX2 != null &&
+        a.gridY2 != null,
     );
     if (areas.length === 0) return;
 
@@ -123,18 +165,24 @@ fetch(`${API_BASE}/api/catalogos/areas`)
       }
       // Si las coordenadas difieren del rooms.js, reconstruir el mesh
       const existing = liveRoomMap[room.id];
-      const coordsChanged = !existing ||
-        existing.x1 !== room.x1 || existing.y1 !== room.y1 ||
-        existing.x2 !== room.x2 || existing.y2 !== room.y2;
+      const coordsChanged =
+        !existing ||
+        existing.x1 !== room.x1 ||
+        existing.y1 !== room.y1 ||
+        existing.x2 !== room.x2 ||
+        existing.y2 !== room.y2;
 
       if (coordsChanged) {
         rebuildRoomGeometry({
           areaId: room.id,
-          gridX1: room.x1, gridY1: room.y1,
-          gridX2: room.x2, gridY2: room.y2,
+          gridX1: room.x1,
+          gridY1: room.y1,
+          gridX2: room.x2,
+          gridY2: room.y2,
           floor: room.floor,
-          color: room.color,   // color desde la API
-          roomMeshes, floorGroups,
+          color: room.color, // color desde la API
+          roomMeshes,
+          floorGroups,
           roomMap: liveRoomMap,
         });
         liveRoomMap[room.id] = { ...room };
@@ -144,6 +192,9 @@ fetch(`${API_BASE}/api/catalogos/areas`)
       if (mesh) ensureRoomLabel(scene, room.id, room.label, mesh);
       else updateRoomLabel(room.id, room.label);
     }
+
+    // Cargar muebles de las áreas ya posicionadas (coords reales en liveRoomMap)
+    refreshMuebles(areas.map((a) => ({ id: a.id })));
   })
   .catch((err) => console.warn("[SIAST3D] No se pudo cargar áreas desde API:", err.message));
 
@@ -181,10 +232,26 @@ const onPointerClick = (e) => {
   pointer.x = (e.clientX / innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
+
+  // Prioridad: muebles visibles (LOD) por estar en primer plano al hacer zoom
+  const muebleHits = raycaster.intersectObjects(furniture.visibleMeshes());
+  if (muebleHits.length) {
+    const m = muebleHits[0].object;
+    const { muebleId, areaId, label, tipo } = m.userData;
+    parent?.postMessage(
+      { type: "MUEBLE_CLICKED", payload: { muebleId, areaId, label, tipo } },
+      "*",
+    );
+    return;
+  }
+
   // Regenerar la lista de meshes clickeables para reflejar reconstrucciones de geometría
   clickableMeshes = [...roomMeshes.values()];
   const hits = raycaster.intersectObjects(clickableMeshes);
-  if (!hits.length) { hideInfoPanel(); return; }
+  if (!hits.length) {
+    hideInfoPanel();
+    return;
+  }
 
   const mesh = hits[0].object;
   const { roomId, label, floor, x1, y1, x2, y2 } = mesh.userData;
@@ -347,7 +414,47 @@ window.SIAST3D = {
       roomMap: liveRoomMap,
     });
 
-    console.info(`[SIAST3D] Geometría de "${areaId}" actualizada: (${gridX1},${gridY1})→(${gridX2},${gridY2}) piso ${resolvedFloor}`);
+    console.info(
+      `[SIAST3D] Geometría de "${areaId}" actualizada: (${gridX1},${gridY1})→(${gridX2},${gridY2}) piso ${resolvedFloor}`,
+    );
+
+    // Reposicionar los muebles del área editada para que sigan alineados
+    refreshMuebles(Object.keys(liveRoomMap).map((id) => ({ id })));
+  },
+
+  /**
+   * Resalta un mueble específico: cambia al piso del área, coloca el pin de
+   * ticket sobre el mueble y hace zoom suave hacia él.
+   * @param {number} muebleId
+   * @param {string} [areaId] - opcional; si se omite se infiere del registro del mueble
+   */
+  highlightMueble(muebleId, areaId) {
+    const entry = furniture.getEntry(muebleId);
+    if (!entry) {
+      console.warn(`[SIAST3D] Mueble ${muebleId} no encontrado`);
+      return;
+    }
+    const resolvedAreaId = areaId ?? entry.areaId;
+    const room = liveRoomMap[resolvedAreaId];
+    const floor = room?.floor ?? 0;
+
+    // Asegurar que el piso del mueble esté visible
+    if (activeFloor !== -1 && activeFloor !== floor) {
+      this.goToFloor(floor);
+    } else if (floor >= 0) {
+      flyToFloor(camera, controls, floor);
+    }
+
+    // Colocar pin sobre el mueble (se muestra cuando el LOD lo hace visible)
+    furniture.showPin(muebleId);
+
+    // Resaltar también el área padre para contexto
+    highlightRoom(roomMeshes, resolvedAreaId);
+  },
+
+  /** Oculta el pin de ticket de muebles. */
+  hideMueblePin() {
+    furniture.hidePin();
   },
 
   async showEmployee(rfc) {
@@ -368,6 +475,8 @@ window.SIAST3D = {
 // postMessage listener (integración con frontend React)
 // ════════════════════════════════════════════════════════════
 window.addEventListener("message", (e) => {
+  const allowed = ["http://localhost:5173", "http://localhost:5101", window.location.origin];
+  if (e.origin && !allowed.includes(e.origin)) return;
   const { type, payload } = e.data ?? {};
   if (!type) return;
 
@@ -399,6 +508,15 @@ window.addEventListener("message", (e) => {
       break;
     case "HIDE_TICKET_PIN":
       window.SIAST3D.hideTicketPin(payload.roomId);
+      break;
+    case "HIGHLIGHT_MUEBLE": {
+      // Soporta { type, payload: { muebleId, areaId } } y { type, muebleId, areaId }
+      const p = payload ?? e.data;
+      window.SIAST3D.highlightMueble(p.muebleId, p.areaId);
+      break;
+    }
+    case "HIDE_MUEBLE_PIN":
+      window.SIAST3D.hideMueblePin();
       break;
   }
 });
@@ -447,7 +565,9 @@ const animateEntry = () => {
     if (shown >= floors.length) {
       setTimeout(() => {
         loader.classList.add("hidden");
-        setTimeout(() => { loader.style.display = "none"; }, 700);
+        setTimeout(() => {
+          loader.style.display = "none";
+        }, 700);
       }, 300);
       return;
     }
@@ -479,18 +599,35 @@ const animateEntry = () => {
 // LOOP DE RENDER
 // ════════════════════════════════════════════════════════════
 const clock = new THREE.Clock();
+let _rafId = null;
 
 const render = () => {
-  requestAnimationFrame(render);
+  _rafId = requestAnimationFrame(render);
   const delta = clock.getDelta();
 
   controls.update();
   updateHighlight(delta);
   updateLoginCamera(camera, controls, delta);
   updateLabelVisibility(camera, floorGroups, activeFloor);
+  furniture.updateVisibility(camera, activeFloor);
 
   renderer.render(scene, camera);
 };
+
+// Pausar render cuando la pestaña/iframe no está visible
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (_rafId !== null) {
+      cancelAnimationFrame(_rafId);
+      _rafId = null;
+    }
+  } else {
+    if (_rafId === null) {
+      clock.getDelta(); // descartar delta acumulado durante la pausa
+      render();
+    }
+  }
+});
 
 // ════════════════════════════════════════════════════════════
 // RESIZE

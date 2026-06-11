@@ -36,23 +36,38 @@ import {
   Chip,
   Tabs,
   Tab,
+  Collapse,
+  List,
+  ListItem,
+  ListItemText,
+  Badge,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
 import SaveIcon from "@mui/icons-material/Save";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import ThreeDRotationIcon from "@mui/icons-material/ThreeDRotation";
-import { getAreas, createArea, updateArea, deleteArea, getSirhAdscripciones } from "../api/catalogos.js";
+import ChairIcon from "@mui/icons-material/Chair";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import {
+  getAreas,
+  createArea,
+  updateArea,
+  deleteArea,
+  getSirhAdscripciones,
+  getMueblesByArea,
+  createMueble,
+  deleteMueble,
+} from "../api/catalogos.js";
 import { AreaGridEditor } from "../components/areas/AreaGridEditor.jsx";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const PISOS = [
-  { piso: "PB",      floor: 0, label: "PB" },
-  { piso: "NIVEL_1", floor: 1, label: "2"  },
-  { piso: "NIVEL_2", floor: 2, label: "3"  },
-  { piso: "NIVEL_3", floor: 3, label: "4"  },
+  { piso: "PB", floor: 0, label: "PB" },
+  { piso: "NIVEL_1", floor: 1, label: "2" },
+  { piso: "NIVEL_2", floor: 2, label: "3" },
+  { piso: "NIVEL_3", floor: 3, label: "4" },
 ];
 
 const PISO_LABELS = { PB: "PB", NIVEL_1: "2", NIVEL_2: "3", NIVEL_3: "4" };
@@ -61,16 +76,16 @@ const PISO_LABELS = { PB: "PB", NIVEL_1: "2", NIVEL_2: "3", NIVEL_3: "4" };
 // Conector: cols 13-18 (6 cols, un poco más ancho) ubicado al FONDO del edificio.
 // Filas altas (14-26) → Z negativo en 3D → parte trasera del edificio.
 const ZONES = [
-  { key: "izq",      label: "ALA IZQUIERDA", colStart: 0,  colCount: 14 },
-  { key: "conector", label: "CONECTOR",       colStart: 13, colCount: 6  },
-  { key: "der",      label: "ALA DERECHA",    colStart: 18, colCount: 14 },
+  { key: "izq", label: "ALA IZQUIERDA", colStart: 0, colCount: 14 },
+  { key: "conector", label: "CONECTOR", colStart: 13, colCount: 6 },
+  { key: "der", label: "ALA DERECHA", colStart: 18, colCount: 14 },
 ];
 
 // Coordenadas por defecto al crear un área según zona.
 // Conector usa filas 14-22 (parte trasera del edificio = Z negativo en 3D).
 const defaultCoordsForZone = (zoneKey) => {
   if (zoneKey === "conector") return { gridX1: 14, gridY1: 14, gridX2: 18, gridY2: 22 };
-  if (zoneKey === "der")      return { gridX1: 20, gridY1: 10, gridX2: 25, gridY2: 15 };
+  if (zoneKey === "der") return { gridX1: 20, gridY1: 10, gridX2: 25, gridY2: 15 };
   return { gridX1: 1, gridY1: 10, gridX2: 6, gridY2: 15 };
 };
 
@@ -85,6 +100,23 @@ const EMPTY_NUEVA = {
   gridY1: String(DEFAULT_COORDS.gridY1),
   gridX2: String(DEFAULT_COORDS.gridX2),
   gridY2: String(DEFAULT_COORDS.gridY2),
+  esComun: false,
+  tipoComun: "",
+  nombrePropio: "",
+};
+
+// Labels amigables para TipoAreaComun
+const TIPO_AREA_COMUN_LABELS = {
+  SALA_JUNTAS: "Sala de Juntas",
+  SALA_CONFERENCIAS: "Sala de Conferencias",
+  BANO: "Bano",
+  LACTANCIA: "Lactancia",
+  COPIADO: "Copiado / Impresion",
+  COMEDOR: "Comedor",
+  RECEPCION: "Recepcion",
+  ARCHIVO: "Archivo",
+  BODEGA: "Bodega",
+  OTRO: "Otro",
 };
 
 // ── Helpers SIRH ──────────────────────────────────────────────────────────────
@@ -97,9 +129,7 @@ function inferirPadres(hijos, padres) {
   const hijoPadre = {};
 
   padres.forEach((padre) => {
-    const obras = (padre.proyectos ?? []).flatMap(
-      (proy) => proy.obras_actividades ?? [],
-    );
+    const obras = (padre.proyectos ?? []).flatMap((proy) => proy.obras_actividades ?? []);
     obras.forEach((obra) => {
       const ue = obra.unidad_ejecutora;
       if (ue && typeof ue === "string") {
@@ -145,6 +175,9 @@ export const AreasPage = () => {
   // Ref al iframe del visor 3D embebido
   const visor3DRef = useRef(null);
 
+  // Muebles del área seleccionada { [areaId]: Mueble[] }
+  const [mueblesPorArea, setMueblesPorArea] = useState({});
+
   // ── Cambios pendientes (batch save) ──────────────────────────────────────
   // Objeto { [areaId]: { label, gridX1, gridY1, gridX2, gridY2, floor } }
   // Persiste en localStorage hasta que el usuario guarda todo.
@@ -152,7 +185,9 @@ export const AreasPage = () => {
     try {
       const raw = localStorage.getItem("siast:areas:pending");
       return raw ? JSON.parse(raw) : {};
-    } catch { return {}; }
+    } catch {
+      return {};
+    }
   });
   const [savingAll, setSavingAll] = useState(false);
   const [saveAllError, setSaveAllError] = useState("");
@@ -161,29 +196,37 @@ export const AreasPage = () => {
 
   const persistPending = (next) => {
     setPendingChanges(next);
-    try { localStorage.setItem("siast:areas:pending", JSON.stringify(next)); } catch {}
+    try {
+      localStorage.setItem("siast:areas:pending", JSON.stringify(next));
+    } catch {}
   };
 
   // ── Auto-guardado en localStorage al instante ─────────────────────────────
-  // Cualquier cambio en el form (nombre, coords, sala de juntas) se persiste
-  // automáticamente sin que el usuario tenga que hacer clic en ningún botón.
+  // Solo escribe via persistPending para evitar doble escritura.
+  // El ref evita loops cuando el mismo objeto (por referencia) no cambió.
+  const prevEditFormRef = useRef(null);
   useEffect(() => {
     if (!editForm || !editForm._dirty) return;
-    setPendingChanges((prev) => {
-      const next = {
-        ...prev,
-        [editForm.id]: {
-          label: editForm.label,
-          gridX1: Number(editForm.gridX1),
-          gridY1: Number(editForm.gridY1),
-          gridX2: Number(editForm.gridX2),
-          gridY2: Number(editForm.gridY2),
-          floor: editForm.floor,
-          esSalaJuntas: editForm.esSalaJuntas ?? false,
-        },
-      };
-      try { localStorage.setItem("siast:areas:pending", JSON.stringify(next)); } catch {}
-      return next;
+    if (
+      prevEditFormRef.current?.id === editForm.id &&
+      JSON.stringify(prevEditFormRef.current) === JSON.stringify(editForm)
+    )
+      return;
+    prevEditFormRef.current = editForm;
+    persistPending({
+      ...pendingChanges,
+      [editForm.id]: {
+        label: editForm.label,
+        gridX1: Number(editForm.gridX1),
+        gridY1: Number(editForm.gridY1),
+        gridX2: Number(editForm.gridX2),
+        gridY2: Number(editForm.gridY2),
+        floor: editForm.floor,
+        esSalaJuntas: editForm.esSalaJuntas ?? false,
+        esComun: editForm.esComun ?? false,
+        tipoComun: editForm.tipoComun ?? null,
+        nombrePropio: editForm.nombrePropio ?? null,
+      },
     });
   }, [editForm]);
 
@@ -197,7 +240,38 @@ export const AreasPage = () => {
     setError("");
     try {
       const res = await getAreas();
-      setAreas(res.data ?? []);
+      const fetched = res.data ?? [];
+      setAreas(fetched);
+      // Bug 3 fix: limpiar de pendingChanges las áreas que ya coinciden con la DB
+      // (evita que datos viejos de localStorage sobreescriban datos frescos)
+      setPendingChanges((prev) => {
+        const cleaned = { ...prev };
+        let changed = false;
+        fetched.forEach((area) => {
+          const p = cleaned[area.id];
+          if (!p) return;
+          const matches =
+            p.label === area.label &&
+            p.gridX1 === area.gridX1 &&
+            p.gridY1 === area.gridY1 &&
+            p.gridX2 === area.gridX2 &&
+            p.gridY2 === area.gridY2 &&
+            p.floor === area.floor &&
+            (p.esSalaJuntas ?? false) === (area.esSalaJuntas ?? false) &&
+            (p.esComun ?? false) === (area.esComun ?? false) &&
+            (p.tipoComun ?? null) === (area.tipoComun ?? null) &&
+            (p.nombrePropio ?? null) === (area.nombrePropio ?? null);
+          if (matches) {
+            delete cleaned[area.id];
+            changed = true;
+          }
+        });
+        if (!changed) return prev;
+        try {
+          localStorage.setItem("siast:areas:pending", JSON.stringify(cleaned));
+        } catch {}
+        return cleaned;
+      });
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al cargar las áreas");
     } finally {
@@ -212,9 +286,7 @@ export const AreasPage = () => {
       const res = await getSirhAdscripciones();
       setSirh(res.data ?? null);
     } catch (err) {
-      setSirhError(
-        err.response?.data?.error ?? "SIRH no disponible. Verifica la conexión.",
-      );
+      setSirhError(err.response?.data?.error ?? "SIRH no disponible. Verifica la conexión.");
     } finally {
       setSirhLoading(false);
     }
@@ -229,32 +301,30 @@ export const AreasPage = () => {
 
   const handleSelect = useCallback((area) => {
     setSelectedId(area.id);
-    setEditForm({ ...area, esSalaJuntas: area.esSalaJuntas ?? false, _dirty: false });
+    setEditForm({
+      ...area,
+      esSalaJuntas: area.esSalaJuntas ?? false,
+      esComun: area.esComun ?? false,
+      tipoComun: area.tipoComun ?? null,
+      nombrePropio: area.nombrePropio ?? null,
+      _dirty: false,
+    });
     setSaveError("");
   }, []);
 
   // ── Resize desde el grid ───────────────────────────────────────────────────
 
   const handleResize = useCallback((id, coords) => {
-    setAreas((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, ...coords } : a)),
-    );
-    setEditForm((prev) =>
-      prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev,
-    );
+    setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...coords } : a)));
+    setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
 
   // ── Move desde el grid ─────────────────────────────────────────────────────
 
   const handleMove = useCallback((id, coords) => {
-    setAreas((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, ...coords } : a)),
-    );
-    setEditForm((prev) =>
-      prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev,
-    );
+    setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...coords } : a)));
+    setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
-
 
   // ── Guardar TODOS los cambios pendientes en la API ────────────────────────
 
@@ -272,7 +342,11 @@ export const AreasPage = () => {
           gridY1: ch.gridY1,
           gridX2: ch.gridX2,
           gridY2: ch.gridY2,
+          floor: ch.floor,
           esSalaJuntas: ch.esSalaJuntas,
+          esComun: ch.esComun ?? false,
+          tipoComun: ch.tipoComun ?? null,
+          nombrePropio: ch.nombrePropio ?? null,
         });
       }
       persistPending({});
@@ -292,7 +366,9 @@ export const AreasPage = () => {
     // Forzar recarga del iframe (Three.js volverá a hacer fetch de /api/catalogos/areas)
     const src = iframe.src;
     iframe.src = "";
-    setTimeout(() => { iframe.src = src; }, 50);
+    setTimeout(() => {
+      iframe.src = src;
+    }, 50);
   };
 
   const handleCancelar = () => {
@@ -300,6 +376,22 @@ export const AreasPage = () => {
     setEditForm(null);
     setSaveError("");
   };
+
+  // ── Muebles: cargar al seleccionar área ──────────────────────────────────
+
+  const loadMuebles = useCallback(async (areaId) => {
+    try {
+      const res = await getMueblesByArea(areaId);
+      const lista = res.data ?? res ?? [];
+      setMueblesPorArea((prev) => ({ ...prev, [areaId]: lista }));
+    } catch {
+      setMueblesPorArea((prev) => ({ ...prev, [areaId]: [] }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedId) loadMuebles(selectedId);
+  }, [selectedId, loadMuebles]);
 
   // ── Eliminar área ──────────────────────────────────────────────────────────
 
@@ -325,7 +417,7 @@ export const AreasPage = () => {
       { items: sirh.nivel5 ?? [], tipo: "Departamento" },
     ];
     return niveles.flatMap(({ items, tipo }) =>
-      items.map((item) => ({ nombre: item.nombre, tipo, nivel: item.nivel ?? null }))
+      items.map((item) => ({ nombre: item.nombre, tipo, nivel: item.nivel ?? null })),
     );
   }, [sirh]);
 
@@ -356,6 +448,9 @@ export const AreasPage = () => {
         gridY1: y1,
         gridX2: x2,
         gridY2: y2,
+        esComun: nuevaForm.esComun ?? false,
+        tipoComun: nuevaForm.tipoComun || null,
+        nombrePropio: nuevaForm.nombrePropio?.trim() || null,
         ...(nuevaAdscripcion && {
           adscripcionNombre: nuevaAdscripcion.nombre,
           adscripcionNivel: nuevaAdscripcion.nivel ?? null,
@@ -381,34 +476,68 @@ export const AreasPage = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, flexWrap: "wrap", gap: 1 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <EditLocationAltIcon sx={{ color: "primary.main" }} />
-          <Typography variant="h5" fontWeight={700}>
-            Mapa de Áreas
-          </Typography>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 0,
+          pb: 2,
+          flexWrap: "wrap",
+          gap: 1,
+          borderBottom: "2px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box
+            sx={{
+              p: 0.75,
+              borderRadius: "8px",
+              bgcolor: "primary.main",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <EditLocationAltIcon sx={{ color: "#fff", fontSize: 20 }} />
+          </Box>
+          <Box>
+            <Typography
+              variant="h5"
+              fontWeight={800}
+              sx={{
+                background: "linear-gradient(135deg, #9d2449 0%, #c0392b 60%, #e74c3c 100%)",
+                backgroundClip: "text",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                lineHeight: 1.1,
+              }}
+            >
+              Mapa de Áreas
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.3 }}>
+              Editor de planta del edificio
+            </Typography>
+          </Box>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-          {pendingCount > 0 && (
-            <Chip
-              label={`${pendingCount} cambio${pendingCount !== 1 ? "s" : ""} pendiente${pendingCount !== 1 ? "s" : ""}`}
-              color="warning"
-              size="small"
-              sx={{ fontWeight: 700 }}
-            />
-          )}
           <Tooltip title="Persiste todos los cambios pendientes en la base de datos">
             <span>
-              <Button
-                variant="outlined"
-                color="warning"
-                size="small"
-                startIcon={savingAll ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                onClick={handleGuardarTodo}
-                disabled={pendingCount === 0 || savingAll}
-              >
-                Guardar todo
-              </Button>
+              <Badge badgeContent={pendingCount} color="warning" max={99}>
+                <Button
+                  variant={pendingCount > 0 ? "contained" : "outlined"}
+                  color="warning"
+                  size="small"
+                  startIcon={
+                    savingAll ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />
+                  }
+                  onClick={handleGuardarTodo}
+                  disabled={pendingCount === 0 || savingAll}
+                  sx={{ fontWeight: 700 }}
+                >
+                  Guardar todo
+                </Button>
+              </Badge>
             </span>
           </Tooltip>
           <Tooltip title="Recarga el modelo 3D desde los datos guardados en la base de datos">
@@ -437,62 +566,73 @@ export const AreasPage = () => {
       </Box>
 
       {saveAllError && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSaveAllError("")}>
+        <Alert severity="error" sx={{ mt: 2, mb: 1 }} onClose={() => setSaveAllError("")}>
           {saveAllError}
         </Alert>
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
           {error}
         </Alert>
       )}
 
       {/* ── Áreas sin mapear ── */}
-      {!loading && (() => {
-        const sinMapear = areas.filter(
-          (a) => a.gridX1 == null || a.gridY1 == null || a.gridX2 == null || a.gridY2 == null,
-        );
-        if (sinMapear.length === 0) return null;
-        return (
-          <Paper variant="outlined" sx={{ mb: 2, p: 1.5, borderColor: "warning.light" }}>
-            <Typography variant="caption" fontWeight={700} color="warning.dark" sx={{ display: "block", mb: 1, letterSpacing: 0.5 }}>
-              {sinMapear.length} ÁREA{sinMapear.length !== 1 ? "S" : ""} SIN MAPEAR — haz clic en "Colocar" para posicionarlas en el grid
-            </Typography>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-              {sinMapear.map((a) => (
-                <Chip
-                  key={a.id}
-                  label={a.label}
-                  size="small"
-                  variant="outlined"
-                  color="warning"
-                  onClick={() => {
-                    // Detectar a qué zona pertenece (por sus coords si las tiene, si no usar izq)
-                    const zoneIdx = ZONES.findIndex((z) => {
-                      const x1 = a.gridX1 ?? -1;
-                      return x1 >= z.colStart && x1 < z.colStart + z.colCount;
-                    });
-                    const targetZoneIdx = zoneIdx >= 0 ? zoneIdx : 0;
-                    const defaultCoords = defaultCoordsForZone(ZONES[targetZoneIdx].key);
-                    const pisoItem = PISOS.find((p) => p.floor === a.floor) ?? PISOS[0];
-                    const withCoords = { ...a, ...defaultCoords, piso: pisoItem.piso };
-                    setAreas((prev) => prev.map((x) => (x.id === a.id ? withCoords : x)));
-                    setPisoIdx(PISOS.findIndex((p) => p.floor === a.floor) >= 0 ? PISOS.findIndex((p) => p.floor === a.floor) : 0);
-                    setAlaIdx(targetZoneIdx);
-                    setSelectedId(a.id);
-                    setEditForm({ ...withCoords, _dirty: true });
-                    setSaveError("");
-                  }}
-                  sx={{ cursor: "pointer" }}
-                  deleteIcon={<span style={{ fontSize: 10, paddingRight: 4 }}>Colocar</span>}
-                  onDelete={() => {}}
-                />
-              ))}
-            </Box>
-          </Paper>
-        );
-      })()}
+      {!loading &&
+        (() => {
+          const sinMapear = areas.filter(
+            (a) => a.gridX1 == null || a.gridY1 == null || a.gridX2 == null || a.gridY2 == null,
+          );
+          if (sinMapear.length === 0) return null;
+          return (
+            <Paper variant="outlined" sx={{ mb: 2, p: 1.5, borderColor: "warning.light" }}>
+              <Typography
+                variant="caption"
+                fontWeight={700}
+                color="warning.dark"
+                sx={{ display: "block", mb: 1, letterSpacing: 0.5 }}
+              >
+                {sinMapear.length} ÁREA{sinMapear.length !== 1 ? "S" : ""} SIN MAPEAR — haz clic en
+                "Colocar" para posicionarlas en el grid
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                {sinMapear.map((a) => (
+                  <Chip
+                    key={a.id}
+                    label={a.label}
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    onClick={() => {
+                      // Detectar a qué zona pertenece (por sus coords si las tiene, si no usar izq)
+                      const zoneIdx = ZONES.findIndex((z) => {
+                        const x1 = a.gridX1 ?? -1;
+                        return x1 >= z.colStart && x1 < z.colStart + z.colCount;
+                      });
+                      const targetZoneIdx = zoneIdx >= 0 ? zoneIdx : 0;
+                      const defaultCoords = defaultCoordsForZone(ZONES[targetZoneIdx].key);
+                      const pisoItem = PISOS.find((p) => p.floor === a.floor) ?? PISOS[0];
+                      const withCoords = { ...a, ...defaultCoords, piso: pisoItem.piso };
+                      setAreas((prev) => prev.map((x) => (x.id === a.id ? withCoords : x)));
+                      setPisoIdx(
+                        PISOS.findIndex((p) => p.floor === a.floor) >= 0
+                          ? PISOS.findIndex((p) => p.floor === a.floor)
+                          : 0,
+                      );
+                      setAlaIdx(targetZoneIdx);
+                      setSelectedId(a.id);
+                      setEditForm({ ...withCoords, _dirty: true });
+                      setSaveError("");
+                    }}
+                    sx={{ cursor: "pointer" }}
+                    deleteIcon={<span style={{ fontSize: 10, paddingRight: 4 }}>Colocar</span>}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </Box>
+            </Paper>
+          );
+        })()}
 
       {/* Layout principal */}
       {loading ? (
@@ -501,35 +641,41 @@ export const AreasPage = () => {
         </Box>
       ) : (
         <Box sx={{ display: "flex", gap: 0, alignItems: "flex-start" }}>
-
           {/* Columna izquierda: tabs de ALA + niveles + grid (2/3) */}
           <Box sx={{ flex: "0 0 67%" }}>
-            <Paper sx={{ borderRadius: "10px", overflow: "hidden" }}>
-
+            <Paper sx={{ borderRadius: "10px", overflow: "hidden", mt: 2 }}>
               {/* TAB nivel 1: ALA IZQUIERDA / CONECTOR / ALA DERECHA */}
               <Box sx={{ borderBottom: "2px solid rgba(0,0,0,0.10)", bgcolor: "grey.50" }}>
                 <Tabs
                   value={alaIdx}
-                  onChange={(_, v) => { setAlaIdx(v); setSelectedId(null); setEditForm(null); }}
+                  onChange={(_, v) => {
+                    setAlaIdx(v);
+                    setSelectedId(null);
+                    setEditForm(null);
+                  }}
                   sx={{ minHeight: 44 }}
                   TabIndicatorProps={{ style: { height: 3 } }}
                 >
-                  {ZONES.map((zone, i) => (
-                    <Tab
-                      key={zone.key}
-                      label={zone.label}
-                      sx={{
-                        minHeight: 44,
-                        fontWeight: 700,
-                        fontSize: zone.key === "conector" ? 11 : 13,
-                        letterSpacing: 0.5,
-                        opacity: alaIdx === i ? 1 : 0.4,
-                        transition: "opacity 0.2s ease",
-                        // Diferenciar visualmente el conector
-                        color: zone.key === "conector" ? "text.secondary" : "inherit",
-                      }}
-                    />
-                  ))}
+                  {ZONES.map((zone, i) => {
+                    const isActive = alaIdx === i;
+                    return (
+                      <Tab
+                        key={zone.key}
+                        label={zone.label}
+                        sx={{
+                          minHeight: 44,
+                          fontWeight: 700,
+                          fontSize: zone.key === "conector" ? 11 : 13,
+                          letterSpacing: 0.5,
+                          opacity: isActive ? 1 : 0.4,
+                          transition: "all 0.2s ease",
+                          bgcolor: isActive ? "rgba(157,36,73,0.07)" : "transparent",
+                          color: isActive ? "primary.main" : "inherit",
+                          borderRadius: "6px 6px 0 0",
+                        }}
+                      />
+                    );
+                  })}
                 </Tabs>
               </Box>
 
@@ -537,12 +683,15 @@ export const AreasPage = () => {
               <Box sx={{ borderBottom: "1px solid rgba(0,0,0,0.07)", bgcolor: "white" }}>
                 <Tabs
                   value={pisoIdx}
-                  onChange={(_, v) => { setPisoIdx(v); setSelectedId(null); setEditForm(null); }}
+                  onChange={(_, v) => {
+                    setPisoIdx(v);
+                    setSelectedId(null);
+                    setEditForm(null);
+                  }}
                   sx={{ minHeight: 38 }}
                   variant="fullWidth"
                 >
                   {PISOS.map((p, i) => {
-                    // Filtrar por zona + piso para el contador
                     const zona = ZONES[alaIdx];
                     const count = areas.filter((a) => {
                       if (a.floor !== p.floor) return false;
@@ -559,8 +708,14 @@ export const AreasPage = () => {
                             <Chip
                               label={count}
                               size="small"
-                              sx={{ height: 16, fontSize: 10, fontWeight: 700 }}
-                              color={isActive ? "primary" : "default"}
+                              sx={{
+                                height: 18,
+                                fontSize: 10,
+                                fontWeight: 800,
+                                bgcolor: isActive ? "primary.main" : "grey.300",
+                                color: isActive ? "#fff" : "text.primary",
+                                "& .MuiChip-label": { px: 0.75 },
+                              }}
                             />
                           </Box>
                         }
@@ -569,9 +724,9 @@ export const AreasPage = () => {
                           fontSize: 12,
                           textTransform: "none",
                           fontWeight: 600,
-                          // Atenuar tabs inactivos visualmente
                           opacity: isActive ? 1 : 0.45,
-                          transition: "opacity 0.2s ease",
+                          transition: "all 0.2s ease",
+                          bgcolor: isActive ? "rgba(157,36,73,0.05)" : "transparent",
                         }}
                       />
                     );
@@ -597,7 +752,7 @@ export const AreasPage = () => {
                       animation: "siast-fadein 0.22s ease",
                       "@keyframes siast-fadein": {
                         from: { opacity: 0, transform: "translateY(4px)" },
-                        to:   { opacity: 1, transform: "translateY(0)" },
+                        to: { opacity: 1, transform: "translateY(0)" },
                       },
                     }}
                   >
@@ -611,6 +766,7 @@ export const AreasPage = () => {
                       colStart={zona.colStart}
                       colCount={zona.colCount}
                       zoneKey={zona.key}
+                      mueblesPorArea={mueblesPorArea}
                       flipY
                     />
                   </Box>
@@ -627,9 +783,18 @@ export const AreasPage = () => {
               top: 16,
               maxHeight: "calc(100vh - 80px)",
               pl: 2,
+              mt: 2,
             }}
           >
-            <Paper sx={{ borderRadius: "10px", overflow: "hidden", height: "100%", display: "flex", flexDirection: "column" }}>
+            <Paper
+              sx={{
+                borderRadius: "10px",
+                overflow: "hidden",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               {/* Panel de edición — solo cuando hay área seleccionada */}
               {editForm && (
                 <EditPanel
@@ -645,14 +810,31 @@ export const AreasPage = () => {
                   todasAdscripciones={todasAdscripciones}
                   esSalaJuntas={editForm.esSalaJuntas ?? false}
                   setEsSalaJuntas={(val) => setEdit("esSalaJuntas", val)}
+                  muebles={mueblesPorArea[editForm.id] ?? []}
+                  onMueblesChange={() => loadMuebles(editForm.id)}
                 />
               )}
 
               {/* Visor 3D — siempre en el DOM (ref persiste); oculto con display:none cuando hay edición activa */}
               <Box sx={{ display: editForm ? "none" : "flex", flexDirection: "column", flex: 1 }}>
-                <Box sx={{ px: 2, py: 1, borderBottom: "1px solid rgba(0,0,0,0.08)", bgcolor: "grey.50", display: "flex", alignItems: "center", gap: 1 }}>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 1,
+                    borderBottom: "1px solid rgba(0,0,0,0.08)",
+                    bgcolor: "grey.50",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
                   <ThreeDRotationIcon sx={{ fontSize: 16, color: "primary.main" }} />
-                  <Typography variant="caption" fontWeight={700} color="primary.main" letterSpacing={0.5}>
+                  <Typography
+                    variant="caption"
+                    fontWeight={700}
+                    color="primary.main"
+                    letterSpacing={0.5}
+                  >
                     VISOR 3D
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -663,7 +845,13 @@ export const AreasPage = () => {
                   ref={visor3DRef}
                   src="http://localhost:5174"
                   title="Visor 3D Edificio"
-                  style={{ flex: 1, width: "100%", border: "none", display: "block", minHeight: 300 }}
+                  style={{
+                    flex: 1,
+                    width: "100%",
+                    border: "none",
+                    display: "block",
+                    minHeight: 300,
+                  }}
                 />
               </Box>
             </Paper>
@@ -673,15 +861,19 @@ export const AreasPage = () => {
 
       {/* Modal Nueva Area */}
       <Dialog open={modalOpen} onClose={() => setModalOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Nueva Area</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Nueva Area</DialogTitle>
+        <DialogContent
+          sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}
+        >
           {nuevaError && <Alert severity="error">{nuevaError}</Alert>}
 
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField
               label="ID (unico)"
               value={nuevaForm.id}
-              onChange={(e) => setNueva("id", e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))}
+              onChange={(e) =>
+                setNueva("id", e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))
+              }
               fullWidth
               required
               helperText="ej: n2_nominas — solo letras, numeros y guiones bajos"
@@ -742,24 +934,85 @@ export const AreasPage = () => {
             )}
           />
 
-          <Typography variant="caption" color="text.secondary" fontWeight={600}>
-            Coordenadas en la cuadrícula (0-based) — valores por defecto visibles en el grid
-          </Typography>
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            {["gridX1", "gridY1", "gridX2", "gridY2"].map((field) => (
-              <TextField
-                key={field}
-                label={field.replace("grid", "")}
-                value={nuevaForm[field]}
-                onChange={(e) => setNueva(field, e.target.value.replace(/\D/g, ""))}
-                size="small"
-                inputProps={{ inputMode: "numeric", maxLength: 3 }}
-                sx={{ flex: 1 }}
-              />
-            ))}
+          {/* Sección coordenadas — fondo diferenciado */}
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: "8px",
+              bgcolor: "action.hover",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              fontWeight={700}
+              sx={{ letterSpacing: 0.5, display: "block", mb: 1 }}
+            >
+              COORDENADAS EN LA CUADRICULA (0-based)
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1.5 }}>
+              {["gridX1", "gridY1", "gridX2", "gridY2"].map((field) => (
+                <TextField
+                  key={field}
+                  label={field.replace("grid", "")}
+                  value={nuevaForm[field]}
+                  onChange={(e) => setNueva(field, e.target.value.replace(/\D/g, ""))}
+                  size="small"
+                  inputProps={{ inputMode: "numeric", maxLength: 3 }}
+                  sx={{ flex: 1 }}
+                />
+              ))}
+            </Box>
           </Box>
+
+          <Divider />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={nuevaForm.esComun ?? false}
+                onChange={(e) => setNueva("esComun", e.target.checked)}
+                size="small"
+              />
+            }
+            label={<Typography variant="body2">Es Area Comun</Typography>}
+          />
+
+          {(nuevaForm.esComun ?? false) && (
+            <>
+              <FormControl fullWidth size="small">
+                <InputLabel>Tipo de Area Comun</InputLabel>
+                <Select
+                  value={nuevaForm.tipoComun ?? ""}
+                  label="Tipo de Area Comun"
+                  onChange={(e) => setNueva("tipoComun", e.target.value || "")}
+                >
+                  <MenuItem value="">
+                    <em>Sin tipo</em>
+                  </MenuItem>
+                  {Object.entries(TIPO_AREA_COMUN_LABELS).map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <TextField
+                label="Nombre propio"
+                value={nuevaForm.nombrePropio ?? ""}
+                onChange={(e) => setNueva("nombrePropio", e.target.value)}
+                fullWidth
+                size="small"
+                placeholder="ej: Sala Oaxaca, Bano Norte..."
+                helperText="Nombre especifico del espacio (opcional)"
+              />
+            </>
+          )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setModalOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={handleNuevaGuardar} disabled={nuevaSaving}>
             {nuevaSaving ? <CircularProgress size={18} /> : "Crear Area"}
@@ -773,7 +1026,31 @@ export const AreasPage = () => {
   );
 };
 
+// ── Constantes de tipos de mueble ────────────────────────────────────────────
+
+const TIPOS_MUEBLE = [
+  { value: "CUBICULO", label: "Cubículo", color: "#4caf50" },
+  { value: "ESCRITORIO", label: "Escritorio", color: "#2196f3" },
+  { value: "SALA", label: "Sala", color: "#9c27b0" },
+  { value: "IMPRESORA", label: "Impresora", color: "#ff9800" },
+  { value: "BODEGA", label: "Bodega", color: "#795548" },
+  { value: "OTRO", label: "Otro", color: "#607d8b" },
+];
+
+const colorMueble = (tipo) => TIPOS_MUEBLE.find((t) => t.value === tipo)?.color ?? "#607d8b";
+
+const labelMueble = (tipo) => TIPOS_MUEBLE.find((t) => t.value === tipo)?.label ?? tipo;
+
 // ── Sub-componente: panel de edición ─────────────────────────────────────────
+
+const MUEBLE_EMPTY = {
+  label: "",
+  tipo: "CUBICULO",
+  posX: "",
+  posY: "",
+  ancho: "",
+  alto: "",
+};
 
 function EditPanel({
   form,
@@ -787,47 +1064,123 @@ function EditPanel({
   todasAdscripciones,
   esSalaJuntas,
   setEsSalaJuntas,
+  muebles,
+  onMueblesChange,
 }) {
   const [adscripcion, setAdscripcion] = useState(null);
+  const [mueblesExpanded, setMueblesExpanded] = useState(false);
+  const [addingMueble, setAddingMueble] = useState(false);
+  const [muebleForm, setMuebleForm] = useState(MUEBLE_EMPTY);
+  const [muebleSaving, setMuebleSaving] = useState(false);
+  const [muebleError, setMuebleError] = useState("");
 
   const handleAdscripcionChange = (_, val) => {
     setAdscripcion(val);
     if (val) setEdit("label", val.nombre);
   };
+
+  const handleGuardarMueble = async () => {
+    if (!muebleForm.label.trim()) {
+      setMuebleError("El nombre es obligatorio");
+      return;
+    }
+    setMuebleSaving(true);
+    setMuebleError("");
+    try {
+      await createMueble(form.id, {
+        label: muebleForm.label.trim(),
+        tipo: muebleForm.tipo,
+        posX: muebleForm.posX !== "" ? Number(muebleForm.posX) : null,
+        posY: muebleForm.posY !== "" ? Number(muebleForm.posY) : null,
+        ancho: muebleForm.ancho !== "" ? Number(muebleForm.ancho) : null,
+        alto: muebleForm.alto !== "" ? Number(muebleForm.alto) : null,
+      });
+      setMuebleForm(MUEBLE_EMPTY);
+      setAddingMueble(false);
+      onMueblesChange();
+    } catch (err) {
+      setMuebleError(err.response?.data?.error ?? "Error al guardar mueble");
+    } finally {
+      setMuebleSaving(false);
+    }
+  };
+
+  const handleEliminarMueble = async (muebleId) => {
+    try {
+      await deleteMueble(muebleId);
+      onMueblesChange();
+    } catch {
+      // silencioso — el usuario puede reintentar
+    }
+  };
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "auto" }}>
-      {/* Header del panel */}
+      {/* Header del panel — peso visual mayor */}
       <Box
         sx={{
           px: 2,
           py: 1.5,
-          borderBottom: "1px solid rgba(0,0,0,0.08)",
+          borderBottom: "2px solid",
+          borderColor: "primary.main",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          bgcolor: "grey.50",
+          background: "linear-gradient(135deg, rgba(157,36,73,0.08) 0%, rgba(157,36,73,0.03) 100%)",
         }}
       >
-        <Typography variant="subtitle2" fontWeight={700} noWrap sx={{ maxWidth: 160 }}>
-          {form.label || form.id}
-        </Typography>
-        <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+        <Box>
+          <Typography
+            variant="subtitle1"
+            fontWeight={800}
+            noWrap
+            sx={{ maxWidth: 160, lineHeight: 1.2 }}
+          >
+            {form.label || form.id}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+            {form.id}
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            display: "flex",
+            gap: 0.5,
+            alignItems: "center",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
           {isPending && (
-            <Chip label="Pendiente" size="small" color="warning" sx={{ fontWeight: 700, fontSize: 10, height: 18 }} />
+            <Chip
+              label="Pendiente"
+              size="small"
+              color="warning"
+              sx={{ fontWeight: 700, fontSize: 10, height: 20, "& .MuiChip-label": { px: 1 } }}
+            />
           )}
           <Chip
             label={`PISO ${PISO_LABELS[form.piso] ?? form.piso}`}
             size="small"
             color="primary"
-            sx={{ fontWeight: 700, fontSize: 11 }}
+            variant="filled"
+            sx={{ fontWeight: 700, fontSize: 11, height: 20, "& .MuiChip-label": { px: 1 } }}
           />
         </Box>
       </Box>
 
-      <Box sx={{ flex: 1, overflow: "auto", p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
-        {saveError && <Alert severity="error" sx={{ fontSize: 12 }}>{saveError}</Alert>}
+      <Box
+        sx={{ flex: 1, overflow: "auto", p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}
+      >
+        {saveError && (
+          <Alert severity="error" sx={{ fontSize: 12 }}>
+            {saveError}
+          </Alert>
+        )}
 
-        {/* Nombre */}
+        {/* Sección: Datos del área */}
+        <SectionLabel>DATOS DEL AREA</SectionLabel>
+
         <TextField
           label="Nombre del area"
           value={form.label}
@@ -847,20 +1200,78 @@ function EditPanel({
           }
           label={
             <Typography variant="body2" color="text.secondary">
-              Sala de juntas / Salon
+              Sala de juntas (legacy)
             </Typography>
           }
+          sx={{ ml: 0 }}
         />
 
-        <Divider />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={form.esComun ?? false}
+              onChange={(e) => setEdit("esComun", e.target.checked)}
+              size="small"
+            />
+          }
+          label={
+            <Typography variant="body2" color="text.secondary">
+              Es Area Comun
+            </Typography>
+          }
+          sx={{ ml: 0 }}
+        />
 
-        {/* Asignar desde SIRH */}
-        <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ letterSpacing: 0.5 }}>
-          ADSCRIPCION SIRH
-        </Typography>
+        {(form.esComun ?? false) && (
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.5,
+              pl: 1,
+              borderLeft: "3px solid",
+              borderColor: "info.light",
+            }}
+          >
+            <FormControl fullWidth size="small">
+              <InputLabel>Tipo de Area Comun</InputLabel>
+              <Select
+                value={form.tipoComun ?? ""}
+                label="Tipo de Area Comun"
+                onChange={(e) => setEdit("tipoComun", e.target.value || null)}
+              >
+                <MenuItem value="">
+                  <em>Sin tipo</em>
+                </MenuItem>
+                {Object.entries(TIPO_AREA_COMUN_LABELS).map(([value, label]) => (
+                  <MenuItem key={value} value={value}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Nombre propio"
+              value={form.nombrePropio ?? ""}
+              onChange={(e) => setEdit("nombrePropio", e.target.value || null)}
+              fullWidth
+              size="small"
+              placeholder="ej: Sala Oaxaca, Bano Norte..."
+              helperText="Nombre especifico del espacio (opcional)"
+            />
+          </Box>
+        )}
+
+        <Divider sx={{ my: 0.5 }} />
+
+        {/* Sección: Adscripción SIRH */}
+        <SectionLabel>ADSCRIPCION SIRH</SectionLabel>
 
         {sirhError ? (
-          <Alert severity="warning" sx={{ fontSize: 11 }}>{sirhError}</Alert>
+          <Alert severity="warning" sx={{ fontSize: 11 }}>
+            {sirhError}
+          </Alert>
         ) : (
           <>
             <Autocomplete
@@ -898,25 +1309,255 @@ function EditPanel({
           </>
         )}
 
-        <Divider />
+        <Divider sx={{ my: 0.5 }} />
 
-        {/* Coordenadas grid */}
-        <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ letterSpacing: 0.5 }}>
-          POSICION EN CUADRICULA
-        </Typography>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          {["gridX1", "gridY1", "gridX2", "gridY2"].map((field) => (
-            <TextField
-              key={field}
-              label={field.replace("grid", "")}
-              value={form[field] ?? ""}
-              onChange={(e) => setEdit(field, e.target.value === "" ? "" : Number(e.target.value))}
-              size="small"
-              type="number"
-              inputProps={{ min: 0, max: field.startsWith("gridX") ? 31 : 26 }}
-              sx={{ flex: 1 }}
+        {/* Sección: Coordenadas */}
+        <SectionLabel>POSICION EN CUADRICULA</SectionLabel>
+        <Box
+          sx={{
+            p: 1.5,
+            borderRadius: "6px",
+            bgcolor: "action.hover",
+            border: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {["gridX1", "gridY1", "gridX2", "gridY2"].map((field) => (
+              <TextField
+                key={field}
+                label={field.replace("grid", "")}
+                value={form[field] ?? ""}
+                onChange={(e) =>
+                  setEdit(field, e.target.value === "" ? "" : Number(e.target.value))
+                }
+                size="small"
+                type="number"
+                inputProps={{ min: 0, max: field.startsWith("gridX") ? 31 : 26 }}
+                sx={{ flex: 1 }}
+              />
+            ))}
+          </Box>
+        </Box>
+
+        <Divider sx={{ my: 0.5 }} />
+
+        {/* Sección: Muebles / Cubículos — colapsable */}
+        <Box>
+          <Box
+            onClick={() => setMueblesExpanded((v) => !v)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              cursor: "pointer",
+              py: 0.5,
+              borderRadius: "4px",
+              "&:hover": { bgcolor: "action.hover" },
+              px: 0.5,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <ChairIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+              <Typography
+                variant="caption"
+                fontWeight={700}
+                color="text.secondary"
+                sx={{ letterSpacing: 0.8, fontSize: 11 }}
+              >
+                MUEBLES / CUBICULOS
+              </Typography>
+              {muebles.length > 0 && (
+                <Chip
+                  label={muebles.length}
+                  size="small"
+                  sx={{
+                    height: 16,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    bgcolor: "primary.main",
+                    color: "#fff",
+                    "& .MuiChip-label": { px: 0.75 },
+                  }}
+                />
+              )}
+            </Box>
+            <ExpandMoreIcon
+              sx={{
+                fontSize: 18,
+                color: "text.secondary",
+                transition: "transform 0.2s",
+                transform: mueblesExpanded ? "rotate(180deg)" : "rotate(0deg)",
+              }}
             />
-          ))}
+          </Box>
+
+          <Collapse in={mueblesExpanded}>
+            <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+              {/* Lista de muebles existentes */}
+              {muebles.length > 0 && (
+                <Paper variant="outlined" sx={{ borderRadius: "6px", overflow: "hidden" }}>
+                  <List dense disablePadding>
+                    {muebles.map((m, idx) => (
+                      <ListItem
+                        key={m.id}
+                        divider={idx < muebles.length - 1}
+                        secondaryAction={
+                          <Tooltip title="Eliminar mueble">
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              color="error"
+                              onClick={() => handleEliminarMueble(m.id)}
+                            >
+                              <DeleteIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          </Tooltip>
+                        }
+                        sx={{ py: 0.5 }}
+                      >
+                        <Box
+                          sx={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: "50%",
+                            bgcolor: colorMueble(m.tipo),
+                            mr: 1,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <ListItemText
+                          primary={
+                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>
+                              {m.label}
+                            </Typography>
+                          }
+                          secondary={
+                            <Chip
+                              label={labelMueble(m.tipo)}
+                              size="small"
+                              sx={{
+                                height: 14,
+                                fontSize: 9,
+                                fontWeight: 700,
+                                bgcolor: colorMueble(m.tipo) + "22",
+                                color: colorMueble(m.tipo),
+                                "& .MuiChip-label": { px: 0.75 },
+                                mt: 0.25,
+                              }}
+                            />
+                          }
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+              )}
+
+              {/* Formulario inline para agregar mueble */}
+              {addingMueble ? (
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 1.5,
+                    borderRadius: "6px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 1,
+                  }}
+                >
+                  {muebleError && (
+                    <Alert severity="error" sx={{ fontSize: 11, py: 0 }}>
+                      {muebleError}
+                    </Alert>
+                  )}
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <TextField
+                      label="Nombre"
+                      value={muebleForm.label}
+                      onChange={(e) => setMuebleForm((p) => ({ ...p, label: e.target.value }))}
+                      size="small"
+                      fullWidth
+                      autoFocus
+                      required
+                    />
+                    <FormControl size="small" sx={{ minWidth: 110 }}>
+                      <InputLabel>Tipo</InputLabel>
+                      <Select
+                        value={muebleForm.tipo}
+                        label="Tipo"
+                        onChange={(e) => setMuebleForm((p) => ({ ...p, tipo: e.target.value }))}
+                      >
+                        {TIPOS_MUEBLE.map((t) => (
+                          <MenuItem key={t.value} value={t.value}>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                              <Box
+                                sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: t.color }}
+                              />
+                              {t.label}
+                            </Box>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    {["posX", "posY", "ancho", "alto"].map((field) => (
+                      <TextField
+                        key={field}
+                        label={field}
+                        value={muebleForm[field]}
+                        onChange={(e) =>
+                          setMuebleForm((p) => ({
+                            ...p,
+                            [field]: e.target.value.replace(/[^0-9.]/g, ""),
+                          }))
+                        }
+                        size="small"
+                        inputProps={{ inputMode: "decimal" }}
+                        sx={{ flex: 1 }}
+                        placeholder="0-1"
+                      />
+                    ))}
+                  </Box>
+                  <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setAddingMueble(false);
+                        setMuebleForm(MUEBLE_EMPTY);
+                        setMuebleError("");
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={handleGuardarMueble}
+                      disabled={muebleSaving}
+                      startIcon={
+                        muebleSaving ? <CircularProgress size={12} color="inherit" /> : null
+                      }
+                    >
+                      Guardar
+                    </Button>
+                  </Box>
+                </Paper>
+              ) : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => setAddingMueble(true)}
+                  fullWidth
+                  sx={{ borderStyle: "dashed" }}
+                >
+                  Agregar mueble
+                </Button>
+              )}
+            </Box>
+          </Collapse>
         </Box>
       </Box>
 
@@ -924,7 +1565,8 @@ function EditPanel({
       <Box
         sx={{
           p: 2,
-          borderTop: "1px solid rgba(0,0,0,0.08)",
+          borderTop: "1px solid",
+          borderColor: "divider",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -939,7 +1581,12 @@ function EditPanel({
         </Tooltip>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           {isPending && (
-            <Typography variant="caption" color="warning.dark" fontWeight={700} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Typography
+              variant="caption"
+              color="warning.dark"
+              fontWeight={700}
+              sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+            >
               <SaveIcon sx={{ fontSize: 13 }} /> Auto-guardado
             </Typography>
           )}
@@ -949,5 +1596,25 @@ function EditPanel({
         </Box>
       </Box>
     </Box>
+  );
+}
+
+// ── Sub-componente: etiqueta de sección ───────────────────────────────────────
+
+function SectionLabel({ children }) {
+  return (
+    <Typography
+      variant="caption"
+      fontWeight={700}
+      color="text.secondary"
+      sx={{
+        letterSpacing: 0.8,
+        fontSize: 10,
+        display: "block",
+        mt: 0.5,
+      }}
+    >
+      {children}
+    </Typography>
   );
 }
