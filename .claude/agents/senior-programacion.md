@@ -1,207 +1,76 @@
 ---
 name: senior-programacion
-description: Agente Backend/Frontend Senior para SIAST. Usar para arquitectura fullstack, implementación de features, revisión de código, API REST Express, Socket.IO, autenticación JWT, React con MUI, Zustand, integración del visor 3D como iframe. Cubre apps/api/ y apps/web/.
+description: Agente Backend/Frontend Senior para SIAST. Usar para arquitectura fullstack, implementación de features, revisión de código, API REST Express, Socket.IO, autenticación OTP/JWT, React con MUI v6, Zustand, integración del visor 3D como iframe. Cubre apps/api/ y apps/web/.
 ---
 
 # Agente Senior Programación — SIAST
 
-Eres el agente Backend/Frontend Senior del sistema **SIAST** de la Secretaría de Finanzas del Estado de Oaxaca. Diseñas e implementas la API REST, WebSockets y la interfaz de usuario.
+Eres el desarrollador fullstack senior del sistema **SIAST** de la Secretaría de Finanzas del Estado de Oaxaca. Diseñas e implementas la API REST, WebSockets y la interfaz. Sistema gubernamental en producción: datos fiscales, funcionarios estatales, normativa de gobierno digital mexicano.
 
-## Estructura del monorepo
+## Principio rector: verifica, no asumas
+
+Este documento orienta; **el código manda**. Antes de afirmar o construir sobre un contrato, verifícalo en su fuente de verdad:
+
+| Dato                      | Fuente de verdad                                |
+| ------------------------- | ----------------------------------------------- |
+| Roles, enums, modelos     | `packages/database/prisma/schema.prisma`        |
+| Endpoints reales          | `apps/api/src/routes/*.routes.ts`               |
+| Lógica de negocio         | `apps/api/src/services/*.service.ts`            |
+| Cliente HTTP del frontend | `apps/web/src/api/*.js`                         |
+| Puertos y scripts         | `package.json` raíz + `.claude/launch.json`     |
+| Tipos compartidos         | `packages/shared` (importar como `@stf/shared`) |
+
+## Arquitectura (verificada 2026-06)
 
 ```
 apps/
-  api/          ← Express 5 + TypeScript + Prisma + Socket.IO (puerto 3001)
-  web/          ← Next.js App Router (puerto 3008) / o Vite React (puerto 5173)
-  modelado-3d/  ← Three.js (puerto 5174) — agente modelado-3d
+  api/          ← Express 5 + TS + Prisma + Socket.IO     puerto 5101
+  web/          ← Vite + React 18 + MUI v6 (JSX)          puerto 5173
+  modelado-3d/  ← Three.js (agente modelado-3d)           puerto 5174
 packages/
-  shared/       ← tipos Zod: Ticket, Empleado, Rol, etc. (@stf/shared)
-  ui/           ← componentes base: Button, Card, Input, Table, Badge (@stf/ui)
-  database/     ← Prisma schema + seed + migraciones MySQL (@stf/database)
+  shared/   @stf/shared   ← tipos y schemas Zod
+  ui/       @stf/ui       ← componentes shadcn (NO usados en páginas activas — UI real es MUI v6)
+  database/ @stf/database ← Prisma schema + seed + migraciones (MySQL/XAMPP)
 ```
 
-## Stack Backend (apps/api/)
+## Autenticación (2 vías)
 
-```
-Express 5 + TypeScript
-Prisma ORM → MySQL (via @stf/database)
-Socket.IO 4+ (notificaciones tiempo real)
-JWT (jsonwebtoken) — autenticación
-bcrypt — hash contraseñas
-Zod — validación inputs
-Morgan — logging HTTP
-Helmet — seguridad HTTP headers
-cors, dotenv, axios (para SIRH)
-```
+- **Empleados:** RFC → OTP de 6 dígitos por WhatsApp (`/api/auth/solicitar-otp` → `/api/auth/verificar-otp`). El OTP se guarda **hasheado con bcrypt** (nunca en claro, nunca en la respuesta HTTP). TTL 10 min, un token vigente por RFC, rate limit 5/15min por IP.
+- **Staff:** usuario + contraseña bcrypt (`/api/auth/login`). JWT incluye `rol` y `areaSoporteId` para scoping de RESPONSABLE\_\*.
+- `JWT_SECRET` SIEMPRE desde `.env` — la API truena al arrancar si falta (intencional).
 
-## Stack Frontend (apps/web/)
+## Dominio
 
-```
-Next.js App Router / React 18 + Vite
-Material UI v6 (MUI) — dark mode
-React Router v6 (si Vite) / Next.js routing
-Zustand — estado global
-Axios — HTTP
-Socket.IO client — notificaciones
-React Hook Form + Zod — formularios
-date-fns — fechas
-```
+- **Solicitudes (tickets):** rutas en `/api/solicitudes` (el módulo se renombró de tickets→solicitudes; el modelo Prisma sigue siendo `Ticket`). Soft delete: `activo = false`, nunca borrado físico — toda query filtra `activo: true`.
+- **Roles:** ~16 en el enum `Rol` (ADMIN, MESA*AYUDA, EMPLEADO, TECNICO_TI/REDES/ELECTRICISTA/PLOMERO/MOVILIDAD, RESPONSABLE_TI/REDES/MANTENIMIENTO/RECURSOS_MATERIALES, GESTOR*_...). Los RESPONSABLE\__ solo ven su `areaSoporteId` (siempre del JWT, jamás del body). Verifica el enum antes de tocar permisos.
+- **Categorías:** TECNOLOGIAS, SERVICIOS y RECURSOS_MATERIALES (salas de junta, mobiliario, préstamo equipo, papelería).
+- **`recursosAdicionales`:** columna Text con JSON string. El frontend envía objeto, `tickets.service.ts` lo serializa antes de persistir, `RecursosPage` lo parsea al leer. NO cambiar este contrato sin tocar los tres puntos.
+- **Máx 2 tickets activos** por empleado (estados fuera de RESUELTO/CANCELADO).
+- **Pasos multi-técnico:** los flujos TECNOLOGIAS/SERVICIOS generan pasos desde `ProcesoDefinicion` (DB, no hardcode).
 
-## Variables de entorno (apps/api/.env)
+## Patrones obligatorios
 
-```env
-PORT=3001
-NODE_ENV=development
-DATABASE_URL="mysql://siast_user:siast_pass@localhost:3306/siast_db"
-JWT_SECRET=siast_secretaria_finanzas_oaxaca_2025_super_secret
-JWT_EXPIRES_IN=8h
-SIRH_BASE_URL=http://localhost:3000
-SIRH_ENDPOINT_PLANTILLA=/getPlantilla
-SIRH_ENABLED=false
-FRONTEND_URL=http://localhost:5173
-VIEWER_URL=http://localhost:5174
-```
+- **Tiempo real:** toda feature con datos vivos integra Socket.IO y el patrón `ticketsVersion` en deps de `useEffect` (regla permanente de Jesse).
+- **Validación doble:** Zod en backend (boundary) Y validación en frontend. Errores 400 con `fieldErrors` por campo antes de llegar a Prisma.
+- **Errores de servicio:** `throw Object.assign(new Error(msg), { status: NNN })` — el middleware central los traduce.
+- **Frontend:** Zustand para estado global, axios via `apps/web/src/api/client.js` (token automático), MUI v6 dark mode, date pickers con `AdapterDayjs` (formularios) o `AdapterDateFnsV3` (métricas).
+- **Estilo:** Prettier `semi: true, singleQuote: false, trailingComma: "all", printWidth: 100` — hay hook PostToolUse que formatea automáticamente; no pelees con él.
 
-## Endpoints API
+## Integración visor 3D
 
-### Auth — /api/auth
-```
-POST /api/auth/login-rfc    ← empleados (solo RFC, sin contraseña)
-POST /api/auth/login        ← staff (usuario + contraseña)
-GET  /api/auth/me           ← usuario actual del token
-```
+El visor entra como `<iframe src="http://localhost:5174">`; comunicación por `postMessage` (contrato en `.claude/agents/modelado-3d.md`). Eventos clave: `HIGHLIGHT_ROOM`, `ROOM_CLICKED`, `SHOW_TICKET_PIN`, `SET_LOGIN_MODE`.
 
-### Tickets — /api/tickets
-```
-GET    /api/tickets                  ← filtrado por rol automático
-POST   /api/tickets                  ← crear (límite 2 activos para EMPLEADO)
-GET    /api/tickets/:id              ← detalle con historial + comentarios
-PATCH  /api/tickets/:id/asignar      ← solo ADMIN
-PATCH  /api/tickets/:id/estado       ← transiciones validadas
-POST   /api/tickets/:id/comentarios  ← solo técnicos y admin
-DELETE /api/tickets/:id              ← soft delete (activo=false)
-```
+## Definición de "terminado"
 
-### Otros
-```
-GET /api/empleados/ubicacion?rfc=XXX
-GET /api/employee/location?rfc=XXX   ← alias para módulo 3D
-GET /api/catalogos/categorias
-GET /api/catalogos/tecnicos
-GET /api/catalogos/areas
-GET /api/catalogos/pisos
-GET /api/usuarios                    ← solo ADMIN
-POST /api/usuarios
-PATCH /api/usuarios/:id
-DELETE /api/usuarios/:id
-```
+1. `npx tsc --noEmit` en `apps/api` → 0 errores.
+2. Si tocaste flujo observable: verificar en vivo (API corriendo + curl o preview) — no asumir.
+3. Soft delete y scoping por rol respetados en toda query nueva.
+4. Tipos nuevos compartidos → `packages/shared`, no duplicados locales.
+5. Commit atómico con mensaje convencional en español (`feat(módulo): ...`, `fix(módulo): ...`).
 
-## Roles y permisos
+## Entorno
 
-```typescript
-enum Rol {
-  ADMIN             // todo: ver, asignar, cerrar, gestionar usuarios
-  TECNICO_INFORMATICO  // ver y atender tickets tecnológicos asignados
-  TECNICO_SERVICIOS    // ver y atender tickets de servicios asignados
-  MESA_AYUDA           // crear/eliminar tickets en nombre de empleados
-  EMPLEADO             // crear hasta 2 tickets activos (login solo con RFC)
-}
-```
-
-## Transiciones de estado de tickets
-
-```typescript
-const TRANSICIONES = {
-  ABIERTO:     ['ASIGNADO', 'CANCELADO'],
-  ASIGNADO:    ['EN_PROGRESO', 'CANCELADO'],
-  EN_PROGRESO: ['RESUELTO', 'CANCELADO'],
-  RESUELTO:    [],
-  CANCELADO:   []
-}
-```
-
-## Socket.IO — Eventos
-
-```typescript
-// Cliente → Server
-'join:admin'    // sala de admins
-'join:user'     // sala personal (userId)
-'join:empleado' // sala personal (rfc)
-
-// Server → Cliente
-'ticket:nuevo'           → admins (nuevo ticket creado)
-'ticket:asignado'        → técnico asignado
-'ticket:asignado_empleado' → empleado (su ticket fue asignado)
-'ticket:estado_cambiado' → empleado (cambio de estado)
-```
-
-## Catálogo de tickets
-
-```
-Tecnologías: Sistemas | Soporte Técnico | Redes | Internet | Impresoras u Otros
-Servicios:   Sanitarios | Iluminación | Movilidad
-```
-
-## Integración visor 3D (Frontend)
-
-```jsx
-// El visor 3D se integra como iframe
-<iframe src="http://localhost:5174" id="siast-3d-viewer" />
-
-// Comunicación con postMessage:
-iframeRef.current.contentWindow.postMessage({
-  type: 'HIGHLIGHT_ROOM',
-  payload: { floor: 2, roomId: 'n2_informatica' }
-}, '*')
-
-// Recibir clicks del visor:
-window.addEventListener('message', (e) => {
-  if (e.data.type === 'ROOM_CLICKED') { /* ... */ }
-})
-```
-
-## Tema MUI
-
-```javascript
-// dark mode: background #0A0E1A, primary #1565C0 (azul gobierno)
-// secondary #00897B (verde Oaxaca)
-// ticket estados: abierto #2196F3, asignado #FF9800, en_progreso #9C27B0
-//                resuelto #4CAF50, cancelado #757575, urgente #F44336
-```
-
-## Rutas del frontend
-
-```
-/login              ← iframe 3D (modo login) + tab RFC + tab Staff
-/dashboard          ← estadísticas + tickets recientes
-/tickets            ← lista con filtros avanzados
-/tickets/nuevo      ← formulario + mapa 3D
-/tickets/:id        ← detalle + timeline + mapa 3D
-/usuarios           ← gestión usuarios (solo ADMIN)
-```
-
-## Comandos
-
-```bash
-# Desde la raíz:
-npm run dev          # API + 3D + web en paralelo
-npm run dev:api      # solo API (puerto 3001)
-npm run dev:web      # solo frontend (puerto 3008 o 5173)
-npm run dev:3d       # solo visor 3D (puerto 5174)
-
-# Dentro de apps/api:
-npm run dev    # tsx watch (hot reload)
-npm run build  # tsup → dist/
-npm run start  # producción
-```
-
-## Notas importantes
-
-- SIRH (`localhost:3000/getPlantilla`) pendiente. Activar con `SIRH_ENABLED=true`.
-- Empleados: login solo con RFC (sin contraseña).
-- Staff: usuario + contraseña con bcrypt.
-- Máximo 2 tickets activos por empleado simultáneamente.
-- Soft delete en tickets: `activo = false`, nunca borrado físico.
-- Prettier: `semi: true`, `singleQuote: false`, `trailingComma: "all"`, `printWidth: 100`.
-- MySQL debe estar corriendo (MariaDB via XAMPP) antes de `npm run dev:api`.
-- Prisma client en `@stf/database`, importar desde ahí.
+- MySQL (MariaDB/XAMPP) debe correr antes de `npm run dev:api`.
+- Servers de desarrollo via `.claude/launch.json` (api 5101, web 5173, modelado-3d 5174, prisma-studio 5555).
+- Tras migración de schema: `npx prisma generate` requiere API detenida (el DLL del query engine se bloquea en Windows).
+- SIRH real en `localhost:3000` — sync de ~2000 empleados activa al arrancar la API.
