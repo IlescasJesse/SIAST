@@ -28,29 +28,26 @@ const gridToScene = (x1, y1, x2, y2) => {
  * Crea un mesh de cuarto.
  */
 // Opacidad base del "acrílico arquitectónico" de las áreas (maqueta de vidrio).
-export const ROOM_BASE_OPACITY = 0.42;
+export const ROOM_BASE_OPACITY = 0.48;
 
 /**
- * Material de área tipo "vidrio esmerilado de maqueta arquitectónica".
- * MeshPhysicalMaterial con transmission para un look de acrílico translúcido
- * teñido del color del área. transmission es barato a este conteo de meshes
- * (≈22 áreas) y aporta el salto de calidad visual principal.
+ * Material de área tipo "acrílico de maqueta arquitectónica".
+ * Transparencia alfa simple — sin transmission: el pase de transmisión de
+ * Three.js solo ve objetos opacos, así que un cuarto de vidrio detrás de otro
+ * desaparecía (se veía el fondo blanquecino). depthWrite:false evita que el
+ * orden de dibujo de cajas solapadas oculte cuartos según el ángulo de cámara.
  */
 const createRoomMaterial = (color) =>
   new THREE.MeshPhysicalMaterial({
     color,
-    roughness: 0.18,
+    roughness: 0.35,
     metalness: 0,
-    transmission: 0.55, // deja pasar luz/fondo → vidrio
-    thickness: 1.2,
-    ior: 1.35,
     transparent: true,
     opacity: ROOM_BASE_OPACITY,
+    depthWrite: false,
     clearcoat: 0.6,
     clearcoatRoughness: 0.25,
-    envMapIntensity: 1.1,
-    attenuationColor: new THREE.Color(color),
-    attenuationDistance: 4,
+    envMapIntensity: 0.7,
   });
 
 export const createRoomMesh = (room) => {
