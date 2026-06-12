@@ -12,6 +12,7 @@
     "db:setup": "bash scripts/setup.sh",
     "db:sync-sirh": "tsx scripts/sync-sirh.ts",
     "db:reset-areas": "tsx prisma/resetAreas.ts",
+    "db:clamp-areas": "tsx prisma/clampAreas.ts",
     "db:delete-areas": "tsx prisma/deleteAreas.ts"
   },
   "dependencies": {

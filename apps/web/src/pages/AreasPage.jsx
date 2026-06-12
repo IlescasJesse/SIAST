@@ -66,6 +66,18 @@ import {
   deleteMueble,
 } from "../api/catalogos.js";
 import { AreaGridEditor } from "../components/areas/AreaGridEditor.jsx";
+import { dentroDelEdificio, seSolapan, validarGeometriaArea } from "@stf/shared";
+
+/** AreaEdificio (gridX1..gridY2) → rect { x1, y1, x2, y2 } para la validación compartida */
+const areaToRect = (a) => ({
+  id: a.id,
+  label: a.label,
+  floor: a.floor,
+  x1: a.gridX1,
+  y1: a.gridY1,
+  x2: a.gridX2,
+  y2: a.gridY2,
+});
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -490,21 +502,79 @@ export const AreasPage = () => {
     setSaveError("");
   }, []);
 
+  // Rechaza coordenadas fuera de la huella del edificio: el rect se queda
+  // "pegado" en la última posición válida durante el drag.
   const handleResize = useCallback((id, coords) => {
+    if (
+      !dentroDelEdificio({
+        x1: coords.gridX1,
+        y1: coords.gridY1,
+        x2: coords.gridX2,
+        y2: coords.gridY2,
+      })
+    )
+      return;
     setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...coords } : a)));
     setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
 
   const handleMove = useCallback((id, coords) => {
+    if (
+      !dentroDelEdificio({
+        x1: coords.gridX1,
+        y1: coords.gridY1,
+        x2: coords.gridX2,
+        y2: coords.gridY2,
+      })
+    )
+      return;
     setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...coords } : a)));
     setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
+
+  // Áreas que se solapan con otra del mismo piso — feedback rojo en el editor
+  // y bloqueo de "Guardar todo".
+  const conflictIds = useMemo(() => {
+    const ids = new Set();
+    const conGeom = areas.filter((a) => a.activo !== false && a.gridX1 != null);
+    for (let i = 0; i < conGeom.length; i++) {
+      for (let j = i + 1; j < conGeom.length; j++) {
+        if (conGeom[i].floor !== conGeom[j].floor) continue;
+        if (seSolapan(areaToRect(conGeom[i]), areaToRect(conGeom[j]))) {
+          ids.add(conGeom[i].id);
+          ids.add(conGeom[j].id);
+        }
+      }
+    }
+    return ids;
+  }, [areas]);
 
   // ── Guardar todo ───────────────────────────────────────────────────────────
 
   const handleGuardarTodo = async () => {
     const ids = Object.keys(pendingChanges);
     if (ids.length === 0) return;
+
+    // Pre-validación: huella del edificio + solapes sobre el estado proyectado
+    // (las mismas reglas que aplica el backend, para fallar con mensaje claro).
+    const proyectadas = areas
+      .filter((a) => a.activo !== false)
+      .map((a) => (pendingChanges[a.id] ? { ...a, ...pendingChanges[a.id] } : a))
+      .filter((a) => a.gridX1 != null && a.gridY1 != null && a.gridX2 != null && a.gridY2 != null)
+      .map(areaToRect);
+    for (const id of ids) {
+      const rect = proyectadas.find((r) => r.id === id);
+      if (!rect) continue;
+      const errorGeometria = validarGeometriaArea(
+        rect,
+        proyectadas.filter((r) => r.id !== id),
+      );
+      if (errorGeometria) {
+        setSaveAllError(`"${rect.label ?? id}": ${errorGeometria}`);
+        return;
+      }
+    }
+
     setSavingAll(true);
     setSaveAllError("");
     try {
@@ -1048,9 +1118,15 @@ export const AreasPage = () => {
                   zoneKey={gridConfig.zoneKey}
                   mueblesPorArea={mueblesPorArea}
                   pendingChanges={pendingChanges}
+                  conflictIds={conflictIds}
                   flipY
                   compact={viewMode === "full"}
                 />
+                {conflictIds.size > 0 && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    Hay áreas solapadas (marcadas en rojo). Corrige el solape antes de guardar.
+                  </Alert>
+                )}
               </Box>
             </Paper>
           </Box>

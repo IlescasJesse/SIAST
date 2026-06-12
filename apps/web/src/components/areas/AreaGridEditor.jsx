@@ -80,6 +80,7 @@ export function AreaGridEditor({
   zoneKey = null,
   mueblesPorArea = {},
   pendingChanges = {},
+  conflictIds = new Set(),
   compact = false,
 }) {
   const CELL = compact ? CELL_COMPACT : CELL_NORMAL;
@@ -426,6 +427,7 @@ export function AreaGridEditor({
     const isSelected = area.id === selectedId;
     const isPending = !!pendingChanges[area.id];
     const isCommon = area.esComun ?? false;
+    const isConflict = conflictIds.has(area.id);
 
     // Variante de color para área común: tinte cian sutil
     const fillColor = isCommon ? "#00bcd4" : (color ?? "#9d2449");
@@ -463,9 +465,19 @@ export function AreaGridEditor({
           height={h}
           fill={fillColor}
           fillOpacity={fillOpacity}
-          stroke={isSelected ? fillColor : isPending ? "#ed6c02" : isCommon ? "#00838f" : fillColor}
-          strokeWidth={isSelected ? 2.5 : isPending ? 2 : 1.5}
-          strokeDasharray={isPending && !isSelected ? "4,2" : undefined}
+          stroke={
+            isConflict
+              ? "#d32f2f"
+              : isSelected
+                ? fillColor
+                : isPending
+                  ? "#ed6c02"
+                  : isCommon
+                    ? "#00838f"
+                    : fillColor
+          }
+          strokeWidth={isConflict ? 2.5 : isSelected ? 2.5 : isPending ? 2 : 1.5}
+          strokeDasharray={isConflict ? "5,3" : isPending && !isSelected ? "4,2" : undefined}
           rx={3}
           style={{ touchAction: "none" }}
           onMouseDown={(e) => handleMoveStart(e, area)}

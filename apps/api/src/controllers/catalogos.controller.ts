@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../config/database.js";
-import { SUBCATEGORIAS_POR_CATEGORIA } from "@stf/shared";
+import { SUBCATEGORIAS_POR_CATEGORIA, validarGeometriaArea } from "@stf/shared";
 import { sirhFetch } from "../services/sirhAuth.service.js";
 
 export const categorias = (_req: Request, res: Response) => {
@@ -236,6 +236,49 @@ const UpdateAreaSchema = z.object({
 });
 
 /**
+ * Valida la geometría de un área (huella del edificio + solape) contra las
+ * demás áreas activas del mismo piso. Devuelve mensaje de error o null.
+ */
+const validarGeometriaContraDB = async (
+  id: string,
+  floor: number,
+  coords: { gridX1: number; gridY1: number; gridX2: number; gridY2: number },
+): Promise<string | null> => {
+  const otras = await prisma.areaEdificio.findMany({
+    where: {
+      activo: true,
+      floor,
+      id: { not: id },
+      gridX1: { not: null },
+      gridY1: { not: null },
+      gridX2: { not: null },
+      gridY2: { not: null },
+    },
+    select: {
+      id: true,
+      label: true,
+      floor: true,
+      gridX1: true,
+      gridY1: true,
+      gridX2: true,
+      gridY2: true,
+    },
+  });
+  return validarGeometriaArea(
+    { id, floor, x1: coords.gridX1, y1: coords.gridY1, x2: coords.gridX2, y2: coords.gridY2 },
+    otras.map((o) => ({
+      id: o.id,
+      label: o.label,
+      floor: o.floor,
+      x1: o.gridX1 as number,
+      y1: o.gridY1 as number,
+      x2: o.gridX2 as number,
+      y2: o.gridY2 as number,
+    })),
+  );
+};
+
+/**
  * POST /api/catalogos/areas
  * Crea un área nueva. Requiere ADMIN.
  */
@@ -266,6 +309,19 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
     if (existente) {
       res.status(409).json({ error: `Ya existe un área con id "${id}"` });
       return;
+    }
+
+    if (gridX1 != null && gridY1 != null && gridX2 != null && gridY2 != null) {
+      const errorGeometria = await validarGeometriaContraDB(id, floor, {
+        gridX1,
+        gridY1,
+        gridX2,
+        gridY2,
+      });
+      if (errorGeometria) {
+        res.status(400).json({ error: errorGeometria });
+        return;
+      }
     }
 
     const area = await prisma.areaEdificio.create({
@@ -327,6 +383,26 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
 
     // piso (enum) siempre se deriva de floor para evitar inconsistencias
     const FLOOR_TO_PISO = ["PB", "NIVEL_1", "NIVEL_2", "NIVEL_3"] as const;
+
+    // Geometría efectiva = valores nuevos con fallback a los existentes
+    const efX1 = gridX1 ?? existente.gridX1;
+    const efY1 = gridY1 ?? existente.gridY1;
+    const efX2 = gridX2 ?? existente.gridX2;
+    const efY2 = gridY2 ?? existente.gridY2;
+    const efFloor = floor ?? existente.floor;
+
+    if (efX1 != null && efY1 != null && efX2 != null && efY2 != null) {
+      const errorGeometria = await validarGeometriaContraDB(id, efFloor, {
+        gridX1: efX1,
+        gridY1: efY1,
+        gridX2: efX2,
+        gridY2: efY2,
+      });
+      if (errorGeometria) {
+        res.status(400).json({ error: errorGeometria });
+        return;
+      }
+    }
 
     const area = await prisma.areaEdificio.update({
       where: { id },

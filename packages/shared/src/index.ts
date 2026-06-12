@@ -795,3 +795,6 @@ export type MetricasResponse =
   | MetricasGlobalResponse
   | MetricasPorAreaResponse
   | MetricasPorTecnicoResponse;
+
+// Geometría del edificio (huella, pasillos, validación de áreas)
+export * from "./areaGeometry";

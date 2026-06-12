@@ -139,6 +139,48 @@ const createSlab = (floor) => {
   return group;
 };
 
+// ── Pasillos ─────────────────────────────────────────────────────────────────
+// Espejo de PASILLOS en @stf/shared (areaGeometry.ts) y de CORRIDOR_COLS del
+// editor 2D: franjas de 1 celda de ancho a lo largo de cada ala.
+const CORRIDOR_STRIPS = [
+  { x1: 4, y1: 0, x2: 5, y2: 27 }, // ala izquierda, pasillo 1
+  { x1: 9, y1: 0, x2: 10, y2: 27 }, // ala izquierda, pasillo 2
+  { x1: 22, y1: 0, x2: 23, y2: 27 }, // ala derecha, pasillo 1
+  { x1: 27, y1: 0, x2: 28, y2: 27 }, // ala derecha, pasillo 2
+];
+
+/**
+ * Marca los pasillos sobre la losa de un piso — solo líneas punteadas en los
+ * bordes de cada franja, sin volumen, para no competir con las áreas.
+ */
+const createCorridorLines = (floor) => {
+  const group = new THREE.Group();
+  const mat = new THREE.LineDashedMaterial({
+    color: 0x64748f,
+    transparent: true,
+    opacity: 0.55,
+    dashSize: 0.45,
+    gapSize: 0.3,
+  });
+  mat.userData = { baseOpacity: 0.55 }; // respetada por setFloorVisibility (isEdge)
+  const y = FLOOR_Y(floor) + 0.02; // apenas sobre la losa para evitar z-fighting
+
+  for (const strip of CORRIDOR_STRIPS) {
+    const { w, d, px, pz } = gridToScene(strip.x1, strip.y1, strip.x2, strip.y2);
+    for (const dx of [-w / 2, w / 2]) {
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(px + dx, y, pz - d / 2),
+        new THREE.Vector3(px + dx, y, pz + d / 2),
+      ]);
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances(); // requerido por LineDashedMaterial
+      line.userData = { isEdge: true };
+      group.add(line);
+    }
+  }
+  return group;
+};
+
 /**
  * Construye todos los pisos del edificio a partir de los datos de rooms.js (fallback).
  * Retorna { floorGroups: Map<floor, Group>, roomMeshes: Map<roomId, Mesh> }
@@ -172,6 +214,7 @@ export const buildBuildingFromData = (rooms) => {
     const group = new THREE.Group();
     group.name = `floor_${floor}`;
     group.add(createSlab(floor));
+    group.add(createCorridorLines(floor));
     floorGroups.set(floor, group);
   }
 
