@@ -24,7 +24,7 @@ interface AreaMapping {
   piso: PisoEdificio;
 }
 
-const FALLBACK: AreaMapping = { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 };
+const FALLBACK: AreaMapping = { areaId: "sin_asignar", piso: PisoEdificio.PB };
 
 const DEPT_TO_AREA: Record<string, AreaMapping> = {
   // ─── PLANTA BAJA ────────────────────────────────────────────
@@ -379,6 +379,18 @@ function mapearArea(departamento: string | undefined): AreaMapping {
   return DEPT_TO_AREA[departamento] ?? FALLBACK;
 }
 
+async function resolveAreaId(mapping: AreaMapping): Promise<AreaMapping> {
+  const exists = await prisma.areaEdificio.findFirst({
+    where: { id: mapping.areaId, activo: true },
+  });
+  if (exists) return { areaId: mapping.areaId, piso: exists.piso };
+  // Área no existe todavía — degradar a fallback
+  if (mapping.areaId !== FALLBACK.areaId) {
+    console.warn(`  ⚠️  areaId '${mapping.areaId}' no existe → degradando a 'sin_asignar'`);
+  }
+  return FALLBACK;
+}
+
 async function main() {
   console.log("🔄 Sincronizando empleados desde SIRH...");
   console.log(`   URL: ${SIRH_URL}\n`);
@@ -431,7 +443,8 @@ async function main() {
       ? emp.VACACIONES.FECHA_VACACIONES.trim() || undefined
       : undefined;
 
-    const { areaId, piso } = mapearArea(emp.DEPARTAMENTO);
+    const rawMapping = mapearArea(emp.DEPARTAMENTO);
+    const { areaId, piso } = await resolveAreaId(rawMapping);
 
     const payload = {
       nombre,

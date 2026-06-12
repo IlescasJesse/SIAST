@@ -29,7 +29,9 @@ if (!process.env.JWT_SECRET) {
 if (!process.env.CORS_ORIGINS) {
   throw new Error("CORS_ORIGINS env var is required");
 }
-const corsOrigins = process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+const corsOrigins = process.env.CORS_ORIGINS.split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
 // ─────────────────────────────────────────────────────────────────────────────
 
 const app = express();
@@ -111,8 +113,10 @@ httpServer.listen(port, "0.0.0.0", () => {
   // ── Job diario: snapshot de métricas en MetricasHistorial (Phase 4, D-20) ─────
   async function ejecutarSnapshotMetricas(): Promise<void> {
     try {
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0); // inicio del día
+      // fecha es @db.Date — MySQL la lee como medianoche UTC, así que la clave
+      // debe construirse en UTC (setHours local desfasa -6h y rompe el upsert con P2002)
+      const ahora = new Date();
+      const hoy = new Date(Date.UTC(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()));
 
       // Snapshot global (sin área) — findFirst+upsert porque Prisma no soporta null en unique compuesto
       const global = await metricasService.obtenerMetricasGlobal();
@@ -185,9 +189,10 @@ httpServer.listen(port, "0.0.0.0", () => {
   const VEINTICUATRO_HORAS = 24 * 60 * 60 * 1000;
   (async () => {
     try {
-      const hoyStr = new Date().toISOString().slice(0, 10);
+      const ahora = new Date();
+      const hoyUtc = new Date(Date.UTC(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()));
       const existeHoy = await prisma.metricasHistorial.findFirst({
-        where: { fecha: new Date(hoyStr) },
+        where: { fecha: hoyUtc },
       });
       if (!existeHoy) {
         // Delay 30s para que el servidor se estabilice antes del primer snapshot
@@ -207,10 +212,10 @@ httpServer.listen(port, "0.0.0.0", () => {
 // no termina solo (conexiones WebSocket activas).
 // ============================================================
 const shutdown = () => {
-  io.close();                              // cerrar todas las conexiones Socket.IO
+  io.close(); // cerrar todas las conexiones Socket.IO
   httpServer.close(() => process.exit(0)); // esperar que el servidor deje de escuchar
   setTimeout(() => process.exit(0), 1000).unref(); // forzar salida en 1 s si sigue abierto
 };
-process.on("SIGINT",  shutdown);
+process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
-process.on("SIGHUP",  shutdown);
+process.on("SIGHUP", shutdown);

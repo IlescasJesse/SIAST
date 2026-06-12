@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { ROOMS, AREA_COLORS } from "./rooms.js";
 
-const CELL = 1;         // 1 unidad Three.js = 1 celda del plano
-const FLOOR_H = 4;      // altura por piso en unidades
-const ROOM_H = 3.4;     // altura de cuarto (deja espacio para losa)
-const WALL_T = 0.08;    // grosor de bordes
+const CELL = 1; // 1 unidad Three.js = 1 celda del plano
+const FLOOR_H = 4; // altura por piso en unidades
+const ROOM_H = 3.4; // altura de cuarto (deja espacio para losa)
+const WALL_T = 0.08; // grosor de bordes
 
 export const FLOOR_Y = (floor) => floor * FLOOR_H;
 
@@ -27,18 +27,38 @@ const gridToScene = (x1, y1, x2, y2) => {
 /**
  * Crea un mesh de cuarto.
  */
+// Opacidad base del "acrílico arquitectónico" de las áreas (maqueta de vidrio).
+export const ROOM_BASE_OPACITY = 0.42;
+
+/**
+ * Material de área tipo "vidrio esmerilado de maqueta arquitectónica".
+ * MeshPhysicalMaterial con transmission para un look de acrílico translúcido
+ * teñido del color del área. transmission es barato a este conteo de meshes
+ * (≈22 áreas) y aporta el salto de calidad visual principal.
+ */
+const createRoomMaterial = (color) =>
+  new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: 0.18,
+    metalness: 0,
+    transmission: 0.55, // deja pasar luz/fondo → vidrio
+    thickness: 1.2,
+    ior: 1.35,
+    transparent: true,
+    opacity: ROOM_BASE_OPACITY,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.25,
+    envMapIntensity: 1.1,
+    attenuationColor: new THREE.Color(color),
+    attenuationDistance: 4,
+  });
+
 export const createRoomMesh = (room) => {
   const { w, d, px, pz } = gridToScene(room.x1, room.y1, room.x2, room.y2);
   const yBase = FLOOR_Y(room.floor);
 
   const geo = new THREE.BoxGeometry(w - WALL_T, ROOM_H, d - WALL_T);
-  const mat = new THREE.MeshStandardMaterial({
-    color: room.color,
-    roughness: 0.7,
-    metalness: 0.1,
-    transparent: false,
-    opacity: 1,
-  });
+  const mat = createRoomMaterial(room.color);
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(px, yBase + ROOM_H / 2, pz);
@@ -48,23 +68,44 @@ export const createRoomMesh = (room) => {
     roomId: room.id,
     floor: room.floor,
     label: room.label,
-    x1: room.x1, y1: room.y1, x2: room.x2, y2: room.y2,
+    x1: room.x1,
+    y1: room.y1,
+    x2: room.x2,
+    y2: room.y2,
     baseColor: room.color,
+    baseOpacity: ROOM_BASE_OPACITY, // usado por setFloorVisibility para restaurar vidrio
   };
 
-  // Borde/wireframe
+  // Borde sutil que define la silueta del volumen acrílico.
   const edges = new THREE.EdgesGeometry(geo);
   const line = new THREE.LineSegments(
     edges,
-    new THREE.LineBasicMaterial({ color: 0x7a90a8, transparent: true, opacity: 0.55 }),
+    new THREE.LineBasicMaterial({ color: 0x5b7390, transparent: true, opacity: 0.45 }),
   );
+  line.userData = { isEdge: true };
   mesh.add(line);
 
   return mesh;
 };
 
+// Grosor estructural de la losa entre pisos.
+const SLAB_H = 0.45;
+
 /**
- * Crea la losa del piso (plataforma base de cada nivel).
+ * Material de losa: concreto pulido claro. MeshStandardMaterial con roughness
+ * alto y un toque de metalness para captar el environment como pulido sutil.
+ */
+const createSlabMaterial = () =>
+  new THREE.MeshStandardMaterial({
+    color: 0xe8e6e1, // concreto claro
+    roughness: 0.82,
+    metalness: 0.05,
+    envMapIntensity: 0.5,
+  });
+
+/**
+ * Crea la losa del piso (plataforma base de cada nivel) con grosor estructural
+ * y bordes definidos por LineSegments.
  */
 const createSlab = (floor) => {
   // Losa con la forma real del edificio (U-shape vista desde arriba):
@@ -72,24 +113,31 @@ const createSlab = (floor) => {
   //   Ala derecha   : X de  +2 a+16 (14 u), profundidad completa Z: -13.5 a +13.5
   //   Conector      : X de  -2 a  +2 ( 4 u), solo al fondo       Z: -13.5 a  -0.5
   // Así las losas NO cruzan el vano abierto entre las alas.
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0xc8d8e8,
-    roughness: 0.85,
-    metalness: 0.02,
+  const mat = createSlabMaterial();
+  const edgeMat = new THREE.LineBasicMaterial({
+    color: 0x9aa6b2,
+    transparent: true,
+    opacity: 0.5,
   });
-  const yPos = FLOOR_Y(floor) - 0.15;
+  const yPos = FLOOR_Y(floor) - SLAB_H / 2;
   const group = new THREE.Group();
 
   const addSlab = (w, d, cx, cz) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w * CELL, 0.3, d * CELL), mat);
+    const geo = new THREE.BoxGeometry(w * CELL, SLAB_H, d * CELL);
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(cx, yPos, cz);
     mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    // Borde definido para legibilidad arquitectónica.
+    const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+    line.userData = { isEdge: true };
+    mesh.add(line);
     group.add(mesh);
   };
 
-  addSlab(14, 27, -9,   0);   // ala izquierda  (cx=-9,  cz=0)
-  addSlab(14, 27,  9,   0);   // ala derecha    (cx=+9,  cz=0)
-  addSlab( 4, 13,  0,  -7);   // conector fondo (cx=0,   cz=-7 → Z: -0.5 a -13.5)
+  addSlab(14, 27, -9, 0); // ala izquierda  (cx=-9,  cz=0)
+  addSlab(14, 27, 9, 0); // ala derecha    (cx=+9,  cz=0)
+  addSlab(4, 13, 0, -7); // conector fondo (cx=0,   cz=-7 → Z: -0.5 a -13.5)
 
   return group;
 };
@@ -100,7 +148,7 @@ const createSlab = (floor) => {
  */
 export const buildBuilding = () => {
   const floorData = [
-    { key: "pb",     floor: 0 },
+    { key: "pb", floor: 0 },
     { key: "nivel1", floor: 1 },
     { key: "nivel2", floor: 2 },
     { key: "nivel3", floor: 3 },
@@ -157,15 +205,23 @@ export const buildBuildingFromData = (rooms) => {
  * @param {object}  params.roomMap     — ROOM_MAP en memoria (se muta in-place)
  * @param {number}  [params.color]     — color hex del nuevo mesh (usa el original si omite)
  */
-export const rebuildRoomGeometry = ({ areaId, gridX1, gridY1, gridX2, gridY2, floor, roomMeshes, floorGroups, roomMap, color }) => {
+export const rebuildRoomGeometry = ({
+  areaId,
+  gridX1,
+  gridY1,
+  gridX2,
+  gridY2,
+  floor,
+  roomMeshes,
+  floorGroups,
+  roomMap,
+  color,
+}) => {
   const oldMesh = roomMeshes.get(areaId);
   const existingRoom = roomMap[areaId];
 
   // Determinar color: prioridad color param → baseColor del mesh → color del roomMap → gris
-  const resolvedColor = color
-    ?? oldMesh?.userData?.baseColor
-    ?? existingRoom?.color
-    ?? 0x78909c;
+  const resolvedColor = color ?? oldMesh?.userData?.baseColor ?? existingRoom?.color ?? 0x78909c;
 
   const label = oldMesh?.userData?.label ?? existingRoom?.label ?? areaId;
 
@@ -203,7 +259,14 @@ export const rebuildRoomGeometry = ({ areaId, gridX1, gridY1, gridX2, gridY2, fl
 
   // Actualizar roomMap en memoria
   if (roomMap[areaId]) {
-    Object.assign(roomMap[areaId], { x1: gridX1, y1: gridY1, x2: gridX2, y2: gridY2, floor, color: resolvedColor });
+    Object.assign(roomMap[areaId], {
+      x1: gridX1,
+      y1: gridY1,
+      x2: gridX2,
+      y2: gridY2,
+      floor,
+      color: resolvedColor,
+    });
   }
 
   return newMesh;
@@ -222,9 +285,18 @@ export const setFloorVisibility = (floorGroups, activeFloor) => {
   for (const [floor, group] of floorGroups) {
     const isActive = activeFloor === -1 || floor === activeFloor;
     group.traverse((obj) => {
+      // Las líneas de borde gestionan su propia opacidad fija; no las atenúes
+      // a 1.0 (perderían su sutileza) y no son meshes.
+      if (obj.userData?.isEdge) {
+        obj.material.opacity = isActive ? (obj.material.userData?.baseOpacity ?? 0.45) : 0.08;
+        return;
+      }
       if (obj.isMesh) {
-        obj.material.opacity = isActive ? 1 : 0.12;
-        obj.material.transparent = !isActive;
+        // Restaurar a la opacidad base del material (vidrio 0.42, losa 1.0)
+        // en vez de forzar 1.0, que volvería sólido el acrílico de las áreas.
+        const base = obj.userData?.baseOpacity ?? 1;
+        obj.material.opacity = isActive ? base : Math.min(base, 0.1);
+        obj.material.transparent = isActive ? base < 1 : true;
         obj.renderOrder = isActive ? 1 : 0;
       }
     });
@@ -241,13 +313,7 @@ export const createConnectorMesh = (floor) => {
   const yBase = FLOOR_Y(floor);
 
   const geo = new THREE.BoxGeometry(w - WALL_T, ROOM_H, d - WALL_T);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0xb0bec5,
-    roughness: 0.85,
-    metalness: 0.05,
-    transparent: true,
-    opacity: 0.9,
-  });
+  const mat = createRoomMaterial(0xb0bec5);
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(px, yBase + ROOM_H / 2, pz);
@@ -257,38 +323,58 @@ export const createConnectorMesh = (floor) => {
     isConnector: true,
     label: "Conector",
     floor,
+    baseOpacity: ROOM_BASE_OPACITY,
   };
 
-  // Borde/wireframe igual que createRoomMesh
+  // Borde sutil igual que createRoomMesh
   const edges = new THREE.EdgesGeometry(geo);
   const line = new THREE.LineSegments(
     edges,
-    new THREE.LineBasicMaterial({ color: 0x7a90a8, transparent: true, opacity: 0.55 }),
+    new THREE.LineBasicMaterial({ color: 0x5b7390, transparent: true, opacity: 0.45 }),
   );
+  line.userData = { isEdge: true };
   mesh.add(line);
 
   return mesh;
 };
 
 /**
- * Crea la huella/sombra del edificio como plano semitransparente en el suelo.
- * Cubre todo el footprint del edificio (32×27 grid).
+ * Crea el suelo de la escena: un plano grande que SOLO recibe sombras
+ * (ShadowMaterial) para una sombra de contacto suave bajo el edificio, más
+ * una huella tenue del footprint para anclar visualmente el volumen.
+ * Devuelve un Group { ground (ShadowMaterial) + footprint }.
  */
 export const createBuildingFootprint = () => {
-  const geo = new THREE.BoxGeometry(32 * CELL, 0.08, 27 * CELL);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x607d8b,
-    roughness: 1,
-    metalness: 0,
-    transparent: true,
-    opacity: 0.15,
-  });
-  const footprint = new THREE.Mesh(geo, mat);
-  footprint.position.set(0, -0.04, 0);
-  footprint.receiveShadow = true;
-  footprint.castShadow = false;
-  footprint.userData = { isFootprint: true };
-  return footprint;
+  const group = new THREE.Group();
+  group.userData = { isFootprint: true };
+
+  // Plano receptor de sombras de contacto (invisible salvo por la sombra).
+  const shadowPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(120, 120),
+    new THREE.ShadowMaterial({ opacity: 0.22 }),
+  );
+  shadowPlane.rotation.x = -Math.PI / 2;
+  shadowPlane.position.y = -0.05;
+  shadowPlane.receiveShadow = true;
+  group.add(shadowPlane);
+
+  // Huella tenue del edificio para definir el perímetro en el suelo.
+  const fp = new THREE.Mesh(
+    new THREE.PlaneGeometry(32 * CELL, 27 * CELL),
+    new THREE.MeshStandardMaterial({
+      color: 0x9fb0c0,
+      roughness: 1,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.12,
+    }),
+  );
+  fp.rotation.x = -Math.PI / 2;
+  fp.position.y = -0.04;
+  fp.receiveShadow = true;
+  group.add(fp);
+
+  return group;
 };
 
 /**

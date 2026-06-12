@@ -104,8 +104,11 @@ export const createMuebleMesh = (mueble, area) => {
   const yBase = FLOOR_Y(area.floor ?? 0);
 
   const geo = new THREE.BoxGeometry(w, MUEBLE_H, d);
-  const mat = new THREE.MeshLambertMaterial({
+  const mat = new THREE.MeshStandardMaterial({
     color: MUEBLE_COLORS[mueble.tipo] ?? MUEBLE_COLORS.OTRO,
+    roughness: 0.65,
+    metalness: 0.1,
+    envMapIntensity: 0.6,
   });
   const mesh = new THREE.Mesh(geo, mat);
   // Descansa sobre la losa del piso (losa en FLOOR_Y - 0.15, superficie ~FLOOR_Y)
@@ -153,7 +156,13 @@ export const createMuebleLabel = (mueble, worldPos) => {
  */
 export const createMueblePin = () => {
   const geo = new THREE.ConeGeometry(0.35, 0.9, 8);
-  const mat = new THREE.MeshBasicMaterial({ color: PIN_COLOR });
+  const mat = new THREE.MeshStandardMaterial({
+    color: PIN_COLOR,
+    emissive: PIN_COLOR,
+    emissiveIntensity: 0.6,
+    roughness: 0.4,
+    metalness: 0.2,
+  });
   const pin = new THREE.Mesh(geo, mat);
   pin.rotation.x = Math.PI; // punta hacia abajo
   pin.userData = { type: "mueblePin" };

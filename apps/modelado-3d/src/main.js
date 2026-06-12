@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import {
   buildBuilding,
   buildBuildingFromData,
@@ -47,39 +48,69 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.getElementById("canvas-container").appendChild(renderer.domElement);
 
 // ════════════════════════════════════════════════════════════
-// ESCENA
+// ESCENA — fondo con gradiente vertical sutil + niebla de profundidad
 // ════════════════════════════════════════════════════════════
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xdce8f2);
-scene.fog = new THREE.Fog(0xdce8f2, 80, 200);
 
-// Luces
-const ambient = new THREE.AmbientLight(0xffffff, 1.2);
-scene.add(ambient);
+/** Crea una textura de gradiente vertical para el fondo (cielo → horizonte). */
+const makeGradientBackground = (top, bottom) => {
+  const c = document.createElement("canvas");
+  c.width = 2;
+  c.height = 256;
+  const ctx = c.getContext("2d");
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, top);
+  g.addColorStop(1, bottom);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+};
 
-const dirLight = new THREE.DirectionalLight(0xfff8f0, 0.6);
-dirLight.position.set(30, 60, 40);
+scene.background = makeGradientBackground("#eef3f9", "#cdd9e6");
+scene.fog = new THREE.Fog(0xcdd9e6, 90, 230);
+
+// Environment map procedural (RoomEnvironment) para reflejos PBR realistas
+// en vidrio y metal sin coste de assets externos.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose(); // la textura del environment persiste; el generador no se necesita más
+
+// ── Iluminación de calidad ──────────────────────────────────────────────────
+// Cielo/suelo: rellena sombras con luz fría arriba, cálida desde la losa.
+const hemi = new THREE.HemisphereLight(0xdcecff, 0xb8a98f, 0.55);
+scene.add(hemi);
+
+// Luz principal (sol): proyecta sombras suaves PCFSoft a 2048.
+const dirLight = new THREE.DirectionalLight(0xfff4e6, 2.1);
+dirLight.position.set(38, 64, 44);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(2048, 2048);
 dirLight.shadow.camera.near = 0.5;
-dirLight.shadow.camera.far = 200;
+dirLight.shadow.camera.far = 220;
 dirLight.shadow.camera.left = -70;
 dirLight.shadow.camera.right = 70;
 dirLight.shadow.camera.top = 70;
 dirLight.shadow.camera.bottom = -70;
+dirLight.shadow.bias = -0.0004;
+dirLight.shadow.normalBias = 0.02;
+dirLight.shadow.radius = 3;
 scene.add(dirLight);
 
-const hemi = new THREE.HemisphereLight(0xc9dff5, 0xddecd0, 0.6);
-scene.add(hemi);
+// Luz de relleno fría opuesta, baja intensidad, sin sombras (modela el ambiente).
+const fillLight = new THREE.DirectionalLight(0xbcd4ff, 0.45);
+fillLight.position.set(-44, 30, -36);
+scene.add(fillLight);
 
-// Grid del suelo
-const gridHelper = new THREE.GridHelper(80, 80, 0xb0c4d8, 0xdce8f2);
-gridHelper.position.y = -0.2;
-scene.add(gridHelper);
+// Ambiente base muy tenue para que ninguna cara quede totalmente negra.
+const ambient = new THREE.AmbientLight(0xffffff, 0.25);
+scene.add(ambient);
 
 // ════════════════════════════════════════════════════════════
 // EDIFICIO — construido inmediatamente desde rooms.js

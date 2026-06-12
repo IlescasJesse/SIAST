@@ -82,7 +82,7 @@ interface AreaMapping {
   piso: PisoEdificio;
 }
 
-const FALLBACK: AreaMapping = { areaId: "n3_secretaria", piso: PisoEdificio.NIVEL_3 };
+const FALLBACK: AreaMapping = { areaId: "sin_asignar", piso: PisoEdificio.PB };
 
 const DEPT_TO_AREA: Record<string, AreaMapping> = {
   // ─── PLANTA BAJA ────────────────────────────────────────────────────────────
@@ -462,29 +462,41 @@ function buildEmpleadoData(emp: SirhEmpleado) {
   };
 }
 
+async function resolveAreaId(areaId: string): Promise<AreaMapping> {
+  const exists = await prisma.areaEdificio.findFirst({ where: { id: areaId, activo: true } });
+  if (exists) return { areaId, piso: exists.piso };
+  // Área no existe todavía — degradar a fallback
+  console.warn(`[SIRH] areaId '${areaId}' no existe en DB → degradando a 'sin_asignar'`);
+  return FALLBACK;
+}
+
 async function upsertEmpleado(
   data: ReturnType<typeof buildEmpleadoData>,
 ): Promise<"created" | "updated"> {
-  const porSirhId = data.sirhId
-    ? await prisma.empleado.findUnique({ where: { sirhId: data.sirhId } })
+  // Verificar que el areaId mapeado existe; si no, degradar a fallback
+  const resolved = await resolveAreaId(data.areaId);
+  const safeData = { ...data, areaId: resolved.areaId, piso: resolved.piso };
+
+  const porSirhId = safeData.sirhId
+    ? await prisma.empleado.findUnique({ where: { sirhId: safeData.sirhId } })
     : null;
   if (porSirhId) {
     await prisma.empleado.update({
       where: { id: porSirhId.id },
-      data: { ...data, sincronizadoSIRH: true, activo: true },
+      data: { ...safeData, sincronizadoSIRH: true, activo: true },
     });
     return "updated";
   }
-  const porRfc = await prisma.empleado.findUnique({ where: { rfc: data.rfc } });
+  const porRfc = await prisma.empleado.findUnique({ where: { rfc: safeData.rfc } });
   if (porRfc) {
     await prisma.empleado.update({
       where: { id: porRfc.id },
-      data: { ...data, sincronizadoSIRH: true, activo: true },
+      data: { ...safeData, sincronizadoSIRH: true, activo: true },
     });
     return "updated";
   }
   await prisma.empleado.create({
-    data: { ...data, sincronizadoSIRH: true, activo: true },
+    data: { ...safeData, sincronizadoSIRH: true, activo: true },
   });
   return "created";
 }

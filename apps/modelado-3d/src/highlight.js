@@ -21,20 +21,22 @@ export const highlightRoom = (roomMeshes, roomId) => {
 
   if (_pulseMesh) {
     _originalColor = _pulseMesh.userData.baseColor;
-    _pulseMesh.material.emissive = new THREE.Color(0x1a6fba);
-    _pulseMesh.material.emissiveIntensity = 0.6;
+    // Emissive teñido del color del área pero elevado: glow propio que
+    // resalta sobre el vidrio sin cambiar el color base (UX consistente).
+    _pulseMesh.material.emissive = new THREE.Color(_originalColor);
+    _pulseMesh.material.emissiveIntensity = 0.9;
     _pulseTime = 0;
   }
 };
 
 /**
- * Llama en cada frame para animar el pulse.
+ * Llama en cada frame para animar el pulse (respiración suave del glow).
  */
 export const updateHighlight = (delta) => {
   if (!_pulseMesh) return;
   _pulseTime += delta;
-  const pulse = 0.85 + Math.sin(_pulseTime * 3) * 0.15;
-  _pulseMesh.material.emissiveIntensity = pulse * 0.7;
+  const pulse = 1.1 + Math.sin(_pulseTime * 3) * 0.45;
+  _pulseMesh.material.emissiveIntensity = pulse;
 };
 
 export const clearHighlight = (roomMeshes) => {

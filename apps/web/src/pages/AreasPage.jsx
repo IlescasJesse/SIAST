@@ -4,9 +4,10 @@
  * Ruta: /admin/areas  (solo ADMIN)
  *
  * Layout:
- *   Header (título + botón Nueva Área)
- *   Pisos apilados verticalmente (PB / 2 / 3 / 4)
- *   Panel lateral flotante único a la derecha para el área seleccionada
+ *   Header (título + controles)
+ *   Toggle Vista completa | Por zonas
+ *   Minimap del edificio (indicador de zona/piso activo)
+ *   Grid + Panel lateral
  */
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -41,6 +42,8 @@ import {
   ListItem,
   ListItemText,
   Badge,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -49,6 +52,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import ThreeDRotationIcon from "@mui/icons-material/ThreeDRotation";
 import ChairIcon from "@mui/icons-material/Chair";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ViewComfyIcon from "@mui/icons-material/ViewComfy";
+import GridViewIcon from "@mui/icons-material/GridView";
 import {
   getAreas,
   createArea,
@@ -72,17 +77,13 @@ const PISOS = [
 
 const PISO_LABELS = { PB: "PB", NIVEL_1: "2", NIVEL_2: "3", NIVEL_3: "4" };
 
-// ── Zonas del edificio: Ala Izquierda | Conector | Ala Derecha ────────────────
-// Conector: cols 13-18 (6 cols, un poco más ancho) ubicado al FONDO del edificio.
-// Filas altas (14-26) → Z negativo en 3D → parte trasera del edificio.
+// Zonas del edificio: Ala Izquierda | Conector | Ala Derecha
 const ZONES = [
-  { key: "izq", label: "ALA IZQUIERDA", colStart: 0, colCount: 14 },
-  { key: "conector", label: "CONECTOR", colStart: 13, colCount: 6 },
-  { key: "der", label: "ALA DERECHA", colStart: 18, colCount: 14 },
+  { key: "izq", label: "ALA IZQUIERDA", colStart: 0, colCount: 14, color: "#3f51b5" },
+  { key: "conector", label: "CONECTOR", colStart: 13, colCount: 6, color: "#7b1fa2" },
+  { key: "der", label: "ALA DERECHA", colStart: 18, colCount: 14, color: "#0277bd" },
 ];
 
-// Coordenadas por defecto al crear un área según zona.
-// Conector usa filas 14-22 (parte trasera del edificio = Z negativo en 3D).
 const defaultCoordsForZone = (zoneKey) => {
   if (zoneKey === "conector") return { gridX1: 14, gridY1: 14, gridX2: 18, gridY2: 22 };
   if (zoneKey === "der") return { gridX1: 20, gridY1: 10, gridX2: 25, gridY2: 15 };
@@ -105,7 +106,6 @@ const EMPTY_NUEVA = {
   nombrePropio: "",
 };
 
-// Labels amigables para TipoAreaComun
 const TIPO_AREA_COMUN_LABELS = {
   SALA_JUNTAS: "Sala de Juntas",
   SALA_CONFERENCIAS: "Sala de Conferencias",
@@ -119,25 +119,189 @@ const TIPO_AREA_COMUN_LABELS = {
   OTRO: "Otro",
 };
 
+// ── Minimap del edificio ──────────────────────────────────────────────────────
+
+function BuildingMinimap({ pisoIdx, alaIdx, viewMode, onZoneClick, onPisoClick }) {
+  const pisoColors = ["#ffb74d", "#81c784", "#64b5f6", "#f06292"];
+  const activePiso = PISOS[pisoIdx];
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        px: 1.5,
+        py: 0.75,
+        borderRadius: "8px",
+        bgcolor: "grey.50",
+        border: "1px solid",
+        borderColor: "divider",
+        flexWrap: "wrap",
+      }}
+    >
+      {/* Esquema de planta del edificio */}
+      <Box sx={{ flexShrink: 0 }}>
+        <svg width={90} height={28} viewBox="0 0 90 28" style={{ display: "block" }}>
+          {/* Ala izquierda */}
+          <rect
+            x={1}
+            y={1}
+            width={34}
+            height={26}
+            rx={2}
+            fill={alaIdx === 0 && viewMode === "zones" ? "#9d244922" : "#f5f5f5"}
+            stroke={alaIdx === 0 && viewMode === "zones" ? "#9d2449" : "#bdbdbd"}
+            strokeWidth={alaIdx === 0 && viewMode === "zones" ? 1.5 : 0.8}
+            style={{ cursor: "pointer" }}
+            onClick={() => onZoneClick(0)}
+          />
+          <text
+            x={18}
+            y={14}
+            fontSize={5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={alaIdx === 0 && viewMode === "zones" ? "#9d2449" : "#9e9e9e"}
+            fontWeight={700}
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            IZQ
+          </text>
+
+          {/* Conector */}
+          <rect
+            x={37}
+            y={8}
+            width={16}
+            height={19}
+            rx={2}
+            fill={alaIdx === 1 && viewMode === "zones" ? "#7b1fa222" : "#f5f5f5"}
+            stroke={alaIdx === 1 && viewMode === "zones" ? "#7b1fa2" : "#bdbdbd"}
+            strokeWidth={alaIdx === 1 && viewMode === "zones" ? 1.5 : 0.8}
+            style={{ cursor: "pointer" }}
+            onClick={() => onZoneClick(1)}
+          />
+          <text
+            x={45}
+            y={18}
+            fontSize={4}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={alaIdx === 1 && viewMode === "zones" ? "#7b1fa2" : "#9e9e9e"}
+            fontWeight={700}
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            CON
+          </text>
+
+          {/* Ala derecha */}
+          <rect
+            x={55}
+            y={1}
+            width={34}
+            height={26}
+            rx={2}
+            fill={alaIdx === 2 && viewMode === "zones" ? "#0277bd22" : "#f5f5f5"}
+            stroke={alaIdx === 2 && viewMode === "zones" ? "#0277bd" : "#bdbdbd"}
+            strokeWidth={alaIdx === 2 && viewMode === "zones" ? 1.5 : 0.8}
+            style={{ cursor: "pointer" }}
+            onClick={() => onZoneClick(2)}
+          />
+          <text
+            x={72}
+            y={14}
+            fontSize={5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={alaIdx === 2 && viewMode === "zones" ? "#0277bd" : "#9e9e9e"}
+            fontWeight={700}
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            DER
+          </text>
+        </svg>
+      </Box>
+
+      {/* Selector de piso compacto */}
+      <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, mr: 0.25 }}>
+          PISO:
+        </Typography>
+        {PISOS.map((p, i) => (
+          <Box
+            key={p.piso}
+            onClick={() => onPisoClick(i)}
+            sx={{
+              width: 24,
+              height: 24,
+              borderRadius: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              bgcolor: pisoIdx === i ? pisoColors[i] : "transparent",
+              border: "1.5px solid",
+              borderColor: pisoIdx === i ? pisoColors[i] : "divider",
+              fontSize: 10,
+              fontWeight: 800,
+              color: pisoIdx === i ? "#fff" : "text.secondary",
+              transition: "all 0.15s ease",
+              "&:hover": { opacity: 0.8, transform: "scale(1.1)" },
+            }}
+          >
+            {p.label}
+          </Box>
+        ))}
+      </Box>
+
+      {/* Zona activa label */}
+      {viewMode === "zones" && (
+        <Chip
+          label={ZONES[alaIdx].label}
+          size="small"
+          sx={{
+            height: 20,
+            fontSize: 9,
+            fontWeight: 800,
+            bgcolor: ZONES[alaIdx].color + "22",
+            color: ZONES[alaIdx].color,
+            border: `1px solid ${ZONES[alaIdx].color}55`,
+            "& .MuiChip-label": { px: 0.75 },
+          }}
+        />
+      )}
+
+      {viewMode === "full" && (
+        <Chip
+          label="PLANTA COMPLETA"
+          size="small"
+          sx={{
+            height: 20,
+            fontSize: 9,
+            fontWeight: 800,
+            bgcolor: "primary.main",
+            color: "#fff",
+            "& .MuiChip-label": { px: 0.75 },
+          }}
+        />
+      )}
+    </Paper>
+  );
+}
+
 // ── Helpers SIRH ──────────────────────────────────────────────────────────────
 
-/**
- * Infiere el padre de un ítem nivel N buscando entre los ítems de nivel N-1
- * aquellos que tengan proyectos cuyos unidades_ejecutoras contengan el nombre del ítem.
- */
 function inferirPadres(hijos, padres) {
   const hijoPadre = {};
-
   padres.forEach((padre) => {
     const obras = (padre.proyectos ?? []).flatMap((proy) => proy.obras_actividades ?? []);
     obras.forEach((obra) => {
       const ue = obra.unidad_ejecutora;
-      if (ue && typeof ue === "string") {
-        hijoPadre[ue] = padre.nombre;
-      }
+      if (ue && typeof ue === "string") hijoPadre[ue] = padre.nombre;
     });
   });
-
   return (nombre) => hijoPadre[nombre] ?? null;
 }
 
@@ -150,20 +314,26 @@ export const AreasPage = () => {
   const [error, setError] = useState("");
 
   // SIRH
-  const [sirh, setSirh] = useState(null); // { nivel1, nivel2, nivel3, nivel4, nivel5 }
+  const [sirh, setSirh] = useState(null);
   const [sirhLoading, setSirhLoading] = useState(false);
   const [sirhError, setSirhError] = useState("");
 
-  // Área seleccionada en el grid (puede ser de cualquier piso)
+  // Selección
   const [selectedId, setSelectedId] = useState(null);
-
-  // Panel lateral — formulario de edición (incluye esSalaJuntas directamente)
-  const [editForm, setEditForm] = useState(null); // null | { ...area, esSalaJuntas, _dirty: bool }
+  const [editForm, setEditForm] = useState(null);
   const [saveError, setSaveError] = useState("");
 
-  // Navegación: ala (0=IZQ, 1=DER) y piso (0-3)
+  // Navegación: zona + piso
   const [alaIdx, setAlaIdx] = useState(0);
   const [pisoIdx, setPisoIdx] = useState(0);
+
+  // Vista completa vs por zonas
+  const [viewMode, setViewMode] = useState("zones"); // "full" | "zones"
+
+  // Dirección de la transición de slide (para animación direccional)
+  const [slideDir, setSlideDir] = useState("right"); // "right" | "left" | "up" | "down"
+  const prevAlaRef = useRef(0);
+  const prevPisoRef = useRef(0);
 
   // Modal Nueva Área
   const [modalOpen, setModalOpen] = useState(false);
@@ -172,15 +342,10 @@ export const AreasPage = () => {
   const [nuevaError, setNuevaError] = useState("");
   const [nuevaSaving, setNuevaSaving] = useState(false);
 
-  // Ref al iframe del visor 3D embebido
   const visor3DRef = useRef(null);
-
-  // Muebles del área seleccionada { [areaId]: Mueble[] }
   const [mueblesPorArea, setMueblesPorArea] = useState({});
 
   // ── Cambios pendientes (batch save) ──────────────────────────────────────
-  // Objeto { [areaId]: { label, gridX1, gridY1, gridX2, gridY2, floor } }
-  // Persiste en localStorage hasta que el usuario guarda todo.
   const [pendingChanges, setPendingChanges] = useState(() => {
     try {
       const raw = localStorage.getItem("siast:areas:pending");
@@ -201,9 +366,6 @@ export const AreasPage = () => {
     } catch {}
   };
 
-  // ── Auto-guardado en localStorage al instante ─────────────────────────────
-  // Solo escribe via persistPending para evitar doble escritura.
-  // El ref evita loops cuando el mismo objeto (por referencia) no cambió.
   const prevEditFormRef = useRef(null);
   useEffect(() => {
     if (!editForm || !editForm._dirty) return;
@@ -230,7 +392,6 @@ export const AreasPage = () => {
     });
   }, [editForm]);
 
-  // Protección de cambios sin guardar
   const { ConfirmDialog } = useUnsavedChanges(pendingCount > 0);
 
   // ── Carga inicial ──────────────────────────────────────────────────────────
@@ -242,8 +403,6 @@ export const AreasPage = () => {
       const res = await getAreas();
       const fetched = res.data ?? [];
       setAreas(fetched);
-      // Bug 3 fix: limpiar de pendingChanges las áreas que ya coinciden con la DB
-      // (evita que datos viejos de localStorage sobreescriban datos frescos)
       setPendingChanges((prev) => {
         const cleaned = { ...prev };
         let changed = false;
@@ -297,7 +456,25 @@ export const AreasPage = () => {
     loadSirh();
   }, []);
 
-  // ── Selección en el grid (cualquier piso) ──────────────────────────────────
+  // ── Cambio de zona con dirección ──────────────────────────────────────────
+
+  const changeAla = useCallback((nextIdx) => {
+    setSlideDir(nextIdx > prevAlaRef.current ? "right" : "left");
+    prevAlaRef.current = nextIdx;
+    setAlaIdx(nextIdx);
+    setSelectedId(null);
+    setEditForm(null);
+  }, []);
+
+  const changePiso = useCallback((nextIdx) => {
+    setSlideDir(nextIdx > prevPisoRef.current ? "down" : "up");
+    prevPisoRef.current = nextIdx;
+    setPisoIdx(nextIdx);
+    setSelectedId(null);
+    setEditForm(null);
+  }, []);
+
+  // ── Selección en el grid ───────────────────────────────────────────────────
 
   const handleSelect = useCallback((area) => {
     setSelectedId(area.id);
@@ -312,21 +489,17 @@ export const AreasPage = () => {
     setSaveError("");
   }, []);
 
-  // ── Resize desde el grid ───────────────────────────────────────────────────
-
   const handleResize = useCallback((id, coords) => {
     setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...coords } : a)));
     setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
-
-  // ── Move desde el grid ─────────────────────────────────────────────────────
 
   const handleMove = useCallback((id, coords) => {
     setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...coords } : a)));
     setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
 
-  // ── Guardar TODOS los cambios pendientes en la API ────────────────────────
+  // ── Guardar todo ───────────────────────────────────────────────────────────
 
   const handleGuardarTodo = async () => {
     const ids = Object.keys(pendingChanges);
@@ -358,12 +531,9 @@ export const AreasPage = () => {
     }
   };
 
-  // ── Generar Render — recarga el visor 3D para que lea la DB actualizada ──
-
   const handleGenerarRender = () => {
     const iframe = visor3DRef.current;
     if (!iframe) return;
-    // Forzar recarga del iframe (Three.js volverá a hacer fetch de /api/catalogos/areas)
     const src = iframe.src;
     iframe.src = "";
     setTimeout(() => {
@@ -377,7 +547,7 @@ export const AreasPage = () => {
     setSaveError("");
   };
 
-  // ── Muebles: cargar al seleccionar área ──────────────────────────────────
+  // ── Muebles ────────────────────────────────────────────────────────────────
 
   const loadMuebles = useCallback(async (areaId) => {
     try {
@@ -407,7 +577,8 @@ export const AreasPage = () => {
     }
   };
 
-  // ── SIRH — lista plana de todas las adscripciones (para modal Nueva Área) ──
+  // ── SIRH ───────────────────────────────────────────────────────────────────
+
   const todasAdscripciones = useMemo(() => {
     if (!sirh) return [];
     const niveles = [
@@ -433,12 +604,10 @@ export const AreasPage = () => {
     const pisoItem = PISOS.find((p) => p.piso === piso);
     setNuevaSaving(true);
     try {
-      // Usar coordenadas del formulario o los defaults si están vacíos
       const x1 = gridX1 !== "" ? Number(gridX1) : DEFAULT_COORDS.gridX1;
       const y1 = gridY1 !== "" ? Number(gridY1) : DEFAULT_COORDS.gridY1;
       const x2 = gridX2 !== "" ? Number(gridX2) : DEFAULT_COORDS.gridX2;
       const y2 = gridY2 !== "" ? Number(gridY2) : DEFAULT_COORDS.gridY2;
-
       await createArea({
         id: id.trim().toLowerCase().replace(/\s+/g, "_"),
         label: label.trim(),
@@ -471,6 +640,60 @@ export const AreasPage = () => {
   const setEdit = (k, v) =>
     setEditForm((prev) => (prev ? { ...prev, [k]: v, _dirty: true } : prev));
 
+  // ── Areas filtradas según vista ────────────────────────────────────────────
+
+  const pisoActivo = PISOS[pisoIdx];
+
+  const { areasFiltradas, gridConfig } = useMemo(() => {
+    if (viewMode === "full") {
+      return {
+        areasFiltradas: areas.filter((a) => a.floor === pisoActivo.floor),
+        gridConfig: { colStart: 0, colCount: 32, zoneKey: "full" },
+      };
+    }
+    const zona = ZONES[alaIdx];
+    return {
+      areasFiltradas: areas.filter((a) => {
+        if (a.floor !== pisoActivo.floor) return false;
+        const x1 = a.gridX1 ?? -1;
+        if (x1 < 0) return false;
+        return x1 >= zona.colStart && x1 < zona.colStart + zona.colCount;
+      }),
+      gridConfig: { colStart: zona.colStart, colCount: zona.colCount, zoneKey: zona.key },
+    };
+  }, [areas, viewMode, pisoIdx, alaIdx, pisoActivo.floor]);
+
+  const gridKey = `${viewMode}-${alaIdx}-${pisoIdx}`;
+
+  // ── Slide animation keyframe según dirección ──────────────────────────────
+
+  const slideKeyframes = {
+    right: {
+      "@keyframes siast-slide": {
+        from: { opacity: 0, transform: "translateX(18px)" },
+        to: { opacity: 1, transform: "translateX(0)" },
+      },
+    },
+    left: {
+      "@keyframes siast-slide": {
+        from: { opacity: 0, transform: "translateX(-18px)" },
+        to: { opacity: 1, transform: "translateX(0)" },
+      },
+    },
+    down: {
+      "@keyframes siast-slide": {
+        from: { opacity: 0, transform: "translateY(14px)" },
+        to: { opacity: 1, transform: "translateY(0)" },
+      },
+    },
+    up: {
+      "@keyframes siast-slide": {
+        from: { opacity: 0, transform: "translateY(-14px)" },
+        to: { opacity: 1, transform: "translateY(0)" },
+      },
+    },
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -482,7 +705,7 @@ export const AreasPage = () => {
           justifyContent: "space-between",
           alignItems: "center",
           mb: 0,
-          pb: 2,
+          pb: 1.5,
           flexWrap: "wrap",
           gap: 1,
           borderBottom: "2px solid",
@@ -521,6 +744,26 @@ export const AreasPage = () => {
           </Box>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          {/* Toggle vista */}
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={(_, v) => {
+              if (v) setViewMode(v);
+            }}
+            size="small"
+            sx={{ "& .MuiToggleButton-root": { py: 0.5, px: 1, fontSize: 11, fontWeight: 700 } }}
+          >
+            <ToggleButton value="zones" title="Ver por zonas (Ala Izq / Conector / Ala Der)">
+              <GridViewIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              Zonas
+            </ToggleButton>
+            <ToggleButton value="full" title="Vista completa del piso (32×27)">
+              <ViewComfyIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              Planta completa
+            </ToggleButton>
+          </ToggleButtonGroup>
+
           <Tooltip title="Persiste todos los cambios pendientes en la base de datos">
             <span>
               <Badge badgeContent={pendingCount} color="warning" max={99}>
@@ -547,7 +790,7 @@ export const AreasPage = () => {
               startIcon={<ThreeDRotationIcon />}
               onClick={handleGenerarRender}
             >
-              Generar Render
+              Render
             </Button>
           </Tooltip>
           <Button
@@ -566,18 +809,32 @@ export const AreasPage = () => {
       </Box>
 
       {saveAllError && (
-        <Alert severity="error" sx={{ mt: 2, mb: 1 }} onClose={() => setSaveAllError("")}>
+        <Alert severity="error" sx={{ mt: 1.5, mb: 0.5 }} onClose={() => setSaveAllError("")}>
           {saveAllError}
         </Alert>
       )}
-
       {error && (
-        <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
+        <Alert severity="error" sx={{ mt: 1.5, mb: 0.5 }}>
           {error}
         </Alert>
       )}
 
-      {/* ── Áreas sin mapear ── */}
+      {/* Minimap + navegación unificada */}
+      {!loading && (
+        <Box sx={{ mt: 1.5, mb: 1 }}>
+          <BuildingMinimap
+            pisoIdx={pisoIdx}
+            alaIdx={alaIdx}
+            viewMode={viewMode}
+            onZoneClick={(idx) => {
+              if (viewMode === "zones") changeAla(idx);
+            }}
+            onPisoClick={changePiso}
+          />
+        </Box>
+      )}
+
+      {/* Áreas sin mapear */}
       {!loading &&
         (() => {
           const sinMapear = areas.filter(
@@ -585,12 +842,12 @@ export const AreasPage = () => {
           );
           if (sinMapear.length === 0) return null;
           return (
-            <Paper variant="outlined" sx={{ mb: 2, p: 1.5, borderColor: "warning.light" }}>
+            <Paper variant="outlined" sx={{ mb: 1.5, p: 1.25, borderColor: "warning.light" }}>
               <Typography
                 variant="caption"
                 fontWeight={700}
                 color="warning.dark"
-                sx={{ display: "block", mb: 1, letterSpacing: 0.5 }}
+                sx={{ display: "block", mb: 0.75, letterSpacing: 0.5 }}
               >
                 {sinMapear.length} ÁREA{sinMapear.length !== 1 ? "S" : ""} SIN MAPEAR — haz clic en
                 "Colocar" para posicionarlas en el grid
@@ -604,7 +861,6 @@ export const AreasPage = () => {
                     variant="outlined"
                     color="warning"
                     onClick={() => {
-                      // Detectar a qué zona pertenece (por sus coords si las tiene, si no usar izq)
                       const zoneIdx = ZONES.findIndex((z) => {
                         const x1 = a.gridX1 ?? -1;
                         return x1 >= z.colStart && x1 < z.colStart + z.colCount;
@@ -614,12 +870,12 @@ export const AreasPage = () => {
                       const pisoItem = PISOS.find((p) => p.floor === a.floor) ?? PISOS[0];
                       const withCoords = { ...a, ...defaultCoords, piso: pisoItem.piso };
                       setAreas((prev) => prev.map((x) => (x.id === a.id ? withCoords : x)));
-                      setPisoIdx(
+                      const pIdx =
                         PISOS.findIndex((p) => p.floor === a.floor) >= 0
                           ? PISOS.findIndex((p) => p.floor === a.floor)
-                          : 0,
-                      );
-                      setAlaIdx(targetZoneIdx);
+                          : 0;
+                      changePiso(pIdx);
+                      if (viewMode === "zones") changeAla(targetZoneIdx);
                       setSelectedId(a.id);
                       setEditForm({ ...withCoords, _dirty: true });
                       setSaveError("");
@@ -641,63 +897,60 @@ export const AreasPage = () => {
         </Box>
       ) : (
         <Box sx={{ display: "flex", gap: 0, alignItems: "flex-start" }}>
-          {/* Columna izquierda: tabs de ALA + niveles + grid (2/3) */}
-          <Box sx={{ flex: "0 0 67%" }}>
-            <Paper sx={{ borderRadius: "10px", overflow: "hidden", mt: 2 }}>
-              {/* TAB nivel 1: ALA IZQUIERDA / CONECTOR / ALA DERECHA */}
-              <Box sx={{ borderBottom: "2px solid rgba(0,0,0,0.10)", bgcolor: "grey.50" }}>
-                <Tabs
-                  value={alaIdx}
-                  onChange={(_, v) => {
-                    setAlaIdx(v);
-                    setSelectedId(null);
-                    setEditForm(null);
-                  }}
-                  sx={{ minHeight: 44 }}
-                  TabIndicatorProps={{ style: { height: 3 } }}
-                >
-                  {ZONES.map((zone, i) => {
-                    const isActive = alaIdx === i;
-                    return (
-                      <Tab
-                        key={zone.key}
-                        label={zone.label}
-                        sx={{
-                          minHeight: 44,
-                          fontWeight: 700,
-                          fontSize: zone.key === "conector" ? 11 : 13,
-                          letterSpacing: 0.5,
-                          opacity: isActive ? 1 : 0.4,
-                          transition: "all 0.2s ease",
-                          bgcolor: isActive ? "rgba(157,36,73,0.07)" : "transparent",
-                          color: isActive ? "primary.main" : "inherit",
-                          borderRadius: "6px 6px 0 0",
-                        }}
-                      />
-                    );
-                  })}
-                </Tabs>
-              </Box>
+          {/* Columna izquierda: grid */}
+          <Box sx={{ flex: "0 0 67%", minWidth: 0 }}>
+            <Paper sx={{ borderRadius: "10px", overflow: "hidden" }}>
+              {/* Tabs de zona — solo en modo "zones" */}
+              {viewMode === "zones" && (
+                <Box sx={{ borderBottom: "2px solid rgba(0,0,0,0.10)", bgcolor: "grey.50" }}>
+                  <Tabs
+                    value={alaIdx}
+                    onChange={(_, v) => changeAla(v)}
+                    sx={{ minHeight: 40 }}
+                    TabIndicatorProps={{ style: { height: 3 } }}
+                  >
+                    {ZONES.map((zone, i) => {
+                      const isActive = alaIdx === i;
+                      return (
+                        <Tab
+                          key={zone.key}
+                          label={zone.label}
+                          sx={{
+                            minHeight: 40,
+                            fontWeight: 700,
+                            fontSize: zone.key === "conector" ? 10 : 12,
+                            letterSpacing: 0.5,
+                            opacity: isActive ? 1 : 0.4,
+                            transition: "all 0.2s ease",
+                            bgcolor: isActive ? `${zone.color}12` : "transparent",
+                            color: isActive ? zone.color : "inherit",
+                            borderRadius: "6px 6px 0 0",
+                          }}
+                        />
+                      );
+                    })}
+                  </Tabs>
+                </Box>
+              )}
 
-              {/* TAB nivel 2: niveles PB / 2 / 3 / 4 */}
+              {/* Tabs de piso */}
               <Box sx={{ borderBottom: "1px solid rgba(0,0,0,0.07)", bgcolor: "white" }}>
                 <Tabs
                   value={pisoIdx}
-                  onChange={(_, v) => {
-                    setPisoIdx(v);
-                    setSelectedId(null);
-                    setEditForm(null);
-                  }}
-                  sx={{ minHeight: 38 }}
+                  onChange={(_, v) => changePiso(v)}
+                  sx={{ minHeight: 36 }}
                   variant="fullWidth"
                 >
                   {PISOS.map((p, i) => {
-                    const zona = ZONES[alaIdx];
-                    const count = areas.filter((a) => {
-                      if (a.floor !== p.floor) return false;
-                      const x1 = a.gridX1 ?? -1;
-                      return x1 >= zona.colStart && x1 < zona.colStart + zona.colCount;
-                    }).length;
+                    const count =
+                      viewMode === "full"
+                        ? areas.filter((a) => a.floor === p.floor).length
+                        : areas.filter((a) => {
+                            if (a.floor !== p.floor) return false;
+                            const zona = ZONES[alaIdx];
+                            const x1 = a.gridX1 ?? -1;
+                            return x1 >= zona.colStart && x1 < zona.colStart + zona.colCount;
+                          }).length;
                     const isActive = pisoIdx === i;
                     return (
                       <Tab
@@ -709,19 +962,19 @@ export const AreasPage = () => {
                               label={count}
                               size="small"
                               sx={{
-                                height: 18,
-                                fontSize: 10,
+                                height: 16,
+                                fontSize: 9,
                                 fontWeight: 800,
                                 bgcolor: isActive ? "primary.main" : "grey.300",
                                 color: isActive ? "#fff" : "text.primary",
-                                "& .MuiChip-label": { px: 0.75 },
+                                "& .MuiChip-label": { px: 0.5 },
                               }}
                             />
                           </Box>
                         }
                         sx={{
-                          minHeight: 38,
-                          fontSize: 12,
+                          minHeight: 36,
+                          fontSize: 11,
                           textTransform: "none",
                           fontWeight: 600,
                           opacity: isActive ? 1 : 0.45,
@@ -734,44 +987,70 @@ export const AreasPage = () => {
                 </Tabs>
               </Box>
 
-              {/* Grid del piso + zona seleccionada */}
-              {(() => {
-                const pisoActivo = PISOS[pisoIdx];
-                const zona = ZONES[alaIdx];
-                const areasFiltradas = areas.filter((a) => {
-                  if (a.floor !== pisoActivo.floor) return false;
-                  const x1 = a.gridX1 ?? -1;
-                  if (x1 < 0) return false;
-                  return x1 >= zona.colStart && x1 < zona.colStart + zona.colCount;
-                });
-                return (
+              {/* Grid con animación de slide */}
+              <Box
+                key={gridKey}
+                sx={{
+                  p: viewMode === "full" ? 1 : 1.5,
+                  animation: "siast-slide 0.22s ease",
+                  ...slideKeyframes[slideDir],
+                }}
+              >
+                {/* Fondos de zona en vista completa */}
+                {viewMode === "full" && (
                   <Box
-                    key={`${alaIdx}-${pisoIdx}`}
                     sx={{
-                      p: 2,
-                      animation: "siast-fadein 0.22s ease",
-                      "@keyframes siast-fadein": {
-                        from: { opacity: 0, transform: "translateY(4px)" },
-                        to: { opacity: 1, transform: "translateY(0)" },
-                      },
+                      display: "flex",
+                      gap: 0.5,
+                      mb: 0.75,
+                      px: 0.25,
+                      pointerEvents: "none",
                     }}
                   >
-                    <AreaGridEditor
-                      areas={areasFiltradas}
-                      selectedId={selectedId}
-                      onSelect={handleSelect}
-                      onResize={handleResize}
-                      onMove={handleMove}
-                      floorLabel={`PISO ${pisoActivo.label} — ${zona.label}`}
-                      colStart={zona.colStart}
-                      colCount={zona.colCount}
-                      zoneKey={zona.key}
-                      mueblesPorArea={mueblesPorArea}
-                      flipY
-                    />
+                    {ZONES.map((z) => (
+                      <Box
+                        key={z.key}
+                        sx={{
+                          flex: z.colCount,
+                          py: 0.25,
+                          borderRadius: "4px",
+                          bgcolor: z.color + "12",
+                          border: `1px solid ${z.color}33`,
+                          textAlign: "center",
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          sx={{ fontSize: 8, fontWeight: 800, color: z.color, letterSpacing: 0.8 }}
+                        >
+                          {z.label}
+                        </Typography>
+                      </Box>
+                    ))}
                   </Box>
-                );
-              })()}
+                )}
+
+                <AreaGridEditor
+                  areas={areasFiltradas}
+                  allAreas={areas}
+                  selectedId={selectedId}
+                  onSelect={handleSelect}
+                  onResize={handleResize}
+                  onMove={handleMove}
+                  floorLabel={
+                    viewMode === "full"
+                      ? `PISO ${pisoActivo.label} — PLANTA COMPLETA`
+                      : `PISO ${pisoActivo.label} — ${ZONES[alaIdx].label}`
+                  }
+                  colStart={gridConfig.colStart}
+                  colCount={gridConfig.colCount}
+                  zoneKey={gridConfig.zoneKey}
+                  mueblesPorArea={mueblesPorArea}
+                  pendingChanges={pendingChanges}
+                  flipY
+                  compact={viewMode === "full"}
+                />
+              </Box>
             </Paper>
           </Box>
 
@@ -782,8 +1061,7 @@ export const AreasPage = () => {
               position: "sticky",
               top: 16,
               maxHeight: "calc(100vh - 80px)",
-              pl: 2,
-              mt: 2,
+              pl: 1.5,
             }}
           >
             <Paper
@@ -795,7 +1073,6 @@ export const AreasPage = () => {
                 flexDirection: "column",
               }}
             >
-              {/* Panel de edición — solo cuando hay área seleccionada */}
               {editForm && (
                 <EditPanel
                   key={editForm.id}
@@ -815,12 +1092,11 @@ export const AreasPage = () => {
                 />
               )}
 
-              {/* Visor 3D — siempre en el DOM (ref persiste); oculto con display:none cuando hay edición activa */}
               <Box sx={{ display: editForm ? "none" : "flex", flexDirection: "column", flex: 1 }}>
                 <Box
                   sx={{
-                    px: 2,
-                    py: 1,
+                    px: 1.5,
+                    py: 0.75,
                     borderBottom: "1px solid rgba(0,0,0,0.08)",
                     bgcolor: "grey.50",
                     display: "flex",
@@ -934,7 +1210,6 @@ export const AreasPage = () => {
             )}
           />
 
-          {/* Sección coordenadas — fondo diferenciado */}
           <Box
             sx={{
               p: 1.5,
@@ -1020,7 +1295,6 @@ export const AreasPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Confirmación de cambios sin guardar */}
       <ConfirmDialog />
     </Box>
   );
@@ -1038,19 +1312,11 @@ const TIPOS_MUEBLE = [
 ];
 
 const colorMueble = (tipo) => TIPOS_MUEBLE.find((t) => t.value === tipo)?.color ?? "#607d8b";
-
 const labelMueble = (tipo) => TIPOS_MUEBLE.find((t) => t.value === tipo)?.label ?? tipo;
 
-// ── Sub-componente: panel de edición ─────────────────────────────────────────
+// ── EditPanel ────────────────────────────────────────────────────────────────
 
-const MUEBLE_EMPTY = {
-  label: "",
-  tipo: "CUBICULO",
-  posX: "",
-  posY: "",
-  ancho: "",
-  alto: "",
-};
+const MUEBLE_EMPTY = { label: "", tipo: "CUBICULO", posX: "", posY: "", ancho: "", alto: "" };
 
 function EditPanel({
   form,
@@ -1109,18 +1375,16 @@ function EditPanel({
     try {
       await deleteMueble(muebleId);
       onMueblesChange();
-    } catch {
-      // silencioso — el usuario puede reintentar
-    }
+    } catch {}
   };
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "auto" }}>
-      {/* Header del panel — peso visual mayor */}
+      {/* Header del panel */}
       <Box
         sx={{
           px: 2,
-          py: 1.5,
+          py: 1.25,
           borderBottom: "2px solid",
           borderColor: "primary.main",
           display: "flex",
@@ -1156,7 +1420,17 @@ function EditPanel({
               label="Pendiente"
               size="small"
               color="warning"
-              sx={{ fontWeight: 700, fontSize: 10, height: 20, "& .MuiChip-label": { px: 1 } }}
+              sx={{
+                fontWeight: 700,
+                fontSize: 10,
+                height: 20,
+                "& .MuiChip-label": { px: 1 },
+                animation: "siast-pulse 1.5s ease infinite",
+                "@keyframes siast-pulse": {
+                  "0%,100%": { boxShadow: "0 0 0 0 rgba(237,108,2,0.35)" },
+                  "50%": { boxShadow: "0 0 0 4px rgba(237,108,2,0)" },
+                },
+              }}
             />
           )}
           <Chip
@@ -1170,7 +1444,14 @@ function EditPanel({
       </Box>
 
       <Box
-        sx={{ flex: 1, overflow: "auto", p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}
+        sx={{
+          flex: 1,
+          overflow: "auto",
+          p: 1.75,
+          display: "flex",
+          flexDirection: "column",
+          gap: 1.25,
+        }}
       >
         {saveError && (
           <Alert severity="error" sx={{ fontSize: 12 }}>
@@ -1178,7 +1459,6 @@ function EditPanel({
           </Alert>
         )}
 
-        {/* Sección: Datos del área */}
         <SectionLabel>DATOS DEL AREA</SectionLabel>
 
         <TextField
@@ -1227,7 +1507,7 @@ function EditPanel({
             sx={{
               display: "flex",
               flexDirection: "column",
-              gap: 1.5,
+              gap: 1.25,
               pl: 1,
               borderLeft: "3px solid",
               borderColor: "info.light",
@@ -1263,9 +1543,8 @@ function EditPanel({
           </Box>
         )}
 
-        <Divider sx={{ my: 0.5 }} />
+        <Divider sx={{ my: 0.25 }} />
 
-        {/* Sección: Adscripción SIRH */}
         <SectionLabel>ADSCRIPCION SIRH</SectionLabel>
 
         {sirhError ? (
@@ -1309,13 +1588,12 @@ function EditPanel({
           </>
         )}
 
-        <Divider sx={{ my: 0.5 }} />
+        <Divider sx={{ my: 0.25 }} />
 
-        {/* Sección: Coordenadas */}
         <SectionLabel>POSICION EN CUADRICULA</SectionLabel>
         <Box
           sx={{
-            p: 1.5,
+            p: 1.25,
             borderRadius: "6px",
             bgcolor: "action.hover",
             border: "1px solid",
@@ -1340,9 +1618,9 @@ function EditPanel({
           </Box>
         </Box>
 
-        <Divider sx={{ my: 0.5 }} />
+        <Divider sx={{ my: 0.25 }} />
 
-        {/* Sección: Muebles / Cubículos — colapsable */}
+        {/* Muebles colapsable */}
         <Box>
           <Box
             onClick={() => setMueblesExpanded((v) => !v)}
@@ -1394,7 +1672,6 @@ function EditPanel({
 
           <Collapse in={mueblesExpanded}>
             <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
-              {/* Lista de muebles existentes */}
               {muebles.length > 0 && (
                 <Paper variant="outlined" sx={{ borderRadius: "6px", overflow: "hidden" }}>
                   <List dense disablePadding>
@@ -1454,7 +1731,6 @@ function EditPanel({
                 </Paper>
               )}
 
-              {/* Formulario inline para agregar mueble */}
               {addingMueble ? (
                 <Paper
                   variant="outlined"
@@ -1492,7 +1768,12 @@ function EditPanel({
                           <MenuItem key={t.value} value={t.value}>
                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                               <Box
-                                sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: t.color }}
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  bgcolor: t.color,
+                                }}
                               />
                               {t.label}
                             </Box>
@@ -1564,7 +1845,7 @@ function EditPanel({
       {/* Acciones */}
       <Box
         sx={{
-          p: 2,
+          p: 1.5,
           borderTop: "1px solid",
           borderColor: "divider",
           display: "flex",
@@ -1599,20 +1880,13 @@ function EditPanel({
   );
 }
 
-// ── Sub-componente: etiqueta de sección ───────────────────────────────────────
-
 function SectionLabel({ children }) {
   return (
     <Typography
       variant="caption"
       fontWeight={700}
       color="text.secondary"
-      sx={{
-        letterSpacing: 0.8,
-        fontSize: 10,
-        display: "block",
-        mt: 0.5,
-      }}
+      sx={{ letterSpacing: 0.8, fontSize: 10, display: "block", mt: 0.25 }}
     >
       {children}
     </Typography>
