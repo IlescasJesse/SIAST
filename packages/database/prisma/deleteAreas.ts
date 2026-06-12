@@ -46,18 +46,25 @@ async function main() {
   });
   console.log(`   ✅ ${ticketCount} ticket(s) reasignados a sin_asignar`);
 
-  // 4. Borrar todas las áreas excepto el placeholder
+  // 4. Borrar muebles primero (FK Restrict hacia areas_edificio)
+  const { count: muebleCount } = await prisma.mueble.deleteMany({});
+  console.log(`   ✅ ${muebleCount} mueble(s) eliminados`);
+
+  // 5. Borrar todas las áreas excepto el placeholder
   const { count: areaCount } = await prisma.areaEdificio.deleteMany({
     where: { id: { not: PLACEHOLDER_ID } },
   });
   console.log(`   ✅ ${areaCount} área(s) eliminadas`);
 
   console.log("");
-  console.log("✅ Listo — solo queda el placeholder \"sin_asignar\"");
+  console.log('✅ Listo — solo queda el placeholder "sin_asignar"');
   console.log("   Crea las áreas reales desde el editor 2D en /admin/areas");
   console.log("   Sistema de coordenadas: 0-based (col 0..31, fila 0..26)");
 }
 
 main()
-  .catch((e) => { console.error(e); process.exit(1); })
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());
