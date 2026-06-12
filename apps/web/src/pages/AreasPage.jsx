@@ -62,6 +62,7 @@ import {
   getSirhAdscripciones,
   getMueblesByArea,
   createMueble,
+  createFilaMuebles,
   deleteMueble,
 } from "../api/catalogos.js";
 import { AreaGridEditor } from "../components/areas/AreaGridEditor.jsx";
@@ -1316,7 +1317,26 @@ const labelMueble = (tipo) => TIPOS_MUEBLE.find((t) => t.value === tipo)?.label 
 
 // ── EditPanel ────────────────────────────────────────────────────────────────
 
-const MUEBLE_EMPTY = { label: "", tipo: "CUBICULO", posX: "", posY: "", ancho: "", alto: "" };
+const MUEBLE_EMPTY = {
+  label: "",
+  tipo: "CUBICULO",
+  gridX: "0.5",
+  gridY: "0.5",
+  ancho: "0.15",
+  alto: "0.15",
+  rotacion: 0,
+  // Modo fila
+  modo: "uno", // "uno" | "fila"
+  cantidad: "4",
+  orientacion: "H",
+};
+
+const ROTACIONES = [
+  { value: 0, label: "0°" },
+  { value: 90, label: "90°" },
+  { value: 180, label: "180°" },
+  { value: 270, label: "270°" },
+];
 
 function EditPanel({
   form,
@@ -1350,17 +1370,39 @@ function EditPanel({
       setMuebleError("El nombre es obligatorio");
       return;
     }
+    const gridX = Number(muebleForm.gridX);
+    const gridY = Number(muebleForm.gridY);
+    if (isNaN(gridX) || gridX < 0 || gridX > 1 || isNaN(gridY) || gridY < 0 || gridY > 1) {
+      setMuebleError("gridX y gridY deben estar entre 0 y 1");
+      return;
+    }
     setMuebleSaving(true);
     setMuebleError("");
     try {
-      await createMueble(form.id, {
-        label: muebleForm.label.trim(),
+      const base = {
         tipo: muebleForm.tipo,
-        posX: muebleForm.posX !== "" ? Number(muebleForm.posX) : null,
-        posY: muebleForm.posY !== "" ? Number(muebleForm.posY) : null,
-        ancho: muebleForm.ancho !== "" ? Number(muebleForm.ancho) : null,
-        alto: muebleForm.alto !== "" ? Number(muebleForm.alto) : null,
-      });
+        gridX,
+        gridY,
+        ancho: muebleForm.ancho !== "" ? Number(muebleForm.ancho) : 0.15,
+        alto: muebleForm.alto !== "" ? Number(muebleForm.alto) : 0.15,
+        rotacion: muebleForm.rotacion,
+      };
+      if (muebleForm.modo === "fila") {
+        const cantidad = parseInt(muebleForm.cantidad, 10);
+        if (isNaN(cantidad) || cantidad < 1 || cantidad > 30) {
+          setMuebleError("La cantidad debe ser de 1 a 30 módulos");
+          setMuebleSaving(false);
+          return;
+        }
+        await createFilaMuebles(form.id, {
+          ...base,
+          labelPrefix: muebleForm.label.trim(),
+          cantidad,
+          orientacion: muebleForm.orientacion,
+        });
+      } else {
+        await createMueble(form.id, { ...base, label: muebleForm.label.trim() });
+      }
       setMuebleForm(MUEBLE_EMPTY);
       setAddingMueble(false);
       onMueblesChange();
@@ -1749,7 +1791,7 @@ function EditPanel({
                   )}
                   <Box sx={{ display: "flex", gap: 1 }}>
                     <TextField
-                      label="Nombre"
+                      label={muebleForm.modo === "fila" ? "Prefijo (ej. Cubículo)" : "Nombre"}
                       value={muebleForm.label}
                       onChange={(e) => setMuebleForm((p) => ({ ...p, label: e.target.value }))}
                       size="small"
@@ -1782,11 +1824,60 @@ function EditPanel({
                       </Select>
                     </FormControl>
                   </Box>
+                  {/* Modo: módulo solo o fila de módulos */}
+                  <ToggleButtonGroup
+                    value={muebleForm.modo}
+                    exclusive
+                    size="small"
+                    fullWidth
+                    onChange={(_, v) => v && setMuebleForm((p) => ({ ...p, modo: v }))}
+                    sx={{ "& .MuiToggleButton-root": { py: 0.4, fontSize: 11, fontWeight: 700 } }}
+                  >
+                    <ToggleButton value="uno">Módulo solo</ToggleButton>
+                    <ToggleButton value="fila">Fila de módulos</ToggleButton>
+                  </ToggleButtonGroup>
+
+                  {muebleForm.modo === "fila" && (
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <TextField
+                        label="Cantidad"
+                        value={muebleForm.cantidad}
+                        onChange={(e) =>
+                          setMuebleForm((p) => ({
+                            ...p,
+                            cantidad: e.target.value.replace(/[^0-9]/g, ""),
+                          }))
+                        }
+                        size="small"
+                        sx={{ flex: 1 }}
+                        inputProps={{ inputMode: "numeric" }}
+                      />
+                      <FormControl size="small" sx={{ flex: 1 }}>
+                        <InputLabel>Orientación</InputLabel>
+                        <Select
+                          value={muebleForm.orientacion}
+                          label="Orientación"
+                          onChange={(e) =>
+                            setMuebleForm((p) => ({ ...p, orientacion: e.target.value }))
+                          }
+                        >
+                          <MenuItem value="H">Horizontal →</MenuItem>
+                          <MenuItem value="V">Vertical ↓</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Box>
+                  )}
+
                   <Box sx={{ display: "flex", gap: 1 }}>
-                    {["posX", "posY", "ancho", "alto"].map((field) => (
+                    {[
+                      { field: "gridX", label: "Pos X (0-1)" },
+                      { field: "gridY", label: "Pos Y (0-1)" },
+                      { field: "ancho", label: "Ancho (0-1)" },
+                      { field: "alto", label: "Alto (0-1)" },
+                    ].map(({ field, label }) => (
                       <TextField
                         key={field}
-                        label={field}
+                        label={label}
                         value={muebleForm[field]}
                         onChange={(e) =>
                           setMuebleForm((p) => ({
@@ -1801,6 +1892,23 @@ function EditPanel({
                       />
                     ))}
                   </Box>
+
+                  <FormControl size="small" fullWidth>
+                    <InputLabel>Rotación</InputLabel>
+                    <Select
+                      value={muebleForm.rotacion}
+                      label="Rotación"
+                      onChange={(e) =>
+                        setMuebleForm((p) => ({ ...p, rotacion: Number(e.target.value) }))
+                      }
+                    >
+                      {ROTACIONES.map((r) => (
+                        <MenuItem key={r.value} value={r.value}>
+                          {r.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                   <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
                     <Button
                       size="small"

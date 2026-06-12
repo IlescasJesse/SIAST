@@ -514,6 +514,9 @@ window.addEventListener("message", (e) => {
   switch (type) {
     case "SET_TOKEN":
       _jwtToken = payload.token ?? null;
+      // El fetch inicial de muebles corre sin token (401 silencioso); al recibir
+      // el JWT se reintenta para que los muebles aparezcan sin esperar otra edición.
+      if (_jwtToken) refreshMuebles(allRoomsLive().filter((r) => r.x1 != null));
       break;
     case "HIGHLIGHT_ROOM":
       window.SIAST3D.highlightRoom(payload.floor, payload.roomId);

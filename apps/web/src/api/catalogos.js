@@ -43,6 +43,9 @@ export const getMueblesByArea = (areaId) =>
 export const createMueble = (areaId, data) =>
   api.post(`/api/admin/areas/${areaId}/muebles`, data).then((r) => r.data);
 
+export const createFilaMuebles = (areaId, data) =>
+  api.post(`/api/admin/areas/${areaId}/muebles/fila`, data).then((r) => r.data);
+
 export const updateMueble = (muebleId, data) =>
   api.put(`/api/admin/muebles/${muebleId}`, data).then((r) => r.data);
 

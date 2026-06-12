@@ -50,6 +50,7 @@ router.get("/areas-soporte", listarAreasSoporte);
 // ── Muebles (cubículos, escritorios, salas dentro de un área) ─────────────────
 router.get("/areas/:areaId/muebles", mueblesCtrl.listarMuebles);
 router.post("/areas/:areaId/muebles", mueblesCtrl.crearMueble);
+router.post("/areas/:areaId/muebles/fila", mueblesCtrl.crearFilaMuebles);
 router.put("/muebles/:id", mueblesCtrl.actualizarMueble);
 router.delete("/muebles/:id", mueblesCtrl.eliminarMueble);
 

@@ -299,6 +299,7 @@ model Mueble {
   gridY     Float
   ancho     Float    @default(1.0)
   alto      Float    @default(1.0)
+  rotacion  Int      @default(0) // grados sobre eje Y: 0, 90, 180, 270
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
 
