@@ -1,15 +1,112 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SIAST — Edificio Saúl Martínez</title>
     <style>
+      /* ═══════════════════════════════════════════════════════
+         VARIABLES DE TEMA — toda la UI de overlay las usa.
+         El JS alterna data-theme="dark" en <html>.
+         ─────────────────────────────────────────────────────
+         Paleta institucional:
+           --color-primary   guinda #9d2449   (acento principal)
+           --color-secondary azul  #1e5fa8    (info secundaria)
+         ═══════════════════════════════════════════════════════ */
+      :root {
+        /* Superficies */
+        --bg-overlay:       rgba(255, 255, 255, 0.88);
+        --bg-overlay-hover: rgba(255, 255, 255, 0.96);
+        --bg-tab-active:    #9d2449;
+        --bg-loader:        #f0f4f8;
+
+        /* Bordes */
+        --border-subtle:    rgba(100, 150, 210, 0.30);
+        --border-panel:     rgba(100, 150, 210, 0.35);
+
+        /* Texto */
+        --text-primary:     #1a2744;
+        --text-secondary:   #5a6a80;
+        --text-muted:       #718096;
+        --text-tab:         #2b6cb0;
+        --text-tab-active:  #ffffff;
+        --text-badge:       #1a2744;
+
+        /* Institucionales */
+        --color-primary:    #9d2449;
+        --color-secondary:  #1e5fa8;
+
+        /* Sombras */
+        --shadow-panel:     0 4px 20px rgba(0, 0, 0, 0.10);
+        --shadow-bar:       0 2px 16px rgba(0, 0, 0, 0.12);
+
+        /* Loader */
+        --loader-bar-bg:    rgba(0, 0, 0, 0.08);
+
+        /* Badges secundarios */
+        --badge-bg:         rgba(255, 255, 255, 0.80);
+        --badge-border:     rgba(100, 150, 210, 0.30);
+
+        /* Área deshabilitada en tab bar */
+        --tab-disabled-color:   rgba(100, 130, 170, 0.45);
+        --tab-disabled-border:  rgba(100, 130, 170, 0.20);
+
+        /* Tickets */
+        --ticket-bg:        rgba(220, 38, 38, 0.08);
+        --ticket-border:    rgba(220, 38, 38, 0.25);
+        --ticket-text:      #c53030;
+      }
+
+      [data-theme="dark"] {
+        /* Superficies */
+        --bg-overlay:       rgba(15, 22, 40, 0.88);
+        --bg-overlay-hover: rgba(20, 30, 55, 0.96);
+        --bg-tab-active:    #9d2449;
+        --bg-loader:        #070b14;
+
+        /* Bordes */
+        --border-subtle:    rgba(80, 110, 160, 0.35);
+        --border-panel:     rgba(80, 120, 180, 0.30);
+
+        /* Texto */
+        --text-primary:     #e2eaf8;
+        --text-secondary:   #8da4c4;
+        --text-muted:       #6b82a0;
+        --text-tab:         #7fa8d8;
+        --text-tab-active:  #ffffff;
+        --text-badge:       #c8d8f0;
+
+        /* Institucionales — igual en ambos temas */
+        --color-primary:    #9d2449;
+        --color-secondary:  #4a8fd4;
+
+        /* Sombras */
+        --shadow-panel:     0 4px 24px rgba(0, 0, 0, 0.45);
+        --shadow-bar:       0 2px 20px rgba(0, 0, 0, 0.50);
+
+        /* Loader */
+        --loader-bar-bg:    rgba(255, 255, 255, 0.08);
+
+        /* Badges */
+        --badge-bg:         rgba(15, 22, 40, 0.80);
+        --badge-border:     rgba(80, 110, 160, 0.35);
+
+        /* Área deshabilitada */
+        --tab-disabled-color:   rgba(100, 130, 160, 0.35);
+        --tab-disabled-border:  rgba(80, 110, 140, 0.20);
+
+        /* Tickets */
+        --ticket-bg:        rgba(220, 38, 38, 0.12);
+        --ticket-border:    rgba(220, 38, 38, 0.30);
+        --ticket-text:      #f47070;
+      }
+
+      /* ── Reset base ── */
       * { margin: 0; padding: 0; box-sizing: border-box; }
 
       body {
-        background: #f0f4f8;
-        color: #1a2744;
+        background: var(--bg-loader);
+        color: var(--text-primary);
         font-family: 'Segoe UI', system-ui, sans-serif;
         overflow: hidden;
         width: 100vw;
@@ -23,91 +120,246 @@
 
       canvas { display: block; }
 
-      /* ── Panel lateral ── */
+      /* ═══════════════════════════════════════════════════════
+         PANEL DE INFORMACIÓN DE ÁREA (arriba-derecha)
+         ═══════════════════════════════════════════════════════ */
       #info-panel {
         position: fixed;
         top: 16px;
         right: 16px;
         width: 260px;
-        background: rgba(255, 255, 255, 0.92);
-        border: 1px solid rgba(100, 150, 210, 0.35);
-        border-radius: 10px;
+        background: var(--bg-overlay);
+        border: 1px solid var(--border-panel);
+        border-radius: 12px;
         padding: 16px;
-        backdrop-filter: blur(12px);
-        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-        transition: opacity 0.3s;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: var(--shadow-panel);
+        transition: opacity 0.3s, background 0.25s, border-color 0.25s;
         opacity: 0;
         pointer-events: none;
+        z-index: 20;
       }
 
       #info-panel.visible { opacity: 1; pointer-events: auto; }
 
+      /* Franja de acento guinda arriba del panel */
+      #info-panel::before {
+        content: '';
+        display: block;
+        height: 3px;
+        background: linear-gradient(90deg, var(--color-primary), transparent);
+        border-radius: 3px 3px 0 0;
+        margin: -16px -16px 12px;
+      }
+
       #info-panel h3 {
-        font-size: 14px;
-        font-weight: 600;
-        color: #1e5fa8;
-        margin-bottom: 8px;
-        letter-spacing: 0.05em;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--color-primary);
+        margin-bottom: 10px;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
       }
 
-      #info-panel .field { margin-bottom: 6px; font-size: 13px; color: #5a6a80; }
-      #info-panel .field span { color: #1a2744; font-weight: 500; }
+      #info-panel .field {
+        margin-bottom: 6px;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      #info-panel .field span {
+        color: var(--text-primary);
+        font-weight: 500;
+      }
 
       #info-panel .tickets-count {
         margin-top: 10px;
-        padding: 8px;
-        border-radius: 6px;
-        background: rgba(220, 38, 38, 0.08);
-        border: 1px solid rgba(220, 38, 38, 0.25);
+        padding: 7px 10px;
+        border-radius: 7px;
+        background: var(--ticket-bg);
+        border: 1px solid var(--ticket-border);
         font-size: 12px;
-        color: #c53030;
+        color: var(--ticket-text);
         display: none;
       }
+
       #info-panel .tickets-count.visible { display: block; }
 
-      /* ── Controles de piso ── */
+      /* ═══════════════════════════════════════════════════════
+         BADGE DE NIVEL — arriba-centro, debajo del borde superior
+         Muestra: "Edificio completo" / "Planta Baja" / "Sala de Servidores — PB"
+         ═══════════════════════════════════════════════════════ */
+      #level-badge {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--badge-bg);
+        border: 1px solid var(--badge-border);
+        border-radius: 20px;
+        padding: 5px 16px;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-badge);
+        letter-spacing: 0.04em;
+        box-shadow: var(--shadow-bar);
+        white-space: nowrap;
+        transition: background 0.25s, border-color 0.25s, color 0.25s;
+        z-index: 20;
+        /* Punto de color institucional */
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      #level-badge .badge-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--color-primary);
+        flex-shrink: 0;
+      }
+
+      /* ═══════════════════════════════════════════════════════
+         TAB BAR INFERIOR — navegación de pisos
+         ═══════════════════════════════════════════════════════ */
       #floor-controls {
         position: fixed;
-        bottom: 20px;
+        bottom: 22px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
-        gap: 8px;
-        background: rgba(255, 255, 255, 0.88);
-        padding: 10px 16px;
+        align-items: center;
+        gap: 4px;
+        background: var(--bg-overlay);
+        padding: 6px 8px;
         border-radius: 40px;
-        border: 1px solid rgba(100, 150, 210, 0.3);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+        border: 1px solid var(--border-subtle);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: var(--shadow-bar);
+        transition: background 0.25s, border-color 0.25s;
+        z-index: 20;
       }
 
+      /* Separador visual entre el grupo de pisos y el indicador "Área" */
+      #floor-controls .tab-separator {
+        width: 1px;
+        height: 20px;
+        background: var(--border-subtle);
+        margin: 0 4px;
+        flex-shrink: 0;
+      }
+
+      /* Tab base */
       .floor-btn {
         background: transparent;
-        border: 1px solid rgba(43, 108, 176, 0.35);
-        color: #2b6cb0;
-        padding: 6px 14px;
-        border-radius: 20px;
+        border: 1px solid transparent;
+        color: var(--text-tab);
+        padding: 6px 16px;
+        border-radius: 28px;
         font-size: 12px;
+        font-weight: 500;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: background 0.18s, color 0.18s, border-color 0.18s, box-shadow 0.18s;
         font-family: inherit;
+        white-space: nowrap;
+        letter-spacing: 0.03em;
+        line-height: 1;
       }
 
-      .floor-btn:hover { background: rgba(43, 108, 176, 0.1); }
-      .floor-btn.active { background: rgba(43, 108, 176, 0.18); color: #1a365d; border-color: #2b6cb0; font-weight: 600; }
+      .floor-btn:hover:not(:disabled) {
+        background: rgba(157, 36, 73, 0.08);
+        border-color: rgba(157, 36, 73, 0.25);
+        color: var(--color-primary);
+      }
 
-      /* ── Loader ── */
+      /* Tab activo — relleno guinda */
+      .floor-btn.active {
+        background: var(--bg-tab-active);
+        color: var(--text-tab-active);
+        border-color: transparent;
+        font-weight: 700;
+        box-shadow: 0 2px 8px rgba(157, 36, 73, 0.35);
+      }
+
+      /* Tab "Área" — solo indicador de estado, no clickable como navegación */
+      .floor-btn[data-floor="area"] {
+        cursor: default;
+        color: var(--tab-disabled-color);
+        border-color: var(--tab-disabled-border);
+      }
+
+      .floor-btn[data-floor="area"]:hover:not(.active) {
+        background: transparent;
+        border-color: var(--tab-disabled-border);
+        color: var(--tab-disabled-color);
+      }
+
+      /* Cuando "Área" está activo sí aplica el relleno normal */
+      .floor-btn[data-floor="area"].active {
+        cursor: default;
+        background: var(--bg-tab-active);
+        color: var(--text-tab-active);
+        border-color: transparent;
+        box-shadow: 0 2px 8px rgba(157, 36, 73, 0.35);
+      }
+
+      /* ═══════════════════════════════════════════════════════
+         TOGGLE DE TEMA — arriba-izquierda
+         ═══════════════════════════════════════════════════════ */
+      #theme-toggle {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--bg-overlay);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px;
+        padding: 5px 12px;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        cursor: pointer;
+        letter-spacing: 0.04em;
+        box-shadow: var(--shadow-bar);
+        transition: background 0.2s, border-color 0.2s, color 0.2s;
+        z-index: 20;
+      }
+
+      #theme-toggle:hover {
+        background: var(--bg-overlay-hover);
+        color: var(--text-primary);
+      }
+
+      /* Iconos SVG inline para claro/oscuro */
+      #theme-toggle .theme-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        opacity: 0.75;
+      }
+
+      /* ═══════════════════════════════════════════════════════
+         LOADER
+         ═══════════════════════════════════════════════════════ */
       #loader {
         position: fixed;
         inset: 0;
-        background: #f0f4f8;
+        background: var(--bg-loader);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         z-index: 100;
-        transition: opacity 0.6s;
+        transition: opacity 0.6s, background 0.25s;
       }
 
       #loader.hidden { opacity: 0; pointer-events: none; }
@@ -116,16 +368,20 @@
         font-size: 22px;
         font-weight: 700;
         letter-spacing: 0.1em;
-        color: #9d2449;
+        color: var(--color-primary);
         margin-bottom: 8px;
       }
 
-      #loader .sub { font-size: 12px; color: #718096; margin-bottom: 32px; }
+      #loader .sub {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 32px;
+      }
 
       #loader .bar-wrap {
         width: 200px;
         height: 3px;
-        background: rgba(0,0,0,0.08);
+        background: var(--loader-bar-bg);
         border-radius: 3px;
         overflow: hidden;
       }
@@ -138,7 +394,9 @@
         transition: width 0.4s ease;
       }
 
-      /* ── Login mode overlay ── */
+      /* ═══════════════════════════════════════════════════════
+         LOGIN OVERLAY
+         ═══════════════════════════════════════════════════════ */
       #login-overlay {
         position: fixed;
         inset: 0;
@@ -155,29 +413,61 @@
       #login-overlay .title {
         font-size: 28px;
         font-weight: 700;
-        color: #9d2449;
+        color: var(--color-primary);
         letter-spacing: 0.08em;
-        text-shadow: 0 0 30px rgba(157,36,73,0.3);
+        text-shadow: 0 0 30px rgba(157, 36, 73, 0.3);
         margin-bottom: 4px;
       }
 
       #login-overlay .subtitle {
         font-size: 12px;
-        color: #718096;
+        color: var(--text-muted);
         letter-spacing: 0.15em;
         text-transform: uppercase;
       }
     </style>
   </head>
   <body>
+    <!-- ── Loader de entrada ── -->
     <div id="loader">
       <div class="logo">SIAST</div>
       <div class="sub">Edificio Saúl Martínez — Secretaría de Finanzas</div>
       <div class="bar-wrap"><div class="bar" id="loader-bar"></div></div>
     </div>
 
+    <!-- ── Canvas Three.js ── -->
     <div id="canvas-container"></div>
 
+    <!-- ── Toggle de tema (arriba-izquierda) ── -->
+    <button id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">
+      <!-- Icono sol (modo claro activo) / luna (modo oscuro activo) — se rota por JS -->
+      <svg class="theme-icon" id="theme-icon-light" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <svg class="theme-icon" id="theme-icon-dark" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           style="display:none">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <span id="theme-label">Oscuro</span>
+    </button>
+
+    <!-- ── Badge de nivel (arriba-centro) ── -->
+    <div id="level-badge">
+      <span class="badge-dot"></span>
+      <span id="level-badge-text">Edificio completo</span>
+    </div>
+
+    <!-- ── Panel de información de área (arriba-derecha) ── -->
     <div id="info-panel">
       <h3 id="panel-area-name">Área</h3>
       <div class="field">Piso: <span id="panel-floor">—</span></div>
@@ -186,19 +476,192 @@
       <div class="tickets-count" id="panel-tickets"></div>
     </div>
 
+    <!-- ── Tab bar inferior (navegación de pisos) ── -->
+    <!--
+      Tabs: Edificio · PB · N1 · N2 · N3 | Área
+      "Área" es indicador de estado: se activa solo cuando viewLevel='area'.
+      El separador | divide los controles de navegación del indicador de contexto.
+    -->
     <div id="floor-controls">
-      <button class="floor-btn" data-floor="all">Todo</button>
+      <button class="floor-btn active" data-floor="all">Edificio</button>
       <button class="floor-btn" data-floor="0">PB</button>
       <button class="floor-btn" data-floor="1">N1</button>
       <button class="floor-btn" data-floor="2">N2</button>
       <button class="floor-btn" data-floor="3">N3</button>
+      <span class="tab-separator" aria-hidden="true"></span>
+      <button class="floor-btn" data-floor="area" disabled aria-label="Área enfocada">Área</button>
     </div>
 
+    <!-- ── Overlay de modo login ── -->
     <div id="login-overlay">
       <div class="title">SIAST</div>
       <div class="subtitle">Sistema Integral de Atención y Soporte Técnico</div>
     </div>
 
     <script type="module" src="/src/main.js"></script>
+
+    <script>
+      /* ═══════════════════════════════════════════════════════
+         TEMA CLARO/OSCURO — script inline (no module)
+         Corre antes que main.js para evitar flash de tema.
+
+         Flujo:
+           1. Leer preferencia guardada en localStorage (siast3d-theme).
+           2. Si no hay preferencia, usar preferencia del sistema operativo.
+           3. Aplicar data-theme en <html> inmediatamente.
+           4. El toggle llama window._siast3dApplyTheme(theme) que:
+              - Actualiza el DOM
+              - Persiste en localStorage
+              - Llama window.SIAST3D.setTheme() si ya está disponible (main.js cargado)
+         ═══════════════════════════════════════════════════════ */
+
+      (function () {
+        // Leer preferencia guardada o deducir del sistema
+        const saved = localStorage.getItem("siast3d-theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const initial = saved ?? (prefersDark ? "dark" : "light");
+
+        // Función central de aplicación de tema
+        window._siast3dApplyTheme = function (theme) {
+          const isDark = theme === "dark";
+          document.documentElement.setAttribute("data-theme", theme);
+          localStorage.setItem("siast3d-theme", theme);
+
+          // Icono y label del toggle
+          const iconLight = document.getElementById("theme-icon-light");
+          const iconDark  = document.getElementById("theme-icon-dark");
+          const label     = document.getElementById("theme-label");
+
+          if (isDark) {
+            // Estamos en oscuro → mostrar sol (para volver a claro)
+            if (iconLight) iconLight.style.display = "";
+            if (iconDark)  iconDark.style.display  = "none";
+            if (label)     label.textContent = "Claro";
+          } else {
+            // Estamos en claro → mostrar luna (para ir a oscuro)
+            if (iconLight) iconLight.style.display = "none";
+            if (iconDark)  iconDark.style.display  = "";
+            if (label)     label.textContent = "Oscuro";
+          }
+
+          // Propagar a la escena Three.js si ya está lista
+          if (window.SIAST3D && typeof window.SIAST3D.setTheme === "function") {
+            window.SIAST3D.setTheme(theme);
+          }
+        };
+
+        // Aplicar tema inicial sin esperar DOMContentLoaded
+        window._siast3dApplyTheme(initial);
+
+        // Escuchar cambios del sistema operativo en tiempo real
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+          // Solo respetar el sistema si el usuario no ha elegido manualmente
+          if (!localStorage.getItem("siast3d-theme")) {
+            window._siast3dApplyTheme(e.matches ? "dark" : "light");
+          }
+        });
+      })();
+    </script>
+
+    <script>
+      /* ═══════════════════════════════════════════════════════
+         INTERACCIÓN DE LA TAB BAR Y BADGE DE NIVEL
+
+         Fuente de verdad: el CustomEvent "siast:viewchange" que
+         despacha main.js cada vez que cambia viewLevel.
+         Payload del evento:
+           { detail: { level, floor, areaLabel } }
+           level:     'building' | 'floor' | 'area'
+           floor:     número de piso activo (-1 = todos)
+           areaLabel: label del área enfocada (solo si level='area')
+
+         Esto garantiza que la UI nunca se desincroniza: da igual
+         que el cambio venga por click en el 3D, postMessage
+         externo (GO_TO_FLOOR) o llamada directa a la API.
+         ═══════════════════════════════════════════════════════ */
+
+      // Etiquetas de piso para el badge
+      const FLOOR_LABELS_UI = { 0: "Planta Baja", 1: "Nivel 1", 2: "Nivel 2", 3: "Nivel 3" };
+
+      /* ── Actualizar tab bar y badge al cambiar el nivel ── */
+      window.addEventListener("siast:viewchange", function (e) {
+        const { level, floor, areaLabel } = e.detail ?? {};
+
+        // ── Tab bar: quitar active de todos, luego asignar al correcto ──
+        document.querySelectorAll(".floor-btn").forEach((btn) => btn.classList.remove("active"));
+
+        if (level === "building") {
+          document.querySelector('.floor-btn[data-floor="all"]').classList.add("active");
+        } else if (level === "floor" && floor !== undefined && floor >= 0) {
+          const btn = document.querySelector(`.floor-btn[data-floor="${floor}"]`);
+          if (btn) btn.classList.add("active");
+        } else if (level === "area") {
+          // El tab del piso padre queda activo + el indicador "Área" también
+          if (floor !== undefined && floor >= 0) {
+            const btn = document.querySelector(`.floor-btn[data-floor="${floor}"]`);
+            if (btn) btn.classList.add("active");
+          }
+          const areaTab = document.querySelector('.floor-btn[data-floor="area"]');
+          if (areaTab) {
+            areaTab.classList.add("active");
+            areaTab.removeAttribute("disabled");
+          }
+        }
+
+        // Cuando salimos de 'area', deshabilitar el indicador
+        if (level !== "area") {
+          const areaTab = document.querySelector('.floor-btn[data-floor="area"]');
+          if (areaTab) {
+            areaTab.classList.remove("active");
+            areaTab.setAttribute("disabled", "");
+          }
+        }
+
+        // ── Badge de nivel ──
+        const badgeText = document.getElementById("level-badge-text");
+        if (badgeText) {
+          if (level === "building") {
+            badgeText.textContent = "Edificio completo";
+          } else if (level === "floor") {
+            badgeText.textContent = FLOOR_LABELS_UI[floor] ?? `Piso ${floor}`;
+          } else if (level === "area") {
+            const floorStr = FLOOR_LABELS_UI[floor] ?? `Piso ${floor}`;
+            badgeText.textContent = areaLabel
+              ? `${areaLabel} — ${floorStr}`
+              : floorStr;
+          }
+        }
+      });
+
+      /* ── Handlers de click de la tab bar ──
+         Solo los tabs de navegación disparan acción.
+         "Área" (data-floor="area") no hace nada por diseño.
+      ── */
+      document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll(".floor-btn").forEach((btn) => {
+          btn.addEventListener("click", function () {
+            const f = btn.dataset.floor;
+
+            // El indicador "Área" no navega
+            if (f === "area") return;
+
+            if (f === "all") {
+              window.SIAST3D?.goToFloor(-1);
+            } else {
+              window.SIAST3D?.goToFloor(parseInt(f, 10));
+            }
+          });
+        });
+
+        /* ── Toggle de tema ── */
+        document.getElementById("theme-toggle").addEventListener("click", function () {
+          const current = document.documentElement.getAttribute("data-theme") ?? "light";
+          const next = current === "light" ? "dark" : "light";
+          // Limpiar la preferencia automática del sistema para que prevalezca la elección manual
+          localStorage.setItem("siast3d-theme", next);
+          window._siast3dApplyTheme(next);
+        });
+      });
+    </script>
   </body>
 </html>
