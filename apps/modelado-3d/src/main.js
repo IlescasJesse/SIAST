@@ -4,21 +4,28 @@ import {
   buildBuilding,
   buildBuildingFromData,
   setFloorVisibility,
+  setViewLevel,
   setRoomTicketState,
   rebuildRoomGeometry,
   createConnectorMesh,
   createBuildingFootprint,
+  applyHologramStyle,
+  createHoloGrid,
+  setHoloGridVisible,
 } from "./building.js";
 import { highlightRoom, updateHighlight, clearHighlight } from "./highlight.js";
 import {
   createCamera,
   flyToFloor,
+  flyToBuilding,
+  flyToArea,
   setLoginMode as setCameraLoginMode,
   updateLoginCamera,
 } from "./camera.js";
 import { addLabels, updateLabelVisibility, updateRoomLabel, ensureRoomLabel } from "./labels.js";
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
+import { createComposer, resizeComposer } from "./postprocessing.js";
 
 const API_BASE = `http://${window.location.hostname}:5101`;
 
@@ -75,6 +82,9 @@ const makeGradientBackground = (top, bottom) => {
 
 scene.background = makeGradientBackground("#eef3f9", "#cdd9e6");
 scene.fog = new THREE.Fog(0xcdd9e6, 90, 230);
+
+// ── Tema activo (se sincroniza con el toggle de la UI) ──────────────────────
+let _currentTheme = "light";
 
 // Environment map procedural (RoomEnvironment) para reflejos PBR realistas
 // en vidrio y metal sin coste de assets externos.
@@ -238,6 +248,13 @@ const allRoomsLive = () => Object.values(liveRoomMap);
 const { camera, controls } = createCamera(renderer);
 
 // ════════════════════════════════════════════════════════════
+// POST-PROCESADO (bloom holográfico)
+// El composer se crea aquí porque necesita renderer, scene y camera listos.
+// Solo se usa cuando _currentTheme === 'dark'; en claro se dibuja directo.
+// ════════════════════════════════════════════════════════════
+const composer = createComposer(renderer, scene, camera);
+
+// ════════════════════════════════════════════════════════════
 // LABELS
 // ════════════════════════════════════════════════════════════
 addLabels(scene, roomMeshes, allRoomsLive());
@@ -246,9 +263,28 @@ addLabels(scene, roomMeshes, allRoomsLive());
 // ESTADO
 // ════════════════════════════════════════════════════════════
 let activeFloor = -1; // -1 = todos
+let viewLevel = "building"; // 'building' | 'floor' | 'area'
+let focusedAreaId = null; // roomId del área enfocada (nivel 'area')
 let embedMode = false;
 let loginMode = false;
 const ticketPins = new Map(); // roomId → ticketData
+
+/**
+ * Despacha el CustomEvent "siast:viewchange" en window para que la UI
+ * (tab bar, badge de nivel) se sincronice con el estado real de la escena.
+ * Se llama siempre que cambia viewLevel, sin importar el origen del cambio.
+ *
+ * @param {'building'|'floor'|'area'} level
+ * @param {number}  floor      - piso activo (-1 si nivel building)
+ * @param {string} [areaLabel] - label del área (solo si level='area')
+ */
+const _dispatchViewChange = (level, floor, areaLabel) => {
+  window.dispatchEvent(
+    new CustomEvent("siast:viewchange", {
+      detail: { level, floor, areaLabel },
+    }),
+  );
+};
 
 // ════════════════════════════════════════════════════════════
 // RAYCASTING (click en cuartos)
@@ -289,6 +325,9 @@ const onPointerClick = (e) => {
   highlightRoom(roomMeshes, roomId);
   showInfoPanel({ roomId, label, floor, x1, y1, x2, y2 });
 
+  // Entrar al nivel área al hacer click en un área
+  window.SIAST3D.showArea(roomId);
+
   // Notificar al parent (postMessage)
   parent?.postMessage({ type: "ROOM_CLICKED", payload: { floor, roomId, label } }, "*");
 };
@@ -323,22 +362,9 @@ const hideInfoPanel = () => {
   clearHighlight(roomMeshes);
 };
 
-// ════════════════════════════════════════════════════════════
-// CONTROLES DE PISO (botones)
-// ════════════════════════════════════════════════════════════
-document.querySelectorAll(".floor-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const f = btn.dataset.floor;
-    document.querySelectorAll(".floor-btn").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-
-    if (f === "all") {
-      window.SIAST3D.goToFloor(-1);
-    } else {
-      window.SIAST3D.goToFloor(parseInt(f, 10));
-    }
-  });
-});
+// Los handlers de click de la tab bar viven en index.html (script inline DOMContentLoaded).
+// La sincronización del tab activo se hace vía el CustomEvent "siast:viewchange"
+// que _dispatchViewChange() despacha desde showBuilding / showFloor / showArea.
 
 // ════════════════════════════════════════════════════════════
 // API PÚBLICA — window.SIAST3D
@@ -354,10 +380,65 @@ window.SIAST3D = {
   },
 
   goToFloor(floorNumber) {
-    activeFloor = floorNumber;
-    setFloorVisibility(floorGroups, activeFloor);
+    // Delegamos a showFloor / showBuilding para mantener viewLevel consistente
+    if (floorNumber === -1) {
+      this.showBuilding();
+    } else {
+      this.showFloor(floorNumber);
+    }
+  },
+
+  /**
+   * Nivel 'building': solo losas visibles, muebles ocultos, cámara alejada.
+   */
+  showBuilding() {
+    viewLevel = "building";
+    activeFloor = -1;
+    focusedAreaId = null;
+    setViewLevel(floorGroups, roomMeshes, "building", { activeFloor: -1, focusedAreaId: null });
+    updateLabelVisibility(camera, floorGroups, -1);
+    flyToBuilding(camera, controls);
+    // Notificar a la UI (tab bar + badge) del cambio de nivel
+    _dispatchViewChange("building", -1);
+  },
+
+  /**
+   * Nivel 'floor': contornos de áreas del piso, muebles ocultos.
+   * @param {number} n  piso (0=PB..3)
+   */
+  showFloor(n) {
+    viewLevel = "floor";
+    activeFloor = n;
+    focusedAreaId = null;
+    setViewLevel(floorGroups, roomMeshes, "floor", { activeFloor: n, focusedAreaId: null });
+    updateLabelVisibility(camera, floorGroups, n);
+    flyToFloor(camera, controls, n);
+    // Notificar a la UI (tab bar + badge) del cambio de nivel
+    _dispatchViewChange("floor", n);
+  },
+
+  /**
+   * Nivel 'area': área enfocada con vidrio normal, resto del piso muy atenuado.
+   * Los muebles se activan por LOD cuando la cámara se acerca.
+   * @param {string} areaId
+   */
+  showArea(areaId) {
+    const room = liveRoomMap[areaId];
+    if (!room) {
+      console.warn(`[SIAST3D] showArea: área "${areaId}" no encontrada en liveRoomMap`);
+      return;
+    }
+    viewLevel = "area";
+    focusedAreaId = areaId;
+    activeFloor = room.floor ?? 0;
+    setViewLevel(floorGroups, roomMeshes, "area", {
+      activeFloor,
+      focusedAreaId: areaId,
+    });
     updateLabelVisibility(camera, floorGroups, activeFloor);
-    if (floorNumber >= 0) flyToFloor(camera, controls, floorNumber);
+    flyToArea(camera, controls, room);
+    // Notificar a la UI (tab bar + badge) del cambio de nivel, incluyendo el label del área
+    _dispatchViewChange("area", activeFloor, room.label);
   },
 
   setEmbedMode(enabled) {
@@ -370,7 +451,50 @@ window.SIAST3D = {
     setCameraLoginMode(enabled);
     controls.enabled = !enabled;
     document.getElementById("login-overlay").classList.toggle("visible", enabled);
-    document.getElementById("floor-controls").style.display = enabled ? "none" : "flex";
+    // Ocultar toda la chrome de navegación y utilidades en modo login/embed
+    const hideInLogin = ["floor-controls", "level-badge", "theme-toggle"];
+    for (const id of hideInLogin) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = enabled ? "none" : "";
+    }
+  },
+
+  /**
+   * Cambia el tema visual de la escena Three.js (fondo, niebla, luces).
+   * La UI overlay ya usa variables CSS — este método solo actualiza la escena.
+   *
+   * @param {'light'|'dark'} theme
+   */
+  setTheme(theme) {
+    _currentTheme = theme;
+
+    if (theme === "dark") {
+      // Fondo oscuro: cielo noche → horizonte casi negro
+      scene.background = makeGradientBackground("#0f1626", "#070b14");
+      // Niebla oscura acorde al horizonte
+      scene.fog.color.setHex(0x0a0f1a);
+      // Bajar ligeramente la luz directa para evitar sobreexposición en oscuro
+      dirLight.intensity = 1.6;
+      hemi.intensity = 0.35;
+      ambient.intensity = 0.18;
+      // En modo holograma las sombras sólidas lucen extrañas sobre materiales
+      // casi transparentes con emissive alto; se desactivan para coherencia visual.
+      renderer.shadowMap.enabled = false;
+    } else {
+      // Fondo claro: cielo suave → horizonte gris-azul
+      scene.background = makeGradientBackground("#eef3f9", "#cdd9e6");
+      // Niebla clara original
+      scene.fog.color.setHex(0xcdd9e6);
+      // Restaurar intensidades originales
+      dirLight.intensity = 2.1;
+      hemi.intensity = 0.55;
+      ambient.intensity = 0.25;
+      // Restaurar sombras en modo claro
+      renderer.shadowMap.enabled = true;
+    }
+
+    // Reconfigurar materiales y aristas para el look holográfico (oscuro) o limpio (claro)
+    applyHologramStyle(scene, theme === "dark");
   },
 
   showTicketPin(roomId, ticketData) {
@@ -537,6 +661,13 @@ window.addEventListener("message", (e) => {
     case "GO_TO_FLOOR":
       window.SIAST3D.goToFloor(payload.floor);
       break;
+    case "SET_THEME":
+      if (payload?.theme === "light" || payload?.theme === "dark") {
+        window._siast3dApplyTheme
+          ? window._siast3dApplyTheme(payload.theme)
+          : window.SIAST3D.setTheme(payload.theme);
+      }
+      break;
     case "SHOW_TICKET_PIN":
       window.SIAST3D.showTicketPin(payload.roomId, payload.ticketData);
       break;
@@ -645,9 +776,17 @@ const render = () => {
   updateHighlight(delta);
   updateLoginCamera(camera, controls, delta);
   updateLabelVisibility(camera, floorGroups, activeFloor);
-  furniture.updateVisibility(camera, activeFloor);
+  // Los muebles solo aplican LOD en nivel 'area'; en building/floor fuerza invisible.
+  furniture.updateVisibility(camera, activeFloor, viewLevel === "area");
 
-  renderer.render(scene, camera);
+  // En tema oscuro: composer con bloom holográfico (UnrealBloomPass + OutputPass).
+  // En tema claro: render directo — sin postprocesado, materiales sólidos normales.
+  // IMPORTANTE: nunca llamar ambos en el mismo frame para evitar doble render.
+  if (_currentTheme === "dark") {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 };
 
 // Pausar render cuando la pestaña/iframe no está visible
@@ -672,6 +811,8 @@ window.addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  // Actualizar resolución del EffectComposer (bloom resolution debe coincidir con el viewport)
+  resizeComposer(innerWidth, innerHeight);
 });
 
 // ════════════════════════════════════════════════════════════
@@ -679,3 +820,16 @@ window.addEventListener("resize", () => {
 // ════════════════════════════════════════════════════════════
 animateEntry();
 render();
+
+// Aplicar tema guardado en localStorage (o deducido del sistema) a la escena.
+// El script inline de index.html ya aplicó el data-theme en el DOM antes de
+// que este módulo cargara; aquí solo sincronizamos la escena Three.js.
+(function sincronizarTemaInicial() {
+  const saved = localStorage.getItem("siast3d-theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const inicial = saved ?? (prefersDark ? "dark" : "light");
+  window.SIAST3D.setTheme(inicial);
+})();
+
+// Despachar el viewLevel inicial para que la tab bar arranque con "Edificio" activo
+_dispatchViewChange("building", -1);

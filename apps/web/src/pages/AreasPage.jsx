@@ -6,8 +6,12 @@
  * Layout:
  *   Header (título + controles)
  *   Toggle Vista completa | Por zonas
- *   Minimap del edificio (indicador de zona/piso activo)
- *   Grid + Panel lateral
+ *   Grid (izquierda 67%) + Panel lateral con visor 3D o editor (derecha 33%)
+ *
+ * Integración visor 3D (iframe en panel lateral):
+ *   - ROOM_CLICKED  → selecciona el área en el editor y navega al piso correcto
+ *   - Al seleccionar/editar un área → llama showArea(id) en el visor
+ *   - Al cargar el iframe → envía SET_THEME con el tema actual (fijo "light")
  */
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -132,178 +136,6 @@ const TIPO_AREA_COMUN_LABELS = {
   OTRO: "Otro",
 };
 
-// ── Minimap del edificio ──────────────────────────────────────────────────────
-
-function BuildingMinimap({ pisoIdx, alaIdx, viewMode, onZoneClick, onPisoClick }) {
-  const pisoColors = ["#ffb74d", "#81c784", "#64b5f6", "#f06292"];
-  const activePiso = PISOS[pisoIdx];
-
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1.5,
-        px: 1.5,
-        py: 0.75,
-        borderRadius: "8px",
-        bgcolor: "grey.50",
-        border: "1px solid",
-        borderColor: "divider",
-        flexWrap: "wrap",
-      }}
-    >
-      {/* Esquema de planta del edificio */}
-      <Box sx={{ flexShrink: 0 }}>
-        <svg width={90} height={28} viewBox="0 0 90 28" style={{ display: "block" }}>
-          {/* Ala izquierda */}
-          <rect
-            x={1}
-            y={1}
-            width={34}
-            height={26}
-            rx={2}
-            fill={alaIdx === 0 && viewMode === "zones" ? "#9d244922" : "#f5f5f5"}
-            stroke={alaIdx === 0 && viewMode === "zones" ? "#9d2449" : "#bdbdbd"}
-            strokeWidth={alaIdx === 0 && viewMode === "zones" ? 1.5 : 0.8}
-            style={{ cursor: "pointer" }}
-            onClick={() => onZoneClick(0)}
-          />
-          <text
-            x={18}
-            y={14}
-            fontSize={5}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={alaIdx === 0 && viewMode === "zones" ? "#9d2449" : "#9e9e9e"}
-            fontWeight={700}
-            style={{ userSelect: "none", pointerEvents: "none" }}
-          >
-            IZQ
-          </text>
-
-          {/* Conector */}
-          <rect
-            x={37}
-            y={8}
-            width={16}
-            height={19}
-            rx={2}
-            fill={alaIdx === 1 && viewMode === "zones" ? "#7b1fa222" : "#f5f5f5"}
-            stroke={alaIdx === 1 && viewMode === "zones" ? "#7b1fa2" : "#bdbdbd"}
-            strokeWidth={alaIdx === 1 && viewMode === "zones" ? 1.5 : 0.8}
-            style={{ cursor: "pointer" }}
-            onClick={() => onZoneClick(1)}
-          />
-          <text
-            x={45}
-            y={18}
-            fontSize={4}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={alaIdx === 1 && viewMode === "zones" ? "#7b1fa2" : "#9e9e9e"}
-            fontWeight={700}
-            style={{ userSelect: "none", pointerEvents: "none" }}
-          >
-            CON
-          </text>
-
-          {/* Ala derecha */}
-          <rect
-            x={55}
-            y={1}
-            width={34}
-            height={26}
-            rx={2}
-            fill={alaIdx === 2 && viewMode === "zones" ? "#0277bd22" : "#f5f5f5"}
-            stroke={alaIdx === 2 && viewMode === "zones" ? "#0277bd" : "#bdbdbd"}
-            strokeWidth={alaIdx === 2 && viewMode === "zones" ? 1.5 : 0.8}
-            style={{ cursor: "pointer" }}
-            onClick={() => onZoneClick(2)}
-          />
-          <text
-            x={72}
-            y={14}
-            fontSize={5}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={alaIdx === 2 && viewMode === "zones" ? "#0277bd" : "#9e9e9e"}
-            fontWeight={700}
-            style={{ userSelect: "none", pointerEvents: "none" }}
-          >
-            DER
-          </text>
-        </svg>
-      </Box>
-
-      {/* Selector de piso compacto */}
-      <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, mr: 0.25 }}>
-          PISO:
-        </Typography>
-        {PISOS.map((p, i) => (
-          <Box
-            key={p.piso}
-            onClick={() => onPisoClick(i)}
-            sx={{
-              width: 24,
-              height: 24,
-              borderRadius: "4px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              bgcolor: pisoIdx === i ? pisoColors[i] : "transparent",
-              border: "1.5px solid",
-              borderColor: pisoIdx === i ? pisoColors[i] : "divider",
-              fontSize: 10,
-              fontWeight: 800,
-              color: pisoIdx === i ? "#fff" : "text.secondary",
-              transition: "all 0.15s ease",
-              "&:hover": { opacity: 0.8, transform: "scale(1.1)" },
-            }}
-          >
-            {p.label}
-          </Box>
-        ))}
-      </Box>
-
-      {/* Zona activa label */}
-      {viewMode === "zones" && (
-        <Chip
-          label={ZONES[alaIdx].label}
-          size="small"
-          sx={{
-            height: 20,
-            fontSize: 9,
-            fontWeight: 800,
-            bgcolor: ZONES[alaIdx].color + "22",
-            color: ZONES[alaIdx].color,
-            border: `1px solid ${ZONES[alaIdx].color}55`,
-            "& .MuiChip-label": { px: 0.75 },
-          }}
-        />
-      )}
-
-      {viewMode === "full" && (
-        <Chip
-          label="PLANTA COMPLETA"
-          size="small"
-          sx={{
-            height: 20,
-            fontSize: 9,
-            fontWeight: 800,
-            bgcolor: "primary.main",
-            color: "#fff",
-            "& .MuiChip-label": { px: 0.75 },
-          }}
-        />
-      )}
-    </Paper>
-  );
-}
-
 // ── Helpers SIRH ──────────────────────────────────────────────────────────────
 
 function inferirPadres(hijos, padres) {
@@ -357,6 +189,23 @@ export const AreasPage = () => {
 
   const visor3DRef = useRef(null);
   const [mueblesPorArea, setMueblesPorArea] = useState({});
+
+  // ── Helper: comandar el visor 3D ──────────────────────────────────────────
+  // Se define aquí para que pueda ser invocado desde handleSelect (abajo).
+  const visorShowArea = useCallback((areaId) => {
+    const iframe = visor3DRef.current;
+    if (!iframe) return;
+    // Acceso directo vía contentWindow (mismo origen en desarrollo)
+    try {
+      if (iframe.contentWindow?.SIAST3D) {
+        iframe.contentWindow.SIAST3D.showArea(areaId);
+        return;
+      }
+    } catch {
+      // cross-origin: caer en postMessage
+    }
+    iframe.contentWindow?.postMessage({ type: "HIGHLIGHT_ROOM", payload: { roomId: areaId } }, "*");
+  }, []);
 
   // ── Cambios pendientes (batch save) ──────────────────────────────────────
   const [pendingChanges, setPendingChanges] = useState(() => {
@@ -489,18 +338,47 @@ export const AreasPage = () => {
 
   // ── Selección en el grid ───────────────────────────────────────────────────
 
-  const handleSelect = useCallback((area) => {
-    setSelectedId(area.id);
-    setEditForm({
-      ...area,
-      esSalaJuntas: area.esSalaJuntas ?? false,
-      esComun: area.esComun ?? false,
-      tipoComun: area.tipoComun ?? null,
-      nombrePropio: area.nombrePropio ?? null,
-      _dirty: false,
-    });
-    setSaveError("");
-  }, []);
+  const handleSelect = useCallback(
+    (area) => {
+      setSelectedId(area.id);
+      setEditForm({
+        ...area,
+        esSalaJuntas: area.esSalaJuntas ?? false,
+        esComun: area.esComun ?? false,
+        tipoComun: area.tipoComun ?? null,
+        nombrePropio: area.nombrePropio ?? null,
+        _dirty: false,
+      });
+      setSaveError("");
+      // Enfocar el área en el visor 3D
+      visorShowArea(area.id);
+    },
+    [visorShowArea],
+  );
+
+  // ── Escuchar ROOM_CLICKED desde el visor ──────────────────────────────────
+  // Se registra después de handleSelect para poder referenciarlo en las deps.
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type !== "ROOM_CLICKED") return;
+      const { roomId, floor } = e.data.payload ?? {};
+      if (!roomId) return;
+      // Sincronizar piso en el editor 2D
+      const pisoItemIdx = PISOS.findIndex((p) => p.floor === floor);
+      if (pisoItemIdx >= 0) changePiso(pisoItemIdx);
+      // Seleccionar el área — usamos setAreas para leer el estado fresco
+      setAreas((prev) => {
+        const area = prev.find((a) => a.id === roomId);
+        if (area) {
+          // handleSelect es estable (useCallback), seguro llamar dentro del setter
+          handleSelect(area);
+        }
+        return prev;
+      });
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [changePiso, handleSelect]);
 
   // Rechaza coordenadas fuera de la huella del edificio: el rect se queda
   // "pegado" en la última posición válida durante el drag.
@@ -890,21 +768,6 @@ export const AreasPage = () => {
         </Alert>
       )}
 
-      {/* Minimap + navegación unificada */}
-      {!loading && (
-        <Box sx={{ mt: 1.5, mb: 1 }}>
-          <BuildingMinimap
-            pisoIdx={pisoIdx}
-            alaIdx={alaIdx}
-            viewMode={viewMode}
-            onZoneClick={(idx) => {
-              if (viewMode === "zones") changeAla(idx);
-            }}
-            onPisoClick={changePiso}
-          />
-        </Box>
-      )}
-
       {/* Áreas sin mapear */}
       {!loading &&
         (() => {
@@ -1150,35 +1013,23 @@ export const AreasPage = () => {
                 flexDirection: "column",
               }}
             >
-              {editForm && (
-                <EditPanel
-                  key={editForm.id}
-                  form={editForm}
-                  setEdit={setEdit}
-                  saveError={saveError}
-                  isPending={!!pendingChanges[editForm.id]}
-                  onCancelar={handleCancelar}
-                  onEliminar={handleEliminar}
-                  sirhLoading={sirhLoading}
-                  sirhError={sirhError}
-                  todasAdscripciones={todasAdscripciones}
-                  esSalaJuntas={editForm.esSalaJuntas ?? false}
-                  setEsSalaJuntas={(val) => setEdit("esSalaJuntas", val)}
-                  muebles={mueblesPorArea[editForm.id] ?? []}
-                  onMueblesChange={() => loadMuebles(editForm.id)}
-                />
-              )}
-
-              <Box sx={{ display: editForm ? "none" : "flex", flexDirection: "column", flex: 1 }}>
+              {/* Visor 3D — siempre visible en la parte superior del panel */}
+              <Box
+                sx={{
+                  borderBottom: editForm ? "1px solid" : "none",
+                  borderColor: "divider",
+                  flexShrink: 0,
+                }}
+              >
                 <Box
                   sx={{
                     px: 1.5,
                     py: 0.75,
-                    borderBottom: "1px solid rgba(0,0,0,0.08)",
                     bgcolor: "grey.50",
                     display: "flex",
                     alignItems: "center",
                     gap: 1,
+                    borderBottom: "1px solid rgba(0,0,0,0.08)",
                   }}
                 >
                   <ThreeDRotationIcon sx={{ fontSize: 16, color: "primary.main" }} />
@@ -1190,23 +1041,59 @@ export const AreasPage = () => {
                   >
                     VISOR 3D
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    &nbsp;— selecciona un área para editarla
-                  </Typography>
+                  {!editForm && (
+                    <Typography variant="caption" color="text.secondary">
+                      &nbsp;— haz clic en un área para editarla
+                    </Typography>
+                  )}
+                  {editForm && (
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 0.5 }}>
+                      &nbsp;— {editForm.label || editForm.id}
+                    </Typography>
+                  )}
                 </Box>
                 <iframe
                   ref={visor3DRef}
                   src="http://localhost:5174"
                   title="Visor 3D Edificio"
+                  onLoad={() => {
+                    // Heredar tema al iframe cuando carga (app fija en "light")
+                    visor3DRef.current?.contentWindow?.postMessage(
+                      { type: "SET_THEME", payload: { theme: "light" } },
+                      "*",
+                    );
+                  }}
                   style={{
-                    flex: 1,
                     width: "100%",
                     border: "none",
                     display: "block",
-                    minHeight: 300,
+                    height: editForm ? "220px" : "360px",
+                    transition: "height 0.25s ease",
                   }}
                 />
               </Box>
+
+              {/* EditPanel — aparece debajo del visor cuando hay selección */}
+              {editForm && (
+                <Box sx={{ flex: 1, overflow: "auto" }}>
+                  <EditPanel
+                    key={editForm.id}
+                    form={editForm}
+                    setEdit={setEdit}
+                    saveError={saveError}
+                    isPending={!!pendingChanges[editForm.id]}
+                    onCancelar={handleCancelar}
+                    onEliminar={handleEliminar}
+                    sirhLoading={sirhLoading}
+                    sirhError={sirhError}
+                    todasAdscripciones={todasAdscripciones}
+                    esSalaJuntas={editForm.esSalaJuntas ?? false}
+                    setEsSalaJuntas={(val) => setEdit("esSalaJuntas", val)}
+                    muebles={mueblesPorArea[editForm.id] ?? []}
+                    onMueblesChange={() => loadMuebles(editForm.id)}
+                  />
+                </Box>
+              )}
             </Paper>
           </Box>
         </Box>

@@ -133,7 +133,16 @@ const buildCubiculo = (group, w, d) => {
   const deskD = d * 0.55;
   addBox(group, MATS.escritorio, w * 0.96, 0.06, deskD, 0, 0.72, -d / 2 + 0.06 + deskD / 2);
   // Cajonera de 3 gavetas bajo el lado derecho
-  addBox(group, MATS.cajonera, w * 0.24, 0.62, deskD * 0.85, w * 0.32, 0.31, -d / 2 + 0.06 + deskD / 2);
+  addBox(
+    group,
+    MATS.cajonera,
+    w * 0.24,
+    0.62,
+    deskD * 0.85,
+    w * 0.32,
+    0.31,
+    -d / 2 + 0.06 + deskD / 2,
+  );
   // Gabinete superior cerrado sobre la mampara
   addBox(group, MATS.gabinete, w * 0.9, 0.34, 0.3, 0, 1.22, -d / 2 + 0.18);
   // Monitor sobre el escritorio (marco + pantalla)
@@ -384,11 +393,24 @@ export class FurnitureManager {
 
   /**
    * LOD: muestra muebles (y sus labels) solo si la cámara está dentro de
-   * MUEBLE_LOD_DISTANCE, y si su piso está visible.
+   * MUEBLE_LOD_DISTANCE, si su piso está visible, Y si el nivel de vista
+   * es 'area' (en 'building' y 'floor' los muebles permanecen ocultos).
+   *
    * @param {THREE.Camera} camera
-   * @param {number} activeFloor  -1 = todos
+   * @param {number}  activeFloor    -1 = todos
+   * @param {boolean} mueblesEnabled true solo cuando viewLevel === 'area'
    */
-  updateVisibility(camera, activeFloor) {
+  updateVisibility(camera, activeFloor, mueblesEnabled = false) {
+    // En vista building o floor forzar todos invisibles sin calcular distancia
+    if (!mueblesEnabled) {
+      for (const { mesh, label } of this.entries.values()) {
+        mesh.visible = false;
+        label.visible = false;
+      }
+      this.pin.visible = false;
+      return;
+    }
+
     for (const { mesh, label } of this.entries.values()) {
       const floor = mesh.userData.floor ?? 0;
       const floorVisible = activeFloor === -1 || floor === activeFloor;

@@ -106,10 +106,31 @@ const createSlabMaterial = () =>
  */
 const createSlab = (floor) => {
   // Losa con la forma real del edificio (U-shape vista desde arriba):
-  //   Ala izquierda : X de -16 a -2 (14 u), profundidad completa Z: -13.5 a +13.5
-  //   Ala derecha   : X de  +2 a+16 (14 u), profundidad completa Z: -13.5 a +13.5
-  //   Conector      : X de  -2 a  +2 ( 4 u), solo al fondo       Z: -13.5 a  -0.5
-  // Así las losas NO cruzan el vano abierto entre las alas.
+  //
+  //   Grid 32×27, CELL=1. Z invertido: filas bajas → Z positivo (frente, hacia la
+  //   cámara); filas altas → Z negativo (fondo del edificio).
+  //
+  //   Orientación de la U:
+  //     FRENTE (Z+): patio abierto — el usuario lo recorre para ingresar.
+  //     FONDO  (Z-): conector + entrada principal del edificio.
+  //
+  //   Ala izquierda : cols  0→13 (ancho 13), filas 0→27 (prof 27)
+  //                   cx = (0+13)/2  - 16 = -9.5  |  cz = 0
+  //                   Cubre X: -16 a -3   Z: -13.5 a +13.5
+  //
+  //   Ala derecha   : cols 19→32 (ancho 13), filas 0→27 (prof 27)
+  //                   cx = (19+32)/2 - 16 = +9.5  |  cz = 0
+  //                   Cubre X: +3 a +16   Z: -13.5 a +13.5
+  //
+  //   Conector+entrada : cols 13→19 (ancho 6), filas 16→27 (prof 11) — zona de FONDO
+  //                   cx = (13+19)/2 - 16 = 0  |  cz = -((16+27)/2 - 13.5) = -8
+  //                   Cubre X: -3 a +3   Z: -13.5 a -2.5
+  //
+  //   Vano/patio abierto de la U: cols 13→19, filas 0→16 (frente central). Sin losa.
+  //
+  //   Juntura ala↔conector: en X las alas cierran en col 13/19 (X=±3) donde el
+  //   conector empieza — sin hueco. En Z el conector llega hasta -13.5, igual
+  //   que las alas — sin hueco en la base del fondo.
   const mat = createSlabMaterial();
   const edgeMat = new THREE.LineBasicMaterial({
     color: 0x9aa6b2,
@@ -125,6 +146,8 @@ const createSlab = (floor) => {
     mesh.position.set(cx, yPos, cz);
     mesh.receiveShadow = true;
     mesh.castShadow = true;
+    // Marca que permite distinguir losa de mesh de área en setViewLevel.
+    mesh.userData = { isSlab: true, baseOpacity: 1 };
     // Borde definido para legibilidad arquitectónica.
     const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
     line.userData = { isEdge: true };
@@ -132,9 +155,9 @@ const createSlab = (floor) => {
     group.add(mesh);
   };
 
-  addSlab(14, 27, -9, 0); // ala izquierda  (cx=-9,  cz=0)
-  addSlab(14, 27, 9, 0); // ala derecha    (cx=+9,  cz=0)
-  addSlab(4, 13, 0, -7); // conector fondo (cx=0,   cz=-7 → Z: -0.5 a -13.5)
+  addSlab(13, 27, -9.5, 0); // ala izquierda      cols  0→13, filas  0→27
+  addSlab(13, 27, 9.5, 0); // ala derecha         cols 19→32, filas  0→27
+  addSlab(6, 11, 0, -8); // conector + entrada  cols 13→19, filas 16→27 (fondo)
 
   return group;
 };
@@ -215,6 +238,11 @@ export const buildBuildingFromData = (rooms) => {
     group.name = `floor_${floor}`;
     group.add(createSlab(floor));
     group.add(createCorridorLines(floor));
+    // Muros perimetrales exteriores — dan volumen estructural al edificio.
+    // Cada muro vive dentro del floorGroup para heredar group.visible en
+    // setViewLevel; la visibilidad en nivel 'area' se gestiona explícitamente
+    // (userData.isWall) para ocultarlos cuando se enfoca un área.
+    group.add(createPerimeterWalls(floor));
     floorGroups.set(floor, group);
   }
 
@@ -417,6 +445,411 @@ export const createBuildingFootprint = () => {
   return group;
 };
 
+// ── Opacidades para cada nivel de zoom ───────────────────────────────────────
+// Valores calibrados para la maqueta arquitectónica:
+//   BUILDING → solo losas, sin ruido de áreas.
+//   FLOOR    → contornos de áreas del piso activo; cuerpo casi invisible.
+//   AREA     → un área destacada, resto del piso atenuado al mínimo.
+const OPA = {
+  // Losa principal del piso activo / único piso relevante
+  SLAB_FULL: 1,
+  // Losa de pisos no activos (edificio completo o contexto)
+  SLAB_DIM: 0.12,
+  // Borde de área en modo FLOOR (contorno fuerte, cuerpo transparente)
+  AREA_FLOOR_EDGE: 0.7,
+  AREA_FLOOR_BOX: 0.06,
+  // Borde e interiores del área enfocada en modo AREA (usa baseOpacity)
+  AREA_FOCUSED_EDGE: 0.45,
+  // Áreas no enfocadas del mismo piso (modo AREA)
+  AREA_DIM_EDGE: 0.15,
+  AREA_DIM_BOX: 0.05,
+  // Pasillo (isEdge dashed) cuando el piso está activo
+  CORRIDOR_ACTIVE: 0.55,
+};
+
+// ── Muros perimetrales exteriores ────────────────────────────────────────────
+
+/**
+ * Grosor del muro perimetral (≈12 cm estructural, fino para no tapar interior).
+ */
+const WALL_THICK = 0.12;
+
+/**
+ * Altura útil del muro — techo del cuarto, sin llegar a la losa superior.
+ */
+const WALL_H = ROOM_H; // 3.4 u
+
+/**
+ * Alféizar de ventana: 1.40 m del suelo del piso.
+ */
+const WIN_SILL = 1.4;
+
+/**
+ * Dimensiones de ventana (ancho × alto) en metros/unidades Three.js.
+ */
+const WIN_W = 0.7;
+const WIN_H = 0.7;
+
+/**
+ * Separación centro-a-centro entre ventanas a lo largo de cada tramo.
+ * Se ajusta dinámicamente para distribuir de forma equidistante.
+ */
+const WIN_SPACING = 1.8;
+
+/**
+ * Material compartido para todos los muros perimetrales — acrílico gris
+ * azulado muy tenue, coherente con el vocabulario de la maqueta.
+ * opacity 0.22 → no tapa el interior desde ningún ángulo.
+ */
+const _wallMat = new THREE.MeshPhysicalMaterial({
+  color: 0x8fa8c0,
+  roughness: 0.3,
+  metalness: 0.0,
+  transparent: true,
+  opacity: 0.22,
+  depthWrite: false,
+  clearcoat: 0.5,
+  clearcoatRoughness: 0.3,
+  envMapIntensity: 0.6,
+});
+
+/**
+ * Material compartido para los paneles de ventana — vidrio ligeramente
+ * más claro y con emisivo azulado que los distingue del muro.
+ */
+const _winMat = new THREE.MeshPhysicalMaterial({
+  color: 0xb8d8f0,
+  roughness: 0.1,
+  metalness: 0.0,
+  transparent: true,
+  opacity: 0.45,
+  depthWrite: false,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.05,
+  envMapIntensity: 1.0,
+  emissive: new THREE.Color(0x2255aa),
+  emissiveIntensity: 0.04,
+});
+
+/**
+ * Material de borde de muro — línea suave, ligeramente más oscura que el muro.
+ */
+const _wallEdgeMat = new THREE.LineBasicMaterial({
+  color: 0x4a6880,
+  transparent: true,
+  opacity: 0.35,
+});
+
+/**
+ * Geometría de ventana reutilizable (panel plano, sin grosor propio —
+ * se desplaza al centro del muro para parecer empotrada).
+ */
+const _winGeo = new THREE.PlaneGeometry(WIN_W, WIN_H);
+
+/**
+ * Crea un tramo de muro recto con ventanas distribuidas uniformemente.
+ *
+ * @param {THREE.Vector3} from   — inicio del tramo (world XZ, Y = base del piso)
+ * @param {THREE.Vector3} to     — fin del tramo
+ * @param {'x'|'z'}       axis   — eje de extensión del tramo
+ * @param {number}        yBase  — Y en la base del piso (FLOOR_Y(floor))
+ * @returns {THREE.Group}
+ */
+const createWallSegment = (from, to, axis, yBase) => {
+  const group = new THREE.Group();
+
+  // Longitud del tramo y centro.
+  const len = Math.abs(axis === "x" ? to.x - from.x : to.z - from.z);
+  const cx = (from.x + to.x) / 2;
+  const cz = (from.z + to.z) / 2;
+  const cy = yBase + WALL_H / 2;
+
+  // ── Panel de muro ──────────────────────────────────────────────────────────
+  const wallGeo =
+    axis === "x"
+      ? new THREE.BoxGeometry(len, WALL_H, WALL_THICK)
+      : new THREE.BoxGeometry(WALL_THICK, WALL_H, len);
+
+  const wallMesh = new THREE.Mesh(wallGeo, _wallMat);
+  wallMesh.position.set(cx, cy, cz);
+  wallMesh.castShadow = false;
+  wallMesh.receiveShadow = false;
+  wallMesh.userData = { isWallPanel: true };
+  group.add(wallMesh);
+
+  // Borde perimetral del tramo de muro.
+  const edgeGeo = new THREE.EdgesGeometry(wallGeo);
+  const edgeLine = new THREE.LineSegments(edgeGeo, _wallEdgeMat);
+  edgeLine.position.set(cx, cy, cz);
+  edgeLine.userData = { isEdge: true };
+  group.add(edgeLine);
+
+  // ── Ventanas ───────────────────────────────────────────────────────────────
+  // Número de ventanas que caben con spacing WIN_SPACING (al menos 1 si el
+  // tramo es suficientemente largo).
+  const nWin = len >= WIN_W + 0.4 ? Math.max(1, Math.floor(len / WIN_SPACING)) : 0;
+
+  if (nWin > 0) {
+    // Posición Y central del panel de ventana: alféizar + mitad de la ventana.
+    const winY = yBase + WIN_SILL + WIN_H / 2;
+
+    // Separación efectiva centrada en el tramo.
+    const step = len / nWin;
+    const startOffset = -(len / 2) + step / 2;
+
+    for (let i = 0; i < nWin; i++) {
+      const offset = startOffset + i * step;
+
+      // Panel de ventana — plano fino desplazado al frente del muro.
+      const winMesh = new THREE.Mesh(_winGeo, _winMat);
+      if (axis === "x") {
+        winMesh.position.set(cx + offset, winY, cz);
+        // La ventana queda coplanar con la cara frontal del muro; si el muro
+        // está en Z se rota 90° para mirar en Z, pero como PlaneGeometry mira
+        // en Y, giramos siempre para orientar al exterior (±Z o ±X).
+        // Para eje X el panel ya mira en Z (normal Z); sin rotación.
+      } else {
+        winMesh.position.set(cx, winY, cz + offset);
+        // Para eje Z necesitamos rotar 90° alrededor de Y para que la cara
+        // del panel mire en X en vez de Z.
+        winMesh.rotation.y = Math.PI / 2;
+      }
+      winMesh.userData = { isWindowPanel: true };
+      group.add(winMesh);
+    }
+  }
+
+  return group;
+};
+
+/**
+ * Construye el conjunto de muros perimetrales exteriores para un piso.
+ *
+ * Polígono de la U derivado de las coordenadas de las losas (world-space):
+ *
+ *   Ala izquierda : X [-16, -3]  Z [-13.5, +13.5]
+ *   Ala derecha   : X [+3, +16]  Z [-13.5, +13.5]
+ *   Conector      : X [-3, +3]   Z [-13.5, -2.5]
+ *   Patio abierto : X [-3, +3]   Z [-2.5, +13.5]  ← sin losa, abierto al frente
+ *
+ * Se recorre el contorno EXTERIOR completo (incluye los lados del patio que
+ * miran al vano abierto, pues también son exteriores con ventanas):
+ *
+ *   Frente ala izq   (Z+, X -16→-3)       eje X
+ *   Frente patio izq (X=-3, Z -2.5→+13.5) eje Z  ← cara interior del patio
+ *   Frente patio dch (X=+3, Z +13.5→-2.5) eje Z  ← cara interior del patio
+ *   Frente ala dch   (Z+, X +3→+16)        eje X
+ *   Lado dch exterior (X=+16, Z +13.5→-13.5) eje Z
+ *   Fondo dch   (Z-, X +16→+3)             eje X
+ *   Fondo conector dch (X=+3, Z -2.5→-13.5) eje Z
+ *   Fondo conector (Z=−13.5, X +3→-3)      eje X
+ *   Fondo conector izq (X=-3, Z -13.5→-2.5) eje Z
+ *   Fondo izq   (Z-, X -3→-16)             eje X
+ *   Lado izq exterior (X=-16, Z -13.5→+13.5) eje Z
+ *   (cierra en el punto de inicio)
+ *
+ * Retorna un THREE.Group con userData.isWall=true.
+ *
+ * @param {number} floor — índice de piso (0=PB, 1, 2, 3)
+ * @returns {THREE.Group}
+ */
+export const createPerimeterWalls = (floor) => {
+  const group = new THREE.Group();
+  group.name = `walls_floor_${floor}`;
+  group.userData = { isWall: true };
+
+  const yBase = FLOOR_Y(floor);
+
+  // Definición de tramos: [from, to, eje].
+  // Cada punto es { x, z } en coordenadas world.
+  // Los tramos cubren el perímetro EXTERIOR completo de la U,
+  // incluyendo las caras que dan al patio (vano frontal abierto).
+  const SEGS = [
+    // Frente del ala izquierda (Z = +13.5, de X=-16 a X=-3)
+    { x1: -16, z1: 13.5, x2: -3, z2: 13.5, axis: "x" },
+    // Cara izquierda del vano del patio (X = -3, de Z=-2.5 a Z=+13.5)
+    { x1: -3, z1: -2.5, x2: -3, z2: 13.5, axis: "z" },
+    // Cara derecha del vano del patio (X = +3, de Z=+13.5 a Z=-2.5)
+    { x1: 3, z1: 13.5, x2: 3, z2: -2.5, axis: "z" },
+    // Frente del ala derecha (Z = +13.5, de X=+3 a X=+16)
+    { x1: 3, z1: 13.5, x2: 16, z2: 13.5, axis: "x" },
+    // Lado exterior derecho (X = +16, de Z=+13.5 a Z=-13.5)
+    { x1: 16, z1: 13.5, x2: 16, z2: -13.5, axis: "z" },
+    // Fondo ala derecha (Z = -13.5, de X=+16 a X=+3)
+    { x1: 16, z1: -13.5, x2: 3, z2: -13.5, axis: "x" },
+    // Fondo conector derecho interior (X = +3, de Z=-2.5 a Z=-13.5)
+    // (omitido — queda solapado por las alas en world-space; el conector
+    //  comparte X=+3 con el ala, no hay muro extra aquí)
+    // Fondo del conector (Z = -13.5, de X=+3 a X=-3)  — incluido en fondo alas
+    // Fondo conector izquierdo interior (X = -3, de Z=-13.5 a Z=-2.5)
+    // (igual que arriba — omitido porque X=-3 es el borde del ala)
+    // Fondo ala izquierda (Z = -13.5, de X=-3 a X=-16)
+    { x1: -3, z1: -13.5, x2: -16, z2: -13.5, axis: "x" },
+    // Lado exterior izquierdo (X = -16, de Z=-13.5 a Z=+13.5)
+    { x1: -16, z1: -13.5, x2: -16, z2: 13.5, axis: "z" },
+  ];
+
+  for (const seg of SEGS) {
+    const from = new THREE.Vector3(seg.x1, yBase, seg.z1);
+    const to = new THREE.Vector3(seg.x2, yBase, seg.z2);
+    const segGroup = createWallSegment(from, to, seg.axis, yBase);
+    group.add(segGroup);
+  }
+
+  return group;
+};
+
+/**
+ * Ajusta la visibilidad y opacidad de la escena según el nivel de zoom semántico.
+ *
+ * @param {Map<number, THREE.Group>} floorGroups  — mapa floor → Group del edificio
+ * @param {Map<string, THREE.Mesh>}  roomMeshes   — mapa roomId → Mesh de área
+ * @param {'building'|'floor'|'area'} level       — nivel de detalle
+ * @param {{ activeFloor?: number, focusedAreaId?: string }} [opts]
+ */
+export const setViewLevel = (floorGroups, roomMeshes, level, opts = {}) => {
+  const { activeFloor = -1, focusedAreaId = null } = opts;
+
+  for (const [floor, group] of floorGroups) {
+    const isActiveFloor = activeFloor === -1 || floor === activeFloor;
+
+    // Modos floor/area: pisos no activos completamente ocultos (group.visible=false
+    // es más barato que recorrer todo el contenido y atenuar objeto por objeto).
+    // En modo building se restauran todos a visible=true.
+    if (level === "building") {
+      group.visible = true;
+    } else {
+      group.visible = isActiveFloor;
+      // Si el grupo queda oculto no hay nada más que procesar en él.
+      if (!isActiveFloor) continue;
+    }
+
+    group.traverse((obj) => {
+      // ── Muros perimetrales ─────────────────────────────────────────────────
+      // El Group raíz (isWall) y sus hijos directos (isWallPanel, isWindowPanel,
+      // isEdge dentro del muro) se gestionan juntos aquí.
+      // - building / floor → visible (dan estructura al volumen)
+      // - area             → ocultos para no estorbar la vista del área enfocada
+      //
+      // Detectar si este objeto pertenece a un grupo isWall (el propio grupo o
+      // un hijo de él) subiendo por la cadena de padres hasta el floorGroup.
+      {
+        let _ancestor = obj;
+        let _inWall = false;
+        while (_ancestor && _ancestor !== group) {
+          if (_ancestor.userData?.isWall) {
+            _inWall = true;
+            break;
+          }
+          _ancestor = _ancestor.parent;
+        }
+        if (_inWall) {
+          obj.visible = level !== "area";
+          return;
+        }
+      }
+
+      // ── Losa ──────────────────────────────────────────────────────────────
+      if (obj.userData?.isSlab) {
+        obj.visible = true;
+        if (level === "building") {
+          // Vista general: todas las losas a opacidad completa
+          obj.material.opacity = OPA.SLAB_FULL;
+          obj.material.transparent = false;
+          obj.renderOrder = 0;
+        } else {
+          // Modos floor / area: solo el piso activo llega aquí (los demás ya
+          // quedaron ocultos por group.visible = false arriba).
+          obj.material.opacity = OPA.SLAB_FULL;
+          obj.material.transparent = false;
+          obj.renderOrder = 0;
+        }
+        return;
+      }
+
+      // ── Pasillo (isEdge dashed, hijo directo del group de piso, no de un área)
+      // Discriminador: el padre NO tiene roomId (no es un room mesh).
+      if (obj.userData?.isEdge && !obj.parent?.userData?.roomId) {
+        // Pasillos y bordes de losa: solo visibles en floor / area del piso activo
+        if (level === "building") {
+          obj.visible = false;
+        } else {
+          // El grupo ya está visible (isActiveFloor=true), mostrar pasillo
+          obj.visible = true;
+          if (obj.material) {
+            obj.material.opacity = obj.material.userData?.baseOpacity ?? OPA.CORRIDOR_ACTIVE;
+          }
+        }
+        return;
+      }
+
+      // ── Borde de área (isEdge hijo de un room mesh) ───────────────────────
+      // Se gestiona dentro del bloque roomId de abajo a través de obj.traverse,
+      // así que saltar aquí para evitar doble procesamiento.
+      if (obj.userData?.isEdge && obj.parent?.userData?.roomId) {
+        return;
+      }
+
+      // ── Mesh de área ──────────────────────────────────────────────────────
+      if (obj.isMesh && obj.userData?.roomId) {
+        // En floor/area solo llegamos aquí si isActiveFloor=true (el continue
+        // de arriba descarta grupos de pisos no activos antes de traverse).
+        const isFocused = focusedAreaId && obj.userData.roomId === focusedAreaId;
+
+        if (level === "building") {
+          // Vista edificio: áreas ocultas
+          obj.visible = false;
+          obj.traverse((child) => {
+            if (child.userData?.isEdge) child.visible = false;
+          });
+          return;
+        }
+
+        if (level === "floor") {
+          // Piso activo: cuerpo casi transparente (delimitador), borde fuerte
+          obj.visible = true;
+          obj.material.opacity = OPA.AREA_FLOOR_BOX;
+          obj.material.transparent = true;
+          obj.renderOrder = 1;
+          obj.traverse((child) => {
+            if (!child.userData?.isEdge) return;
+            child.visible = true;
+            child.material.opacity = OPA.AREA_FLOOR_EDGE;
+          });
+          return;
+        }
+
+        if (level === "area") {
+          if (isFocused) {
+            // Área enfocada: vidrio normal
+            obj.visible = true;
+            obj.material.opacity = obj.userData.baseOpacity ?? ROOM_BASE_OPACITY;
+            obj.material.transparent = true;
+            obj.renderOrder = 1;
+            obj.traverse((child) => {
+              if (!child.userData?.isEdge) return;
+              child.visible = true;
+              child.material.opacity = OPA.AREA_FOCUSED_EDGE;
+            });
+          } else {
+            // Resto del piso: muy atenuado
+            obj.visible = true;
+            obj.material.opacity = OPA.AREA_DIM_BOX;
+            obj.material.transparent = true;
+            obj.renderOrder = 0;
+            obj.traverse((child) => {
+              if (!child.userData?.isEdge) return;
+              child.visible = true;
+              child.material.opacity = OPA.AREA_DIM_EDGE;
+            });
+          }
+          return;
+        }
+      }
+    });
+  }
+};
+
 /**
  * Actualiza el color de un mesh de cuarto para mostrar estado de ticket.
  */
@@ -429,4 +862,263 @@ export const setRoomTicketState = (mesh, state) => {
         ? AREA_COLORS.ticket_asignado
         : mesh.userData.baseColor;
   mesh.material.color.setHex(color);
+};
+
+// ════════════════════════════════════════════════════════════
+// ESTILO HOLOGRÁFICO (tema oscuro) — recorre la escena y
+// ajusta opacidades y colores emisivos para dar look de
+// proyección holográfica. En tema claro restaura los valores
+// base guardados en userData.
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Color guinda/rosa de las aristas en modo holograma.
+ * Coincide con la paleta institucional del sistema (guinda #9d2449 → rosa #c44e71).
+ * El emissive alto hace que UnrealBloomPass las capture y genere halo.
+ */
+const HOLO_EDGE_COLOR = new THREE.Color(0xc44e71);
+const HOLO_EDGE_COLOR_HEX = 0xc44e71;
+
+/**
+ * Guarda en userData los valores originales de un material de línea
+ * para poder restaurarlos al volver a tema claro.
+ * Solo guarda si aún no se ha guardado (idempotente).
+ *
+ * @param {THREE.Material} mat
+ */
+const _guardarBaseLinea = (mat) => {
+  if (mat.userData._holoBaseColor !== undefined) return;
+  mat.userData._holoBaseColor = mat.color.getHex();
+  mat.userData._holoBaseOpacity = mat.opacity;
+};
+
+/**
+ * Guarda en userData los valores originales de un MeshMaterial (losa/área/muro).
+ *
+ * @param {THREE.Material} mat
+ */
+const _guardarBaseMesh = (mat) => {
+  if (mat.userData._holoBaseOpacity !== undefined) return;
+  mat.userData._holoBaseOpacity = mat.opacity;
+  mat.userData._holoBaseTransparent = mat.transparent;
+  mat.userData._holoBaseEmissive = mat.emissive ? mat.emissive.getHex() : 0x000000;
+  mat.userData._holoBaseEmissiveIntensity = mat.emissiveIntensity ?? 0;
+};
+
+/**
+ * Restaura los valores base de un material de línea desde userData.
+ *
+ * @param {THREE.Material} mat
+ */
+const _restaurarLinea = (mat) => {
+  if (mat.userData._holoBaseColor === undefined) return;
+  mat.color.setHex(mat.userData._holoBaseColor);
+  mat.opacity = mat.userData._holoBaseOpacity;
+  mat.needsUpdate = true;
+};
+
+/**
+ * Restaura los valores base de un MeshMaterial desde userData.
+ *
+ * @param {THREE.Material} mat
+ */
+const _restaurarMesh = (mat) => {
+  if (mat.userData._holoBaseOpacity === undefined) return;
+  mat.opacity = mat.userData._holoBaseOpacity;
+  mat.transparent = mat.userData._holoBaseTransparent;
+  if (mat.emissive) mat.emissive.setHex(mat.userData._holoBaseEmissive);
+  mat.emissiveIntensity = mat.userData._holoBaseEmissiveIntensity;
+  mat.needsUpdate = true;
+};
+
+/**
+ * Aplica o quita el estilo holográfico en toda la escena.
+ *
+ * En modo holograma (enabled=true):
+ *   - Aristas (isEdge) de losas, áreas y muros → color guinda emisivo brillante,
+ *     opacity 0.95. El UnrealBloomPass las detecta y genera halo.
+ *   - Losas (isSlab) → casi etéreas, opacity 0.10 + leve emissive guinda.
+ *   - Áreas (roomId) → opacity muy baja 0.06 + emissive guinda tenue.
+ *   - Muros (isWall*) → opacity 0.08 + emissive tenue.
+ *   - Ventanas (isWindowPanel) → emissive azul más fuerte (puntos que brillan).
+ *   - Huella del suelo (isFootprint) → casi invisible.
+ *
+ * En modo claro (enabled=false) restaura todos los valores base guardados.
+ *
+ * IMPORTANTE: esta función NO toca las opacidades que gestiona setViewLevel.
+ * setViewLevel recorre la escena DESPUÉS de applyHologramStyle y sobrescribe
+ * opacity según el nivel (building/floor/area). Para que el holograma persista
+ * en cada nivel, los valores emisivos y de color SE QUEDAN en el material;
+ * solo la opacity la gestiona setViewLevel (que ya respeta baseOpacity).
+ * La solución: guardar los valores emisivos/color en el material directamente
+ * (no en baseOpacity, que setViewLevel usa para restaurar vidrio).
+ *
+ * @param {THREE.Scene} scene
+ * @param {boolean}     enabled — true = holograma, false = look claro
+ */
+export const applyHologramStyle = (scene, enabled) => {
+  scene.traverse((obj) => {
+    // ── Aristas (LineSegments / Line) ──────────────────────────────────────
+    // Aplica a bordes de losas, áreas y muros perimetrales.
+    if (obj.userData?.isEdge && obj.material) {
+      if (enabled) {
+        _guardarBaseLinea(obj.material);
+        obj.material.color.setHex(HOLO_EDGE_COLOR_HEX);
+        obj.material.opacity = 0.95;
+        obj.material.needsUpdate = true;
+      } else {
+        _restaurarLinea(obj.material);
+      }
+      return;
+    }
+
+    if (!obj.isMesh || !obj.material) return;
+
+    // ── Paneles de ventana ─────────────────────────────────────────────────
+    if (obj.userData?.isWindowPanel) {
+      if (enabled) {
+        _guardarBaseMesh(obj.material);
+        if (obj.material.emissive) obj.material.emissive.setHex(0x2288ff);
+        obj.material.emissiveIntensity = 0.6;
+        obj.material.opacity = 0.55;
+        obj.material.needsUpdate = true;
+      } else {
+        _restaurarMesh(obj.material);
+      }
+      return;
+    }
+
+    // ── Paneles de muro ────────────────────────────────────────────────────
+    if (obj.userData?.isWallPanel) {
+      if (enabled) {
+        _guardarBaseMesh(obj.material);
+        obj.material.opacity = 0.08;
+        obj.material.transparent = true;
+        if (obj.material.emissive) obj.material.emissive.setHex(0xc44e71);
+        obj.material.emissiveIntensity = 0.04;
+        obj.material.needsUpdate = true;
+      } else {
+        _restaurarMesh(obj.material);
+      }
+      return;
+    }
+
+    // ── Losas (isSlab) ─────────────────────────────────────────────────────
+    if (obj.userData?.isSlab) {
+      if (enabled) {
+        _guardarBaseMesh(obj.material);
+        obj.material.opacity = 0.1;
+        obj.material.transparent = true;
+        // emissive solo si el material lo soporta (MeshStandard lo tiene)
+        if (obj.material.emissive) obj.material.emissive.setHex(0x9d2449);
+        obj.material.emissiveIntensity = 0.12;
+        obj.material.needsUpdate = true;
+      } else {
+        // Restaurar: opaco de nuevo, sin emissive
+        _restaurarMesh(obj.material);
+        // setViewLevel asigna transparent=false para losas — aquí simplemente
+        // restauramos los valores originales; setViewLevel hará lo suyo.
+        obj.material.needsUpdate = true;
+      }
+      return;
+    }
+
+    // ── Meshes de área (roomId) ────────────────────────────────────────────
+    if (obj.userData?.roomId) {
+      if (enabled) {
+        _guardarBaseMesh(obj.material);
+        // Cuerpo muy etéreo — las aristas (hijos isEdge) son lo que brilla
+        obj.material.opacity = 0.06;
+        obj.material.transparent = true;
+        if (obj.material.emissive) obj.material.emissive.setHex(0xc44e71);
+        obj.material.emissiveIntensity = 0.08;
+        obj.material.needsUpdate = true;
+      } else {
+        _restaurarMesh(obj.material);
+        obj.material.needsUpdate = true;
+      }
+      return;
+    }
+
+    // ── Huella del suelo (ShadowMaterial / MeshStandard de footprint) ──────
+    if (obj.parent?.userData?.isFootprint) {
+      if (enabled) {
+        _guardarBaseMesh(obj.material);
+        obj.material.opacity = Math.min(
+          (obj.material.userData._holoBaseOpacity ?? 0.12) * 0.3,
+          0.04,
+        );
+        obj.material.transparent = true;
+        obj.material.needsUpdate = true;
+      } else {
+        _restaurarMesh(obj.material);
+      }
+    }
+  });
+};
+
+/**
+ * Crea la rejilla holográfica en el plano del suelo.
+ * Solo visible en tema oscuro — en tema claro se oculta.
+ * Líneas guinda muy sutiles que con el bloom dan sensación de
+ * rejilla de proyección holográfica.
+ *
+ * Se añade a la escena una sola vez; la visibilidad la gestiona
+ * setHoloGridVisible().
+ *
+ * @param {THREE.Scene} scene
+ * @returns {THREE.Group} grupo del grid (para guardar referencia y ocultar/mostrar)
+ */
+export const createHoloGrid = (scene) => {
+  const group = new THREE.Group();
+  group.name = "holo_grid";
+  group.userData = { isHoloGrid: true };
+
+  // Dimensiones: cubre el footprint del edificio (32×27 celdas).
+  // Espaciado de líneas cada 4 celdas para que sea sutil, no ruidoso.
+  const W = 32;
+  const D = 27;
+  const STEP = 4;
+  const Y = -0.02; // justo bajo la losa de PB para evitar z-fighting
+
+  const mat = new THREE.LineBasicMaterial({
+    color: 0x9d2449, // guinda institucional — el bloom lo amplificará
+    transparent: true,
+    opacity: 0.18, // muy sutil; el bloom lo hace visible sin sobrecargarlo
+  });
+
+  const points = [];
+
+  // Líneas paralelas al eje X (franjas en Z)
+  for (let z = -Math.floor(D / 2); z <= Math.ceil(D / 2); z += STEP) {
+    points.push(new THREE.Vector3(-W / 2, Y, z));
+    points.push(new THREE.Vector3(W / 2, Y, z));
+  }
+
+  // Líneas paralelas al eje Z (franjas en X)
+  for (let x = -Math.floor(W / 2); x <= Math.ceil(W / 2); x += STEP) {
+    points.push(new THREE.Vector3(x, Y, -D / 2));
+    points.push(new THREE.Vector3(x, Y, D / 2));
+  }
+
+  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  // LineSegments dibuja pares de puntos consecutivos (sin conectar el final
+  // de una línea con el inicio de la siguiente).
+  const grid = new THREE.LineSegments(geo, mat);
+  group.add(grid);
+
+  group.visible = false; // inicia oculto; setHoloGridVisible lo activa
+  scene.add(group);
+
+  return group;
+};
+
+/**
+ * Muestra u oculta la rejilla holográfica del suelo.
+ *
+ * @param {THREE.Group | null} gridGroup — referencia devuelta por createHoloGrid
+ * @param {boolean}            visible
+ */
+export const setHoloGridVisible = (gridGroup, visible) => {
+  if (gridGroup) gridGroup.visible = visible;
 };
