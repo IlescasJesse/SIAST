@@ -14,6 +14,7 @@
     "dev:api": "npm run dev -w ./apps/api",
     "dev:3d": "npm run dev -w ./apps/modelado-3d",
     "dev:web": "npm run dev -w ./apps/web",
+    "dashboard:tunnel": "cloudflared tunnel --url http://localhost:5101",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "format": "prettier --write ."

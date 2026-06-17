@@ -7,6 +7,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* El atributo HTML [hidden] debe ganar a cualquier display de clase
+   (.death-overlay/.q-overlay usan display:flex y si no, ignoran [hidden]) */
+[hidden] { display: none !important; }
 
 :root {
   --bg:       #06060f;
@@ -26,7 +29,7 @@
 }
 
 html, body { height: 100%; background: var(--bg); color: var(--text);
-  font-family: var(--mf); font-size: 13px; overflow: hidden; }
+  font-family: var(--mf); font-size: 15px; overflow: hidden; }
 
 /* Scanlines */
 body::before {
@@ -43,12 +46,15 @@ body::after {
 .app {
   height: 100vh;
   display: grid;
-  grid-template-rows: 58px 1fr 36px;
-  grid-template-columns: 200px 1fr 260px;
+  grid-template-rows: 62px 1fr 80px 142px 44px 34px;
+  grid-template-columns: 1fr 320px;
   grid-template-areas:
-    "hd hd hd"
-    "ag tk lg"
-    "ft ft ft";
+    "hd hd"
+    "tk lg"
+    "vi vi"
+    "ag ag"
+    "cm cm"
+    "ft ft";
   gap: 4px;
   padding: 6px;
 }
@@ -66,7 +72,7 @@ body::after {
   background: linear-gradient(90deg, transparent, var(--bright), transparent);
 }
 .panel-title {
-  font-family: var(--pf); font-size: 6px; color: var(--cyan);
+  font-family: var(--pf); font-size: 7px; color: var(--cyan);
   letter-spacing: 1px; margin-bottom: 8px; padding-bottom: 6px;
   border-bottom: 1px solid var(--border); text-transform: uppercase;
 }
@@ -79,19 +85,18 @@ body::after {
   border: 2px solid var(--bright);
   padding: 0 16px;
 }
-.hd-left {}
 .hd-title {
-  font-family: var(--pf); font-size: 10px; color: var(--cyan);
+  font-family: var(--pf); font-size: 12px; color: var(--cyan);
   text-shadow: 0 0 14px rgba(0,229,255,.6); letter-spacing: 2px;
 }
 .hd-title b { color: var(--yellow); }
 .hd-sub {
-  font-family: var(--pf); font-size: 5px; color: var(--dim);
+  font-family: var(--pf); font-size: 6px; color: var(--dim);
   margin-top: 5px; letter-spacing: 1px;
 }
 .hd-right { display: flex; align-items: center; gap: 20px; }
 .live-badge { display: flex; align-items: center; gap: 7px;
-  font-family: var(--pf); font-size: 6px; }
+  font-family: var(--pf); font-size: 7px; }
 .dot { width: 9px; height: 9px; border-radius: 50%;
   background: var(--green); box-shadow: 0 0 10px var(--green); }
 .dot.off { background: var(--dim); box-shadow: none; animation: none !important; }
@@ -99,43 +104,62 @@ body::after {
 .dot.live { animation: pulse-dot 1.5s infinite; }
 #liveLabel { color: var(--green); }
 #liveLabel.sim-mode { color: var(--yellow); }
-.hd-stats { display: flex; gap: 14px; font-family: var(--pf); font-size: 6px; color: var(--dim); }
+.hd-stats { display: flex; gap: 14px; font-family: var(--pf); font-size: 7px; color: var(--dim); }
 .hd-stats span { color: var(--cyan); }
 
-/* ─── Agents ─────────────────────────────────────────────── */
-.agents { grid-area: ag; overflow-y: auto; }
-
-.agent-card {
-  border: 1px solid var(--border); padding: 8px; margin-bottom: 6px;
-  position: relative; transition: border-color .3s, background .3s;
+/* ─── Vitals (HP / VIGOR + métricas) ─────────────────────── */
+.vitals {
+  grid-area: vi;
+  display: grid; grid-template-columns: 380px 1fr; gap: 12px;
+  background: var(--panel); border: 2px solid var(--border);
+  padding: 7px 12px; align-items: center;
 }
-.agent-card.busy { border-color: var(--yellow); background: rgba(255,215,0,.03); }
-.agent-card.done { border-color: var(--green); }
-
-.agent-sprite { font-size: 22px; text-align: center; display: block; margin-bottom: 4px; }
-.agent-name {
-  font-family: var(--pf); font-size: 5px; text-align: center;
-  margin-bottom: 3px; letter-spacing: .5px;
+.vitals::before {
+  content: ''; position: absolute;
 }
-.agent-model { font-size: 10px; color: var(--dim); text-align: center; margin-bottom: 5px; }
-
-.agent-status-badge {
-  font-family: var(--pf); font-size: 5px; text-align: center;
-  padding: 2px 4px; background: var(--bg); border: 1px solid currentColor;
-  margin-bottom: 5px;
+.bars { display: flex; flex-direction: column; gap: 7px; }
+.bar-row { display: flex; align-items: center; gap: 8px; }
+.bar-label {
+  font-family: var(--pf); font-size: 7px; width: 52px; flex-shrink: 0;
+  letter-spacing: .5px;
 }
-.badge-idle { color: var(--dim); }
-.badge-busy { color: var(--yellow); animation: blink 1.2s infinite; }
-.badge-done { color: var(--green); }
+.bar-label.hp    { color: var(--green); }
+.bar-label.vigor { color: var(--yellow); }
+.bar-track {
+  flex: 1; height: 13px; background: #02020a;
+  border: 1px solid var(--border); overflow: hidden; position: relative;
+}
+.bar-fill { height: 100%; transition: width .6s ease, background .6s ease; }
+.bar-fill.hp    { background: linear-gradient(90deg, var(--green), #00cc66); box-shadow: 0 0 8px var(--green); }
+.bar-fill.vigor { background: linear-gradient(90deg, var(--yellow), var(--orange)); box-shadow: 0 0 8px var(--yellow); }
+.bar-val {
+  font-family: var(--pf); font-size: 7px; width: 96px; flex-shrink: 0;
+  text-align: right; color: var(--text);
+}
+.bar-val b { color: #fff; }
 
-.agent-bar { height: 4px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; margin-bottom: 3px; }
-.agent-bar-fill { height: 100%; transition: width .6s ease; }
-
-.agent-tasks-ct { font-size: 9px; color: var(--dim); text-align: center; }
+.metrics-actions { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; max-height: 56px; }
+.metrics-empty { font-size: 12px; color: var(--green); align-self: center; }
+.metrics-empty::before { content: '✓ '; }
+.sug {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid currentColor; padding: 3px 6px;
+  font-size: 12px;
+}
+.sug.warn { color: var(--yellow); }
+.sug.crit { color: var(--red); animation: blink 1.4s infinite; }
+.sug-reason { color: var(--text); flex: 1; font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sug-btn {
+  font-family: var(--mf); font-size: 12px; cursor: pointer; flex-shrink: 0;
+  background: var(--bg); color: inherit; border: 1px solid currentColor;
+  padding: 2px 8px; font-weight: bold;
+}
+.sug-btn:hover { background: rgba(255,255,255,.07); }
+.sug-btn:disabled { opacity: .4; cursor: default; }
 
 /* ─── Tasks ──────────────────────────────────────────────── */
 .tasks { grid-area: tk; overflow-y: auto; }
-
 .task-row {
   display: grid; grid-template-columns: 22px 1fr auto;
   gap: 6px; align-items: start;
@@ -145,34 +169,29 @@ body::after {
 .task-row:hover { background: rgba(255,255,255,.02); }
 .task-row.active  { background: rgba(255,215,0,.04); }
 .task-row.complete { opacity: .55; }
-
 .task-num {
-  font-family: var(--pf); font-size: 6px; color: var(--dim);
+  font-family: var(--pf); font-size: 7px; color: var(--dim);
   padding-top: 3px; text-align: right;
 }
 .task-row.active   .task-num { color: var(--yellow); }
 .task-row.complete .task-num { color: var(--green); }
 .task-row.blocked  .task-num { color: var(--red); }
-
-.task-name { font-size: 11px; color: var(--text); margin-bottom: 2px;
+.task-name { font-size: 13px; color: var(--text); margin-bottom: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .task-row.active   .task-name { color: var(--yellow); }
 .task-row.complete .task-name { color: var(--green); text-decoration: line-through; }
 .task-row.blocked  .task-name { color: var(--red); }
-
-.task-meta { font-size: 9px; color: var(--dim); margin-bottom: 3px; }
+.task-meta { font-size: 11px; color: var(--dim); margin-bottom: 3px; }
 .task-pb { height: 5px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
 .task-pb-fill { height: 100%; background: var(--dim); transition: width .8s ease; }
 .task-row.active   .task-pb-fill { background: linear-gradient(90deg,var(--yellow),var(--orange)); animation: shimmer 2s infinite; background-size: 200% 100%; }
 .task-row.complete .task-pb-fill { background: var(--green); }
 .task-row.blocked  .task-pb-fill { background: var(--red); }
-
-.task-action { font-size: 9px; color: var(--cyan); margin-top: 2px; min-height: 14px; }
+.task-action { font-size: 11px; color: var(--cyan); margin-top: 2px; min-height: 14px; }
 .task-action::before { content: '▸ '; }
 .cursor { animation: blink .85s infinite; }
-
 .task-badge {
-  font-family: var(--pf); font-size: 5px; padding: 3px 5px;
+  font-family: var(--pf); font-size: 6px; padding: 3px 5px;
   border: 1px solid currentColor; white-space: nowrap; align-self: center;
 }
 .task-badge.pending  { color: var(--dim); }
@@ -184,7 +203,7 @@ body::after {
 .log { grid-area: lg; overflow: hidden; display: flex; flex-direction: column; }
 .log-body { flex: 1; overflow-y: auto; }
 .log-line { padding: 2px 0; border-bottom: 1px solid rgba(34,34,138,.2);
-  font-size: 10px; line-height: 1.5; word-break: break-word; }
+  font-size: 12px; line-height: 1.5; word-break: break-word; }
 .log-ts { color: var(--dim); }
 .log-line.info    .log-msg { color: var(--cyan); }
 .log-line.success .log-msg { color: var(--green); }
@@ -193,24 +212,167 @@ body::after {
 .log-line.default .log-msg { color: var(--text); }
 .log-line.new { animation: slideIn .3s ease; }
 
+/* ─── Squad (agentes, abajo, horizontal) ─────────────────── */
+.squad { grid-area: ag; }
+.squad-list {
+  display: flex; gap: 8px; height: calc(100% - 22px);
+  overflow-x: auto; padding-bottom: 2px;
+}
+.agent-card {
+  flex: 1 1 0; min-width: 130px;
+  border: 1px solid var(--border); padding: 7px 8px;
+  display: grid; grid-template-columns: 38px 1fr; grid-template-rows: auto auto auto;
+  grid-template-areas: "av name" "av badge" "av bar"; gap: 2px 8px;
+  align-items: center; transition: border-color .3s, background .3s;
+}
+.agent-card.busy { border-color: var(--yellow); background: rgba(255,215,0,.04); }
+.agent-card.done { border-color: var(--green); }
+.agent-avatar {
+  grid-area: av; font-size: 30px; text-align: center;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+.agent-name {
+  grid-area: name; font-family: var(--pf); font-size: 7px;
+  letter-spacing: .5px; align-self: end;
+}
+.agent-role { font-size: 11px; color: var(--dim); }
+.agent-badge {
+  grid-area: badge; font-family: var(--pf); font-size: 6px;
+  padding: 2px 0; letter-spacing: .5px;
+}
+.badge-idle { color: var(--dim); }
+.badge-busy { color: var(--yellow); animation: blink 1.2s infinite; }
+.badge-done { color: var(--green); }
+.agent-bar { grid-area: bar; height: 5px; background: var(--bg);
+  border: 1px solid var(--border); overflow: hidden; }
+.agent-bar-fill { height: 100%; transition: width .6s ease; }
+
 /* ─── Footer ─────────────────────────────────────────────── */
 .footer {
   grid-area: ft; display: flex; justify-content: space-between; align-items: center;
   background: var(--panel); border: 1px solid var(--border);
-  padding: 0 12px; font-family: var(--pf); font-size: 6px; color: var(--dim);
+  padding: 0 12px; font-family: var(--pf); font-size: 7px; color: var(--dim);
 }
 .footer span { color: var(--cyan); }
 #progressBar { flex: 0 0 200px; height: 8px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
 #progressFill { height: 100%; background: linear-gradient(90deg,var(--cyan),var(--purple)); transition: width 1s ease; }
+
+/* ─── Chat / Solicitudes al orquestador (barra fija) ─────── */
+.cmdbar {
+  grid-area: cm; display: flex; align-items: center; gap: 8px;
+  background: var(--panel); border: 2px solid var(--bright);
+  padding: 0 10px;
+}
+.cmdbar-label {
+  font-family: var(--pf); font-size: 7px; color: var(--orange);
+  letter-spacing: 1px; flex-shrink: 0; text-transform: uppercase;
+}
+.cmd-input {
+  font-family: var(--mf); font-size: 14px; flex: 1; min-width: 0;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  padding: 7px 10px; outline: none;
+}
+.cmd-input:focus { border-color: var(--orange); }
+.cmd-input::placeholder { color: var(--dim); }
+.cmd-send {
+  font-family: var(--mf); font-size: 14px; cursor: pointer; flex-shrink: 0;
+  background: var(--orange); color: var(--bg); border: 1px solid var(--orange);
+  padding: 7px 16px; font-weight: bold;
+}
+.cmd-send:hover { box-shadow: 0 0 12px rgba(255,136,0,.6); }
+.cmd-send:disabled { opacity: .4; cursor: default; }
+
+/* ─── Preguntas / Decisiones (overlay) ──────────────────── */
+.q-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 0 12px 46px; pointer-events: none;
+}
+.q-modal {
+  pointer-events: auto;
+  width: min(440px, 94%); max-height: 64vh; overflow-y: auto;
+  background: linear-gradient(160deg, #120a02 0%, var(--panel) 70%);
+  border: 2px solid var(--orange);
+  box-shadow: 0 0 30px rgba(255,136,0,.4);
+  padding: 0; animation: slideUp .3s ease;
+}
+.q-modal-title {
+  font-family: var(--pf); font-size: 7px; color: var(--bg);
+  letter-spacing: 1px; padding: 8px 10px; background: var(--orange);
+  text-transform: uppercase; display: flex; align-items: center; gap: 8px;
+}
+.q-modal-title .q-count {
+  background: var(--bg); color: var(--orange); padding: 2px 5px; font-size: 7px;
+}
+.q-modal-body { padding: 10px; }
+.q-card {
+  border: 1px solid var(--border); border-top: 3px solid var(--orange);
+  padding: 10px; margin-bottom: 10px; background: rgba(255,136,0,.05);
+}
+.q-card:last-child { margin-bottom: 0; }
+.q-agent {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--pf); font-size: 7px; color: var(--cyan);
+  letter-spacing: .5px; margin-bottom: 8px;
+}
+.q-agent .q-ava { font-size: 16px; }
+.q-text { font-size: 14px; color: #e8eeff; line-height: 1.55; margin-bottom: 11px; }
+.q-opts { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+.q-opt {
+  font-family: var(--mf); font-size: 13px; cursor: pointer; text-align: left;
+  background: var(--bg); color: var(--cyan); border: 1px solid var(--border);
+  padding: 7px 10px; transition: all .15s; display: flex; align-items: center; gap: 8px;
+}
+.q-opt::before { content: '▸'; color: var(--orange); }
+.q-opt:hover { border-color: var(--cyan); background: rgba(0,229,255,.1); transform: translateX(2px); }
+.q-free { display: flex; gap: 6px; }
+.q-input {
+  font-family: var(--mf); font-size: 13px; flex: 1; min-width: 0;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  padding: 6px 9px; outline: none;
+}
+.q-input:focus { border-color: var(--orange); }
+.q-send {
+  font-family: var(--mf); font-size: 13px; cursor: pointer;
+  background: var(--orange); color: var(--bg); border: 1px solid var(--orange);
+  padding: 6px 14px; font-weight: bold;
+}
+.q-send:hover { box-shadow: 0 0 12px rgba(255,136,0,.6); }
+
+/* ─── ESTÁS MUERTO (game over) ───────────────────────────── */
+.death-overlay {
+  position: fixed; inset: 0; z-index: 20000;
+  background: rgba(2,0,4,.93);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 26px; text-align: center;
+  animation: deathIn .5s ease;
+}
+.death-overlay::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,0,0,.04) 3px,rgba(255,0,0,.04) 4px);
+}
+.death-title {
+  font-family: var(--pf); font-size: 38px; color: var(--red);
+  text-shadow: 0 0 24px rgba(255,60,60,.8), 4px 4px 0 #500;
+  letter-spacing: 4px; animation: deathPulse 1.4s ease infinite;
+}
+.death-skull { font-size: 72px; filter: drop-shadow(0 0 18px var(--red)); }
+.death-sub { font-family: var(--pf); font-size: 11px; color: var(--yellow); letter-spacing: 1px; line-height: 1.8; }
+.death-sub b { color: #fff; }
+.death-hint { font-family: var(--mf); font-size: 13px; color: var(--dim); margin-top: 4px; }
+.death-hint .blink { color: var(--cyan); animation: blink 1s infinite; }
 
 /* ─── Animations ─────────────────────────────────────────── */
 @keyframes blink   { 0%,100%{opacity:1}  50%{opacity:0} }
 @keyframes pulse-dot { 0%,100%{box-shadow:0 0 5px var(--green)} 50%{box-shadow:0 0 14px var(--green)} }
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 @keyframes slideIn { from{opacity:0;transform:translateX(8px)} to{opacity:1;transform:none} }
+@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+@keyframes deathIn { from{opacity:0} to{opacity:1} }
+@keyframes deathPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); }
 ::-webkit-scrollbar-thumb:hover { background: var(--bright); }
@@ -227,7 +389,7 @@ body::after {
     </div>
     <div class="hd-right">
       <div class="hd-stats">
-        TOTAL <span id="stTotal">8</span> &nbsp;|&nbsp;
+        TOTAL <span id="stTotal">0</span> &nbsp;|&nbsp;
         DONE <span id="stDone">0</span> &nbsp;|&nbsp;
         ACTIVE <span id="stActive">0</span>
       </div>
@@ -238,10 +400,21 @@ body::after {
     </div>
   </div>
 
-  <!-- ── AGENTS ── -->
-  <div class="panel agents">
-    <div class="panel-title">▪ SQUAD</div>
-    <div id="agentsList"></div>
+  <!-- ── VITALS (HP / VIGOR + métricas) ── -->
+  <div class="vitals">
+    <div class="bars">
+      <div class="bar-row">
+        <span class="bar-label hp">HP</span>
+        <div class="bar-track"><div class="bar-fill hp" id="hpFill" style="width:0%"></div></div>
+        <span class="bar-val" id="hpVal">--</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label vigor">VIGOR</span>
+        <div class="bar-track"><div class="bar-fill vigor" id="vigorFill" style="width:0%"></div></div>
+        <span class="bar-val" id="vigorVal">--</span>
+      </div>
+    </div>
+    <div class="metrics-actions" id="metricsActions"></div>
   </div>
 
   <!-- ── TASKS ── -->
@@ -256,6 +429,21 @@ body::after {
     <div class="log-body" id="logBody"></div>
   </div>
 
+  <!-- ── SQUAD (agentes abajo) ── -->
+  <div class="panel squad">
+    <div class="panel-title">▪ SQUAD — AGENTES</div>
+    <div class="squad-list" id="agentsList"></div>
+  </div>
+
+  <!-- ── CHAT / SOLICITUDES AL ORQUESTADOR ── -->
+  <div class="cmdbar">
+    <span class="cmdbar-label">▸ Solicitud</span>
+    <input class="cmd-input" id="cmdInput" autocomplete="off"
+           placeholder="Escribe una solicitud para el orquestador y pulsa Enter…"
+           onkeydown="if(event.key==='Enter'){sendChatRequest()}">
+    <button class="cmd-send" id="cmdSend" onclick="sendChatRequest()">ENVIAR</button>
+  </div>
+
   <!-- ── FOOTER ── -->
   <div class="footer">
     <span id="clockEl">--:--:--</span>
@@ -265,31 +453,44 @@ body::after {
 
 </div>
 
+<!-- ── PREGUNTAS / DECISIONES (overlay) ── -->
+<div id="questionsOverlay" class="q-overlay" hidden>
+  <div class="q-modal">
+    <div class="q-modal-title">⚠ DECISIONES <span class="q-count" id="qCount">0</span></div>
+    <div class="q-modal-body" id="questionsList"></div>
+  </div>
+</div>
+
+<!-- ── ESTÁS MUERTO (game over) ── -->
+<div id="deathOverlay" class="death-overlay" hidden>
+  <div class="death-skull">☠️</div>
+  <div class="death-title">ESTÁS MUERTO!</div>
+  <div class="death-sub">
+    SE ACABARON LOS TOKENS DE LA SESIÓN<br>
+    HP <b>0%</b> · CONTEXTO AL <b id="deathFill">100</b>%
+  </div>
+  <div class="death-hint">Inicia una nueva sesión o compacta · <span class="blink">INSERT COIN</span></div>
+</div>
+
 <script>
 // ══════════════════════════════════════════════════════════
-//  MISSION DATA
+//  DEFINICIONES — SQUAD (avatares por profesión)
 // ══════════════════════════════════════════════════════════
 const AGENTS_DEF = [
-  { id:'analizador-db',       name:'ANALIZADOR DB', sprite:'🗄️',  model:'OPUS-4',  tasks:[1,2] },
-  { id:'modelado-3d',         name:'MODELADO 3D',   sprite:'🎮',  model:'SONNET',  tasks:[4,5] },
-  { id:'senior-programacion', name:'SENIOR PROG',   sprite:'💻',  model:'SONNET',  tasks:[3,6,7] },
-  { id:'workflow',            name:'WORKFLOW',      sprite:'⚙️',   model:'——',      tasks:[8] },
+  { id:'orquestador',         name:'ORQUESTADOR', role:'mando',        avatar:'🧭', color:'var(--orange)' },
+  { id:'senior-programacion', name:'SENIOR PROG', role:'fullstack',    avatar:'👨‍💻', color:'var(--cyan)' },
+  { id:'modelado-3d',         name:'MODELADO 3D', role:'3D / WebGL',   avatar:'🎨', color:'var(--purple)' },
+  { id:'analizador-db',       name:'ANALIZA DB',  role:'datos / SQL',  avatar:'🗄️', color:'var(--green)' },
+  { id:'revisor-seguridad',   name:'REVISOR SEG', role:'seguridad',    avatar:'🛡️', color:'var(--red)' },
+  { id:'workflow',            name:'WORKFLOW',    role:'automatiz.',   avatar:'⚙️', color:'var(--yellow)' },
 ];
-const AGENT_COLORS = {
-  'analizador-db':       'var(--green)',
-  'modelado-3d':         'var(--purple)',
-  'senior-programacion': 'var(--cyan)',
-  'workflow':            'var(--yellow)',
-};
+const AGENT_BY_ID = Object.fromEntries(AGENTS_DEF.map(a => [a.id, a]));
+
+// Definiciones de fallback (modo simulación si la API no responde)
 const TASKS_DEF = [
-  { id:1, name:'Schema: TipoAreaComun + Mueble',    agent:'analizador-db',       model:'opus',    depends:[],  actions:['Leyendo schema.prisma…','Analizando FKs de AreaEdificio…','Diseñando enum TipoAreaComun…','Modelando entidad Mueble/Cubiculo…','Plan de migración no-destructivo…'] },
-  { id:2, name:'Seed/reset no-destructivo',          agent:'analizador-db',       model:'sonnet',  depends:[1], actions:['Detectando 1994 FKs activas…','Generando script de reasignación…','Escribiendo seed PB/N1/N2/N3…'] },
-  { id:3, name:'Backend: endpoints + fix PUT floor', agent:'senior-programacion', model:'sonnet',  depends:[1], actions:['Fix: floor faltaba en PUT /areas:267…','Endpoints para Área Común…','Tipos en @stf/shared…'] },
-  { id:4, name:'Visor 3D: nomenclatura + render',    agent:'modelado-3d',         model:'sonnet',  depends:[],  actions:['Corrigiendo FLOOR_LABELS → PB/N1/N2/N3…','Pausando render loop en segundo plano…','Optimizando setPixelRatio…','Mejorando fluidez de cámara…'] },
-  { id:5, name:'Visor 3D: muebles/cubículos LOD',    agent:'modelado-3d',         model:'opus',    depends:[1,3], actions:['Diseñando LOD para muebles…','Creando geometría de cubículos…','Pins de ticket sobre mueble…','Integrando postMessage ↔ frontend…'] },
-  { id:6, name:'Frontend: fix estado + Área Común',  agent:'senior-programacion', model:'sonnet',  depends:[3], actions:['Unificando escritura a localStorage…','Reconciliando pendingChanges con API…','Añadiendo floor al guardar…','UI de subtipo Área Común…'] },
-  { id:7, name:'Frontend: editor muebles + estilos', agent:'senior-programacion', model:'sonnet',  depends:[6], actions:['Capa de muebles en AreaGridEditor…','Retoque visual profesional…','Optimizando transiciones…'] },
-  { id:8, name:'Gate pre-deploy',                    agent:'workflow',            model:'—',       depends:[5,7], actions:['Auditoría de seguridad…','Verificando integridad FK post-migración…','Validando build completo…','Generando reporte final…'] },
+  { id:1, name:'Schema: TipoAreaComun + Mueble',    agent:'analizador-db',       model:'opus',    depends:[],  actions:['Leyendo schema.prisma…','Diseñando enum TipoAreaComun…'] },
+  { id:2, name:'Visor 3D: nomenclatura + render',    agent:'modelado-3d',         model:'sonnet',  depends:[],  actions:['Corrigiendo FLOOR_LABELS…','Optimizando cámara…'] },
+  { id:3, name:'Backend: endpoints + fix floor',     agent:'senior-programacion', model:'sonnet',  depends:[1], actions:['Fix PUT /areas…','Tipos en @stf/shared…'] },
 ];
 
 // ══════════════════════════════════════════════════════════
@@ -297,10 +498,25 @@ const TASKS_DEF = [
 // ══════════════════════════════════════════════════════════
 let tasks = TASKS_DEF.map(t => ({ ...t, status:'pending', progress:0, action:'' }));
 let logLines = [];
+let questions = [];
+let vitals = null;
 let isLive = false;
 
+// Backend del orquestador (API Express). Si no responde, cae a archivo local.
+// - Abierto como archivo local (file://) → apunta a localhost:5101.
+// - Servido por Express o vía túnel (http/https) → ruta del MISMO origen,
+//   así funciona desde internet sin CORS ni mixed-content.
+const API_BASE = location.protocol === 'file:'
+  ? 'http://localhost:5101/api/orchestrator'
+  : '/api/orchestrator';
+
+// Token de acceso (DASHBOARD_TOKEN). Se toma de la URL (?key=…) con la que se
+// abrió el dashboard y se reenvía en cada petición (header x-dashboard-key).
+const DASH_KEY = new URLSearchParams(location.search).get('key') || '';
+const KEY_HEADERS = DASH_KEY ? { 'x-dashboard-key': DASH_KEY } : {};
+
 // ══════════════════════════════════════════════════════════
-//  RENDER
+//  RENDER — SQUAD
 // ══════════════════════════════════════════════════════════
 function renderAgents() {
   const el = document.getElementById('agentsList');
@@ -308,37 +524,40 @@ function renderAgents() {
     const agTasks = tasks.filter(t => t.agent === ag.id);
     const active  = agTasks.filter(t => t.status === 'active');
     const done    = agTasks.filter(t => t.status === 'complete');
-    const progress = agTasks.reduce((s,t) => s + t.progress, 0) / (agTasks.length || 1);
-    const stClass  = active.length ? 'busy' : done.length === agTasks.length && agTasks.length > 0 ? 'done' : '';
-    const stBadge  = active.length ? 'badge-busy' : done.length === agTasks.length && agTasks.length > 0 ? 'badge-done' : 'badge-idle';
-    const stLabel  = active.length ? 'EN MISIÓN' : done.length === agTasks.length && agTasks.length > 0 ? 'COMPLETADO' : 'EN ESPERA';
-    const color    = AGENT_COLORS[ag.id];
+    const progress = agTasks.reduce((s,t) => s + (t.progress||0), 0) / (agTasks.length || 1);
+    const allDone  = agTasks.length > 0 && done.length === agTasks.length;
+    const stClass  = active.length ? 'busy' : allDone ? 'done' : '';
+    const stBadge  = active.length ? 'badge-busy' : allDone ? 'badge-done' : 'badge-idle';
+    const stLabel  = active.length ? 'EN MISIÓN' : allDone ? 'COMPLETADO' : 'EN ESPERA';
     return `
 <div class="agent-card ${stClass}">
-  <span class="agent-sprite">${ag.sprite}</span>
-  <div class="agent-name" style="color:${color}">${ag.name}</div>
-  <div class="agent-model">[${ag.model}]</div>
-  <div class="agent-status-badge ${stBadge}">${stLabel}</div>
-  <div class="agent-bar"><div class="agent-bar-fill" style="width:${progress.toFixed(1)}%;background:${color}"></div></div>
-  <div class="agent-tasks-ct">${done.length}/${agTasks.length} misiones</div>
+  <div class="agent-avatar" style="color:${ag.color}">${ag.avatar}</div>
+  <div class="agent-name" style="color:${ag.color}">${ag.name}<div class="agent-role">${ag.role}</div></div>
+  <div class="agent-badge ${stBadge}">${stLabel}</div>
+  <div class="agent-bar"><div class="agent-bar-fill" style="width:${progress.toFixed(1)}%;background:${ag.color}"></div></div>
 </div>`;
   }).join('');
 }
 
+// ══════════════════════════════════════════════════════════
+//  RENDER — TASKS
+// ══════════════════════════════════════════════════════════
 function renderTasks() {
   const el = document.getElementById('tasksList');
+  if (!tasks.length) { el.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:8px">Sin misiones activas</div>'; return; }
   el.innerHTML = tasks.map(t => {
-    const depStr  = t.depends.length ? ` · deps: ${t.depends.map(d=>'#'+d).join(',')}` : '';
+    const depStr  = (t.depends && t.depends.length) ? ` · deps: ${t.depends.map(d=>'#'+d).join(',')}` : '';
     const badge   = { pending:'ESPERA', active:'ACTIVO', complete:'✓ HECHO', blocked:'BLOQ' }[t.status] || t.status;
+    const ava     = AGENT_BY_ID[t.agent]?.avatar || '•';
     const actionHtml = t.status === 'active' && t.action
-      ? `<div class="task-action">${t.action}<span class="cursor">▌</span></div>` : '';
+      ? `<div class="task-action">${escHtml(t.action)}<span class="cursor">▌</span></div>` : '';
     return `
 <div class="task-row ${t.status}">
   <div class="task-num">${String(t.id).padStart(2,'0')}</div>
   <div>
-    <div class="task-name">${t.name}</div>
-    <div class="task-meta">${t.agent} · ${t.model}${depStr}</div>
-    <div class="task-pb"><div class="task-pb-fill" style="width:${t.progress}%"></div></div>
+    <div class="task-name">${escHtml(t.name)}</div>
+    <div class="task-meta">${ava} ${escHtml(t.agent)} · ${escHtml(t.model||'—')}${depStr}</div>
+    <div class="task-pb"><div class="task-pb-fill" style="width:${t.progress||0}%"></div></div>
     ${actionHtml}
   </div>
   <div class="task-badge ${t.status}">${badge}</div>
@@ -346,20 +565,171 @@ function renderTasks() {
   }).join('');
 }
 
+// ══════════════════════════════════════════════════════════
+//  RENDER — VITALS (HP / VIGOR) + MÉTRICAS
+// ══════════════════════════════════════════════════════════
+function renderVitals() {
+  const hpFill = document.getElementById('hpFill');
+  const vigorFill = document.getElementById('vigorFill');
+  const hpVal = document.getElementById('hpVal');
+  const vigorVal = document.getElementById('vigorVal');
+  const actions = document.getElementById('metricsActions');
+
+  if (!vitals || !vitals.available) {
+    hpFill.style.width = '0%'; vigorFill.style.width = '0%';
+    hpVal.textContent = 'SIN DATOS'; vigorVal.textContent = '--';
+    actions.innerHTML = '<div class="metrics-empty">esperando token-optimizer…</div>';
+    document.getElementById('deathOverlay').hidden = true;
+    return;
+  }
+
+  const hp = vitals.hp ?? 0;
+  hpFill.style.width = hp + '%';
+  // HP cambia de color: verde → amarillo → rojo
+  if (hp <= 20)      hpFill.style.background = 'linear-gradient(90deg, var(--red), #aa0000)';
+  else if (hp <= 45) hpFill.style.background = 'linear-gradient(90deg, var(--orange), var(--yellow))';
+  else               hpFill.style.background = 'linear-gradient(90deg, var(--green), #00cc66)';
+  const kLeft = Math.round((vitals.tokensLeft||0)/1000);
+  const kMax  = Math.round((vitals.tokensMax||0)/1000);
+  hpVal.innerHTML = `<b>${hp}%</b> · ${kLeft}k/${kMax}k`;
+
+  vigorFill.style.width = (vitals.vigor ?? 0) + '%';
+  vigorVal.innerHTML = `<b>${vitals.vigor ?? '--'}</b> [${vitals.grade ?? '?'}]`;
+
+  // Sugerencias de métricas → botones de acción
+  const sugs = vitals.suggestions || [];
+  actions.innerHTML = sugs.length
+    ? sugs.map(s => `
+<div class="sug ${s.severity}">
+  <span>${escHtml(s.label)}</span>
+  <span class="sug-reason" title="${escAttr(s.reason)}">${escHtml(s.reason)}</span>
+  <button class="sug-btn" onclick="sendAction('${s.id}', this)"
+    data-label="${escAttr(s.label)}" data-action="${escAttr(s.action)}">PEDIR</button>
+</div>`).join('')
+    : '<div class="metrics-empty">contexto saludable — sin acciones</div>';
+
+  // Game over
+  const death = document.getElementById('deathOverlay');
+  if (vitals.dead) {
+    document.getElementById('deathFill').textContent = Math.round(vitals.fillPct ?? 100);
+    death.hidden = false;
+  } else {
+    death.hidden = true;
+  }
+}
+
+async function sendAction(id, btn) {
+  const label = btn?.dataset.label || id;
+  const action = btn?.dataset.action || id;
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const r = await fetch(API_BASE + '/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...KEY_HEADERS },
+      body: JSON.stringify({ id, label, action }),
+    });
+    if (!r.ok) throw new Error();
+    addLog('Acción solicitada: ' + label, 'warn');
+    if (btn) btn.textContent = '✓ PEDIDO';
+  } catch {
+    addLog('No se pudo enviar la acción (¿API en :5101?)', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'PEDIR'; }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  CHAT — solicitud libre al orquestador (POST /action)
+// ══════════════════════════════════════════════════════════
+async function sendChatRequest() {
+  const input = document.getElementById('cmdInput');
+  const btn = document.getElementById('cmdSend');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  const id = 'chat-' + Date.now();
+  input.disabled = true; btn.disabled = true; btn.textContent = '…';
+  try {
+    const r = await fetch(API_BASE + '/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...KEY_HEADERS },
+      body: JSON.stringify({ id, label: text, action: text }),
+    });
+    if (!r.ok) throw new Error();
+    addLog('Solicitud enviada: ' + text, 'warn');
+    input.value = '';
+  } catch {
+    addLog('No se pudo enviar la solicitud (¿API en :5101?)', 'error');
+  } finally {
+    input.disabled = false; btn.disabled = false; btn.textContent = 'ENVIAR';
+    input.focus();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER — PREGUNTAS
+// ══════════════════════════════════════════════════════════
+function renderQuestions() {
+  const overlay = document.getElementById('questionsOverlay');
+  const el = document.getElementById('questionsList');
+  const pendientes = questions.filter(q => !q.answer);
+  overlay.hidden = pendientes.length === 0;
+  document.getElementById('qCount').textContent = pendientes.length;
+  if (pendientes.length === 0) { el.innerHTML = ''; return; }
+
+  el.innerHTML = pendientes.map(q => {
+    const ava = AGENT_BY_ID[q.agent]?.avatar || '🤖';
+    const opts = (q.options || []).map(o =>
+      `<button class="q-opt" onclick="answerQuestion('${q.id}', this.dataset.val)" data-val="${escAttr(o)}">${escHtml(o)}</button>`
+    ).join('');
+    return `
+<div class="q-card" id="qcard-${q.id}">
+  <div class="q-agent"><span class="q-ava">${ava}</span>${escHtml((q.agent||'agente').toUpperCase())} PREGUNTA</div>
+  <div class="q-text">${escHtml(q.text)}</div>
+  <div class="q-opts">${opts}</div>
+  <div class="q-free">
+    <input class="q-input" id="qinput-${q.id}" placeholder="otra respuesta…"
+           onkeydown="if(event.key==='Enter'){answerQuestion('${q.id}', this.value)}">
+    <button class="q-send" onclick="answerQuestion('${q.id}', document.getElementById('qinput-${q.id}').value)">ENVIAR</button>
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function answerQuestion(id, value) {
+  const answer = (value || '').trim();
+  if (!answer) return;
+  const card = document.getElementById('qcard-' + id);
+  if (card) card.style.opacity = '0.5';
+  try {
+    const r = await fetch(API_BASE + '/answer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...KEY_HEADERS },
+      body: JSON.stringify({ id, answer }),
+    });
+    if (!r.ok) throw new Error();
+    const local = questions.find(q => q.id === id);
+    if (local) { local.answer = answer; local.answeredAt = new Date().toISOString(); }
+    addLog('Respuesta enviada: "' + answer + '"', 'success');
+    renderQuestions();
+    fetchLive();
+  } catch {
+    addLog('No se pudo enviar la respuesta (¿API en :5101?)', 'error');
+    if (card) card.style.opacity = '1';
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER — LOG / STATS / CLOCK
+// ══════════════════════════════════════════════════════════
 function addLog(msg, type = 'default') {
   const now = new Date();
   const ts  = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   logLines.unshift({ ts, msg, type, isNew: true });
   if (logLines.length > 80) logLines.pop();
   renderLog();
-  setTimeout(() => { if (logLines[logLines.length-1]) logLines.forEach(l=>l.isNew=false); }, 500);
 }
 
 function renderLog() {
   const el = document.getElementById('logBody');
   el.innerHTML = logLines.map((l,i) =>
     `<div class="log-line ${l.type}${i===0?' new':''}">
-      <span class="log-ts">[${l.ts}] </span><span class="log-msg">${l.msg}</span>
+      <span class="log-ts">[${l.ts}] </span><span class="log-msg">${escHtml(l.msg)}</span>
     </div>`
   ).join('');
 }
@@ -370,13 +740,15 @@ function renderStats() {
   document.getElementById('stTotal').textContent  = tasks.length;
   document.getElementById('stDone').textContent   = done;
   document.getElementById('stActive').textContent = active;
-  const pct = (done / tasks.length) * 100;
+  const pct = tasks.length ? (done / tasks.length) * 100 : 0;
   document.getElementById('progressFill').style.width = pct + '%';
 }
 
-function render() { renderAgents(); renderTasks(); renderStats(); }
+function render() { renderAgents(); renderTasks(); renderStats(); renderVitals(); renderQuestions(); }
 
 function pad(n) { return String(n).padStart(2,'0'); }
+function escHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function escAttr(s) { return escHtml(s).replace(/'/g, '&#39;'); }
 
 function renderClock() {
   const now = new Date();
@@ -390,20 +762,34 @@ function renderClock() {
 // ══════════════════════════════════════════════════════════
 async function fetchLive() {
   try {
-    const r = await fetch('agent-status.json?t=' + Date.now(), { cache:'no-store' });
-    if (!r.ok) throw new Error();
-    const data = await r.json();
-    if (data.tasks) {
-      tasks = tasks.map(t => {
-        const live = data.tasks.find(d => d.id === t.id);
-        return live ? { ...t, ...live } : t;
-      });
+    let data;
+    try {
+      const rb = await fetch(API_BASE + '/status?t=' + Date.now(), { cache:'no-store', headers: KEY_HEADERS });
+      if (!rb.ok) throw new Error();
+      data = await rb.json();
+    } catch {
+      const rf = await fetch('agent-status.json?t=' + Date.now(), { cache:'no-store' });
+      if (!rf.ok) throw new Error();
+      data = await rf.json();
     }
-    if (data.log) data.log.forEach(l => addLog(l.msg, l.type));
+
+    if (Array.isArray(data.tasks) && data.tasks.length) {
+      tasks = data.tasks.map(t => ({
+        depends: [], progress: 0, status: 'pending', action: '', model: '—', ...t,
+      }));
+    }
+    if (Array.isArray(data.log)) {
+      logLines = data.log.map(l => ({
+        ts: l.ts || '', msg: l.msg || '', type: l.type || 'default', isNew: false,
+      }));
+      renderLog();
+    }
+    questions = Array.isArray(data.questions) ? data.questions : [];
+    vitals = data.vitals || null;
+
     if (!isLive) {
       isLive = true;
-      const dot = document.getElementById('liveDot');
-      dot.className = 'dot live';
+      document.getElementById('liveDot').className = 'dot live';
       const lbl = document.getElementById('liveLabel');
       lbl.textContent = 'EN VIVO'; lbl.className = '';
       stopSim(); addLog('Conexión en vivo establecida ✓', 'success');
@@ -421,74 +807,34 @@ async function fetchLive() {
 }
 
 // ══════════════════════════════════════════════════════════
-//  SIMULATION
+//  SIMULATION (fallback)
 // ══════════════════════════════════════════════════════════
-let simTimer = null;
-let simIdx   = 0;
-
+let simTimer = null, simIdx = 0;
 function setActive(id, p=0)   { tasks = tasks.map(t => t.id===id ? {...t, status:'active',  progress:p} : t); render(); }
 function setProgress(id, p)   { tasks = tasks.map(t => t.id===id ? {...t, progress:p}    : t); render(); }
 function setAction(id, a)     { tasks = tasks.map(t => t.id===id ? {...t, action:a}      : t); render(); }
 function setComplete(id)      { tasks = tasks.map(t => t.id===id ? {...t, status:'complete', progress:100, action:''} : t); render(); }
-
 const SIM = [
   ()=>{ addLog('SIAST Mission Control iniciado', 'success'); addLog('Esperando agentes…', 'info'); },
-  ()=>{ setActive(1); addLog('[analizador-db] ▶ Task #1 — Schema TipoAreaComun', 'info'); },
-  ()=>{ setProgress(1,15); setAction(1,'Leyendo schema.prisma…'); },
-  ()=>{ setProgress(1,30); addLog('[analizador-db] FKs: Empleado.areaId + Ticket.areaId detectadas', 'warn'); },
-  ()=>{ setActive(4); setProgress(1,45); setAction(1,'Diseñando enum TipoAreaComun…'); addLog('[modelado-3d] ▶ Task #4 — Visor 3D nomenclatura (paralelo)', 'info'); },
-  ()=>{ setProgress(1,55); setProgress(4,20); setAction(4,'Corrigiendo FLOOR_LABELS → PB/N1/N2/N3…'); },
-  ()=>{ setProgress(1,65); setProgress(4,40); setAction(1,'Modelando entidad Mueble/Cubiculo…'); },
-  ()=>{ setProgress(1,78); setProgress(4,60); setAction(4,'Pausando render loop en background…'); },
-  ()=>{ setProgress(4,80); addLog('[modelado-3d] render loop ahora pausa con visibilitychange', 'success'); },
-  ()=>{ setProgress(1,90); setProgress(4,100); setComplete(4); addLog('[modelado-3d] Task #4 COMPLETADA ✓', 'success'); },
-  ()=>{ setProgress(1,100); setComplete(1); addLog('[analizador-db] Task #1 COMPLETADA ✓ Schema diseñado', 'success'); },
-  ()=>{ setActive(2); setActive(3); addLog('[analizador-db] ▶ Task #2 — Seed/reset (paralelo)', 'info'); addLog('[senior-prog] ▶ Task #3 — Backend endpoints', 'info'); },
-  ()=>{ setProgress(2,25); setProgress(3,20); setAction(2,'Script reasignación FKs (1994 empleados)…'); setAction(3,'Fix PUT /areas:267 + campo floor…'); },
-  ()=>{ setProgress(2,50); setProgress(3,45); addLog('[senior-prog] Bug corregido: floor faltaba en handleGuardarTodo', 'success'); },
-  ()=>{ setProgress(2,70); setProgress(3,65); setAction(2,'Escribiendo seed PB/N1/N2/N3 coherente…'); },
-  ()=>{ setProgress(2,100); setComplete(2); addLog('[analizador-db] Task #2 COMPLETADA ✓', 'success'); },
-  ()=>{ setProgress(3,100); setComplete(3); addLog('[senior-prog] Task #3 COMPLETADA ✓', 'success'); },
-  ()=>{ setActive(5); setActive(6); addLog('[modelado-3d] ▶ Task #5 — Muebles/cubículos LOD', 'info'); addLog('[senior-prog] ▶ Task #6 — Frontend fix estado', 'info'); },
-  ()=>{ setProgress(5,20); setProgress(6,25); setAction(5,'Diseñando sistema LOD…'); setAction(6,'Unificando escritura localStorage…'); },
-  ()=>{ setProgress(5,40); setProgress(6,45); addLog('[senior-prog] Bug corregido: doble escritura localStorage eliminada', 'success'); },
-  ()=>{ setProgress(5,55); setProgress(6,60); setAction(5,'Creando geometría cubículos Three.js…'); setAction(6,'UI Área Común + nombre propio sala juntas…'); },
-  ()=>{ setProgress(5,72); setProgress(6,80); addLog('[modelado-3d] Pins de ticket sobre mueble específico funcionando', 'success'); },
-  ()=>{ setProgress(5,88); setProgress(6,100); setComplete(6); addLog('[senior-prog] Task #6 COMPLETADA ✓', 'success'); },
-  ()=>{ setProgress(5,100); setComplete(5); addLog('[modelado-3d] Task #5 COMPLETADA ✓ Muebles 3D listos', 'success'); },
-  ()=>{ setActive(7); addLog('[senior-prog] ▶ Task #7 — Editor muebles + estilos', 'info'); },
-  ()=>{ setProgress(7,33); setAction(7,'Capa de muebles en AreaGridEditor…'); },
-  ()=>{ setProgress(7,66); setAction(7,'Retoque visual profesional AreasPage…'); addLog('[senior-prog] Estilos mejorados aplicados', 'info'); },
-  ()=>{ setProgress(7,100); setComplete(7); addLog('[senior-prog] Task #7 COMPLETADA ✓', 'success'); },
-  ()=>{ setActive(8); addLog('[workflow] ▶ Task #8 — Gate pre-deploy', 'warn'); setAction(8,'Auditoría de seguridad…'); },
-  ()=>{ setProgress(8,40); addLog('[workflow] Verificando integridad FK post-migración…', 'info'); },
-  ()=>{ setProgress(8,75); setAction(8,'Validando build completo…'); addLog('[workflow] Build OK — cero errores TypeScript', 'success'); },
-  ()=>{ setProgress(8,100); setComplete(8); addLog('[workflow] ████ OPERACIÓN COMPLETA ✓ ████', 'success'); addLog('Todos los agentes completaron sus misiones', 'success'); },
+  ()=>{ setActive(1); addLog('[analizador-db] ▶ Task #1 — Schema', 'info'); },
+  ()=>{ setProgress(1,40); setAction(1,'Leyendo schema.prisma…'); },
+  ()=>{ setActive(2); setProgress(1,70); addLog('[modelado-3d] ▶ Task #2 (paralelo)', 'info'); },
+  ()=>{ setProgress(1,100); setComplete(1); setProgress(2,60); },
+  ()=>{ setActive(3); setProgress(2,100); setComplete(2); addLog('[senior-prog] ▶ Task #3', 'info'); },
+  ()=>{ setProgress(3,100); setComplete(3); addLog('████ DEMO COMPLETA ████', 'success'); },
 ];
-
-function simTick() {
-  if (simIdx >= SIM.length) return;
-  SIM[simIdx]();
-  simIdx++;
-  const delay = simIdx < 3 ? 1400 : simIdx > 28 ? 1600 : 750 + Math.random()*500;
-  simTimer = setTimeout(simTick, delay);
-}
-
+function simTick() { if (simIdx >= SIM.length) return; SIM[simIdx](); simIdx++; simTimer = setTimeout(simTick, 1300); }
 function stopSim()  { if (simTimer) { clearTimeout(simTimer); simTimer = null; } }
 function startSim() {
-  addLog('MODO DEMO — sin agent-status.json en vivo', 'warn');
-  addLog('Tip: servir carpeta con http-server para datos reales', 'default');
-  simIdx = 0;
-  simTimer = setTimeout(simTick, 900);
+  addLog('MODO DEMO — API :5101 no responde', 'warn');
+  simIdx = 0; simTimer = setTimeout(simTick, 900);
 }
 
 // ══════════════════════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════════════════════
 render();
-setInterval(renderClock, 1000);
-renderClock();
-
+setInterval(renderClock, 1000); renderClock();
 fetchLive().then(() => {
   if (!isLive) startSim();
   setInterval(fetchLive, 2500);

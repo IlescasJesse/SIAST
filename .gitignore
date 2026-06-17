@@ -18,3 +18,4 @@ CREDENCIALES.md
 # DevVault — contexto local Claude Code (no commitear)
 .claude/CLAUDE.md
 .claude/settings.local.json
+.cloudflared-tunnel.log

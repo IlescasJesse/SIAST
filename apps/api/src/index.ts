@@ -14,6 +14,7 @@ import catalogosRoutes from "./routes/catalogos.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import recursosRoutes from "./routes/recursos.routes.js";
 import metricasRoutes from "./routes/metricas.routes.js";
+import orchestratorRoutes from "./routes/orchestrator.routes.js";
 import * as metricasService from "./services/metricas.service.js";
 import { prisma } from "./config/database.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
@@ -49,6 +50,31 @@ const io = new Server(httpServer, {
 });
 configurarSockets(io);
 setIo(io);
+
+// ============================================================
+// Defensa en profundidad para el túnel (Cloudflare/ngrok):
+// las peticiones que llegan por un túnel traen cabeceras de proxy
+// (cf-connecting-ip / x-forwarded-for con IP pública). Para esas
+// peticiones SOLO permitimos el dashboard del orquestador; cualquier otra
+// ruta (empleados, auth, métricas, datos fiscales) se rechaza con 403.
+// El acceso local (sin esas cabeceras) sigue funcionando normal.
+// ============================================================
+app.use((req, res, next) => {
+  const viaTunnel = Boolean(req.get("cf-connecting-ip"));
+  if (viaTunnel && !req.path.startsWith("/api/orchestrator")) {
+    res.status(403).json({ error: "Ruta no expuesta públicamente" });
+    return;
+  }
+  next();
+});
+
+// ============================================================
+// Orquestador: dashboard local de agentes. Se monta ANTES del CORS global
+// con su propio CORS abierto + sin auth (el dashboard se abre como archivo
+// local con origin "null" y sin JWT; datos no sensibles). Mantenerlo antes
+// evita que el CORS global rechace el preflight OPTIONS del origin "null".
+// ============================================================
+app.use("/api/orchestrator", cors(), express.json(), orchestratorRoutes);
 
 // ============================================================
 // Middlewares globales
