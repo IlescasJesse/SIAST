@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useTheme, useMediaQuery } from "@mui/material";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
   Box,
@@ -70,6 +71,7 @@ import {
   deleteMueble,
 } from "../api/catalogos.js";
 import { AreaGridEditor } from "../components/areas/AreaGridEditor.jsx";
+import { FloorPlanMobile } from "../components/areas/FloorPlanMobile.jsx";
 import { dentroDelEdificio, seSolapan, validarGeometriaArea } from "@stf/shared";
 
 /** AreaEdificio (gridX1..gridY2) → rect { x1, y1, x2, y2 } para la validación compartida */
@@ -593,6 +595,16 @@ export const AreasPage = () => {
 
   const pisoActivo = PISOS[pisoIdx];
 
+  // ── Detección mobile/tablet ────────────────────────────────────────────────
+  // Se usa `pointer: coarse` (touch) como señal primaria. En dispositivos híbridos
+  // (Surface, iPad con teclado) también consideramos ancho < md.
+  // El iframe 3D se monta condicionalmente: fuera del árbol en mobile para que
+  // Three.js no se cargue ni ejecute.
+  const muiTheme = useTheme();
+  const isNarrow = useMediaQuery(muiTheme.breakpoints.down("md"));
+  const isCoarsePointer = useMediaQuery("(pointer: coarse)");
+  const isMobileView = isNarrow || isCoarsePointer;
+
   const { areasFiltradas, gridConfig } = useMemo(() => {
     if (viewMode === "full") {
       return {
@@ -1013,67 +1025,125 @@ export const AreasPage = () => {
                 flexDirection: "column",
               }}
             >
-              {/* Visor 3D — siempre visible en la parte superior del panel */}
-              <Box
-                sx={{
-                  borderBottom: editForm ? "1px solid" : "none",
-                  borderColor: "divider",
-                  flexShrink: 0,
-                }}
-              >
+              {/*
+               * Vista de planta en el panel lateral:
+               *   - Desktop (mouse, ancho ≥ md) → iframe con visor 3D (Three.js).
+               *     El iframe SE MONTA solo en desktop: cuando isMobileView es true
+               *     el nodo no existe en el árbol y Three.js no se carga/ejecuta.
+               *   - Mobile/tablet (pointer coarse o ancho < md) → FloorPlanMobile,
+               *     SVG puro 2D sin dependencias pesadas.
+               */}
+              {isMobileView ? (
+                /* ── Vista mobile: planta SVG 2D ── */
                 <Box
                   sx={{
-                    px: 1.5,
-                    py: 0.75,
-                    bgcolor: "grey.50",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    borderBottom: "1px solid rgba(0,0,0,0.08)",
+                    borderBottom: editForm ? "1px solid" : "none",
+                    borderColor: "divider",
+                    flexShrink: 0,
                   }}
                 >
-                  <ThreeDRotationIcon sx={{ fontSize: 16, color: "primary.main" }} />
-                  <Typography
-                    variant="caption"
-                    fontWeight={700}
-                    color="primary.main"
-                    letterSpacing={0.5}
+                  <Box
+                    sx={{
+                      px: 1.5,
+                      py: 0.75,
+                      bgcolor: "grey.50",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      borderBottom: "1px solid rgba(0,0,0,0.08)",
+                    }}
                   >
-                    VISOR 3D
-                  </Typography>
-                  {!editForm && (
-                    <Typography variant="caption" color="text.secondary">
-                      &nbsp;— haz clic en un área para editarla
+                    <EditLocationAltIcon sx={{ fontSize: 16, color: "primary.main" }} />
+                    <Typography
+                      variant="caption"
+                      fontWeight={700}
+                      color="primary.main"
+                      letterSpacing={0.5}
+                    >
+                      PLANTA 2D
                     </Typography>
-                  )}
-                  {editForm && (
-                    <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 0.5 }}>
-                      &nbsp;— {editForm.label || editForm.id}
-                    </Typography>
-                  )}
+                    {!editForm && (
+                      <Typography variant="caption" color="text.secondary">
+                        &nbsp;— toca un área para editarla
+                      </Typography>
+                    )}
+                    {editForm && (
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 0.5 }}>
+                        &nbsp;— {editForm.label || editForm.id}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Box sx={{ p: 1, bgcolor: "#ffffff" }}>
+                    <FloorPlanMobile
+                      areas={areas.filter((a) => a.floor === pisoActivo.floor)}
+                      selectedId={selectedId}
+                      onSelect={handleSelect}
+                    />
+                  </Box>
                 </Box>
-                <iframe
-                  ref={visor3DRef}
-                  src="http://localhost:5174"
-                  title="Visor 3D Edificio"
-                  onLoad={() => {
-                    // Heredar tema al iframe cuando carga (app fija en "light")
-                    visor3DRef.current?.contentWindow?.postMessage(
-                      { type: "SET_THEME", payload: { theme: "light" } },
-                      "*",
-                    );
+              ) : (
+                /* ── Vista desktop: iframe Three.js ── */
+                <Box
+                  sx={{
+                    borderBottom: editForm ? "1px solid" : "none",
+                    borderColor: "divider",
+                    flexShrink: 0,
                   }}
-                  style={{
-                    width: "100%",
-                    border: "none",
-                    display: "block",
-                    height: editForm ? "220px" : "360px",
-                    transition: "height 0.25s ease",
-                  }}
-                />
-              </Box>
+                >
+                  <Box
+                    sx={{
+                      px: 1.5,
+                      py: 0.75,
+                      bgcolor: "grey.50",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      borderBottom: "1px solid rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    <ThreeDRotationIcon sx={{ fontSize: 16, color: "primary.main" }} />
+                    <Typography
+                      variant="caption"
+                      fontWeight={700}
+                      color="primary.main"
+                      letterSpacing={0.5}
+                    >
+                      VISOR 3D
+                    </Typography>
+                    {!editForm && (
+                      <Typography variant="caption" color="text.secondary">
+                        &nbsp;— haz clic en un área para editarla
+                      </Typography>
+                    )}
+                    {editForm && (
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 0.5 }}>
+                        &nbsp;— {editForm.label || editForm.id}
+                      </Typography>
+                    )}
+                  </Box>
+                  <iframe
+                    ref={visor3DRef}
+                    src="http://localhost:5174"
+                    title="Visor 3D Edificio"
+                    onLoad={() => {
+                      // Heredar tema al iframe cuando carga (app fija en "light")
+                      visor3DRef.current?.contentWindow?.postMessage(
+                        { type: "SET_THEME", payload: { theme: "light" } },
+                        "*",
+                      );
+                    }}
+                    style={{
+                      width: "100%",
+                      border: "none",
+                      display: "block",
+                      height: editForm ? "220px" : "360px",
+                      transition: "height 0.25s ease",
+                    }}
+                  />
+                </Box>
+              )}
 
-              {/* EditPanel — aparece debajo del visor cuando hay selección */}
+              {/* EditPanel — aparece debajo del visor/planta cuando hay selección */}
               {editForm && (
                 <Box sx={{ flex: 1, overflow: "auto" }}>
                   <EditPanel
