@@ -1,15 +1,204 @@
 {
-  "operation": "MAPA DE ÁREAS v2.0",
-  "started": null,
+  "updatedAt": "2026-06-18T21:36:00.000Z",
+  "mission": "Ajustes UI — Visor 3D + /admin/areas",
   "tasks": [
-    { "id": 1, "status": "pending", "progress": 0, "action": "", "log": [] },
-    { "id": 2, "status": "pending", "progress": 0, "action": "", "log": [] },
-    { "id": 3, "status": "pending", "progress": 0, "action": "", "log": [] },
-    { "id": 4, "status": "pending", "progress": 0, "action": "", "log": [] },
-    { "id": 5, "status": "pending", "progress": 0, "action": "", "log": [] },
-    { "id": 6, "status": "pending", "progress": 0, "action": "", "log": [] },
-    { "id": 7, "status": "pending", "progress": 0, "action": "", "log": [] },
-    { "id": 8, "status": "pending", "progress": 0, "action": "", "log": [] }
+    {
+      "id": 1,
+      "name": "Quitar tarjeta fantasma detrás de Datos del Área (RRHH / UNDEFINED)",
+      "agent": "senior-programacion",
+      "model": "sonnet",
+      "depends": [],
+      "status": "pending",
+      "progress": 0,
+      "action": ""
+    },
+    {
+      "id": 2,
+      "name": "Switch 'Sala de juntas (legacy)' → etiqueta clara",
+      "agent": "senior-programacion",
+      "model": "sonnet",
+      "depends": [],
+      "status": "pending",
+      "progress": 0,
+      "action": ""
+    },
+    {
+      "id": 3,
+      "name": "Reemplazar etiqueta de ubicación (coords) por una acorde al 3D",
+      "agent": "senior-programacion",
+      "model": "sonnet",
+      "depends": [],
+      "status": "pending",
+      "progress": 0,
+      "action": ""
+    },
+    {
+      "id": 4,
+      "name": "Modo 'Editar Espacio' (toolbar izq) → abre cuadrícula 2D/3D",
+      "agent": "senior-programacion",
+      "model": "sonnet",
+      "depends": [],
+      "status": "pending",
+      "progress": 0,
+      "action": ""
+    },
+    {
+      "id": 5,
+      "name": "Cuadrícula: centrar, alas horizontal + conector vertical, sin pantalla completa, más remarcada",
+      "agent": "senior-programacion",
+      "model": "sonnet",
+      "depends": [4],
+      "status": "pending",
+      "progress": 0,
+      "action": ""
+    },
+    {
+      "id": 6,
+      "name": "Órbita 3D: quitar o esconder según decisión",
+      "agent": "modelado-3d",
+      "model": "sonnet",
+      "depends": [],
+      "status": "pending",
+      "progress": 0,
+      "action": ""
+    },
+    {
+      "id": 7,
+      "name": "Ver/rotar modelo 3D del cubículo (muebles no se ven)",
+      "agent": "modelado-3d",
+      "model": "sonnet",
+      "depends": [],
+      "status": "pending",
+      "progress": 0,
+      "action": ""
+    }
   ],
-  "log": []
+  "log": [
+    {
+      "ts": "2026-06-18T21:36:00.000Z",
+      "msg": "Orquestador conectado en vivo — cola vaciada (5 solicitudes atendidas)",
+      "type": "success"
+    },
+    {
+      "ts": "2026-06-18T21:36:00.000Z",
+      "msg": "Tareas activas: 7 (5 senior-programacion, 2 modelado-3d). Ver QUEST LOG ↑",
+      "type": "info"
+    },
+    {
+      "ts": "2026-06-18T21:31:22.913Z",
+      "msg": "Jesse solicitó: 💾 Guardar (save vault)",
+      "type": "warn"
+    },
+    {
+      "ts": "2026-06-18T21:31:12.902Z",
+      "msg": "Jesse solicitó: holaue tareas tienes ?",
+      "type": "warn"
+    },
+    {
+      "ts": "2026-06-18T21:11:43.442Z",
+      "msg": "Jesse solicitó: 💤 Descansar",
+      "type": "warn"
+    },
+    {
+      "ts": "2026-06-18T21:11:06.242Z",
+      "msg": "[senior-programacion] Jesse respondió: \"2D y 3D con un toggle\"",
+      "type": "success"
+    },
+    {
+      "ts": "2026-06-18T21:10:54.579Z",
+      "msg": "[modelado-3d] Jesse respondió: \"Mini-visor aparte en el panel lateral\"",
+      "type": "success"
+    },
+    {
+      "ts": "2026-06-18T21:10:43.345Z",
+      "msg": "[modelado-3d] Jesse respondió: \"Quitar por completo\"",
+      "type": "success"
+    },
+    {
+      "ts": "2026-06-18T21:10:29.985Z",
+      "msg": "Jesse solicitó: descansa",
+      "type": "warn"
+    },
+    {
+      "ts": "2026-06-17T19:14:12.430Z",
+      "msg": "Jesse solicitó: 🧹 Limpiar contexto",
+      "type": "warn"
+    },
+    {
+      "ts": "13:00:00",
+      "msg": "Orquestador listo — esperando decisiones de Jesse",
+      "type": "info"
+    },
+    {
+      "ts": "13:00:01",
+      "msg": "3 preguntas publicadas en el panel de decisiones",
+      "type": "warn"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-orbita",
+      "agent": "modelado-3d",
+      "text": "La 'Órbita 3D' rota la cámara alrededor del edificio para explorarlo. Dijiste que si no es funcional la quite. ¿Qué hago?",
+      "options": ["Quitar por completo", "Dejarla oculta tras un toggle"],
+      "answer": "Quitar por completo",
+      "answeredAt": "2026-06-18T21:10:43.345Z"
+    },
+    {
+      "id": "q-cubiculo",
+      "agent": "modelado-3d",
+      "text": "Para ver/rotar el modelo 3D del cubículo, ¿qué prefieres?",
+      "options": [
+        "Clic en módulo → zoom + orbitarlo en el visor",
+        "Mini-visor aparte en el panel lateral"
+      ],
+      "answer": "Mini-visor aparte en el panel lateral",
+      "answeredAt": "2026-06-18T21:10:54.579Z"
+    },
+    {
+      "id": "q-editar-espacio",
+      "agent": "senior-programacion",
+      "text": "El nuevo 'Editar Espacio' (toolbar izquierda): ¿dónde se edita la huella del área?",
+      "options": ["Solo cuadrícula 2D", "2D y 3D con un toggle"],
+      "answer": "2D y 3D con un toggle",
+      "answeredAt": "2026-06-18T21:11:06.242Z"
+    }
+  ],
+  "commands": [
+    {
+      "id": "guardar-vault-1781818282910",
+      "label": "💾 Guardar (save vault)",
+      "action": "Guardar estado de la sesión en el vault/memoria: tarea actual, archivos modificados, decisiones y pendientes.",
+      "ts": "2026-06-18T21:31:22.913Z",
+      "done": true
+    },
+    {
+      "id": "chat-1781818272880",
+      "label": "holaue tareas tienes ?",
+      "action": "holaue tareas tienes ?",
+      "ts": "2026-06-18T21:31:12.902Z",
+      "done": true
+    },
+    {
+      "id": "descansar",
+      "label": "💤 Descansar",
+      "action": "Descansar: limpiar lecturas obsoletas y duplicados del contexto",
+      "ts": "2026-06-18T21:11:43.442Z",
+      "done": true
+    },
+    {
+      "id": "chat-1781817029875",
+      "label": "descansa",
+      "action": "descansa",
+      "ts": "2026-06-18T21:10:29.985Z",
+      "done": true
+    },
+    {
+      "id": "limpiar-contexto",
+      "label": "🧹 Limpiar contexto",
+      "action": "Limpiar lecturas obsoletas y duplicados del contexto",
+      "ts": "2026-06-17T19:14:12.430Z",
+      "done": true
+    }
+  ]
 }
