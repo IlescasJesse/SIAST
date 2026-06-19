@@ -4,6 +4,13 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { timingSafeEqual } from "crypto";
+import {
+  readStatus,
+  updateStatus,
+  type OrchestratorStatus,
+  type OrchestratorCommand,
+} from "../services/status.service.js";
+import { isBusy, startChat } from "../services/chat.service.js";
 
 /**
  * Orquestador — estado en vivo de los agentes para `agent-dashboard.html`.
@@ -21,7 +28,6 @@ import { timingSafeEqual } from "crypto";
 // Raíz del repo: apps/api/src/controllers → ../../../../
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = process.env.SIAST_ROOT ?? path.resolve(__dirname, "../../../..");
-const STATUS_FILE = path.join(REPO_ROOT, "agent-status.json");
 const DASHBOARD_FILE = path.join(REPO_ROOT, "agent-dashboard.html");
 
 /**
@@ -32,6 +38,15 @@ const DASHBOARD_FILE = path.join(REPO_ROOT, "agent-dashboard.html");
  * Si DASHBOARD_TOKEN no está configurado, se bloquea el acceso por seguridad.
  */
 export const dashboardAuth = (req: Request, res: Response, next: () => void): void => {
+  // Acceso local (npm run dev, sin túnel): el dashboard debe "just work" sin
+  // fricción. Solo exigimos token cuando la petición llega por el túnel público
+  // (Cloudflare/ngrok añaden cf-connecting-ip). Así el dashboard se conecta EN
+  // VIVO a la API en desarrollo aunque no haya DASHBOARD_TOKEN configurado.
+  const viaTunnel = Boolean(req.get("cf-connecting-ip"));
+  if (!viaTunnel) {
+    next();
+    return;
+  }
   const expected = process.env.DASHBOARD_TOKEN;
   if (!expected) {
     res.status(503).json({ error: "DASHBOARD_TOKEN no configurado en el servidor" });
@@ -51,44 +66,19 @@ export const dashboardAuth = (req: Request, res: Response, next: () => void): vo
   next();
 };
 
-interface OrchestratorQuestion {
-  id: string;
-  agent: string;
-  text: string;
-  options?: string[];
-  answer?: string | null;
-  answeredAt?: string | null;
-}
-
-interface OrchestratorCommand {
-  id: string;
-  label: string;
-  action: string;
-  ts: string;
-  done?: boolean;
-}
-
-interface OrchestratorStatus {
-  updatedAt: string | null;
-  mission: string;
-  tasks: unknown[];
-  log: unknown[];
-  questions: OrchestratorQuestion[];
-  commands?: OrchestratorCommand[];
-}
-
-const EMPTY_STATUS: OrchestratorStatus = {
-  updatedAt: null,
-  mission: "",
-  tasks: [],
-  log: [],
-  questions: [],
-  commands: [],
-};
-
 // ── VITALS: salud del contexto (VIGOR + HP) ─────────────────────────────────
-// Lee el quality-cache-<sesión>.json más reciente que escribe token-optimizer.
+// Lee el quality-cache de la sesión de Claude que trabaja EN ESTE repo (SIAST),
+// no el más reciente global. Si tomáramos el más fresco de cualquier sesión, el
+// HP reflejaría otro proyecto (p. ej. SIRH-NG) y no el uso real de SIAST.
 const TOKEN_OPT_DIR = path.join(os.homedir(), ".claude", "token-optimizer");
+// Carpeta de sesiones de Claude Code para ESTE repo. Claude codifica la ruta del
+// proyecto reemplazando ':' '\' '/' por '-' (ej. C--Users-ilesm-Documents-SIAST).
+const PROJECT_SESSIONS_DIR = path.join(
+  os.homedir(),
+  ".claude",
+  "projects",
+  REPO_ROOT.replace(/[:\\/]/g, "-"),
+);
 
 interface Suggestion {
   id: string;
@@ -98,7 +88,37 @@ interface Suggestion {
   action: string;
 }
 
-async function readFreshestQualityCache(): Promise<Record<string, any> | null> {
+/** Lee y parsea un quality-cache concreto por id de sesión. */
+async function readQualityCacheById(sessionId: string): Promise<Record<string, any> | null> {
+  try {
+    const raw = await fs.readFile(
+      path.join(TOKEN_OPT_DIR, `quality-cache-${sessionId}.json`),
+      "utf-8",
+    );
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Ids de las sesiones de SIAST ordenadas de más reciente a más antigua. */
+async function siastSessionIdsByRecency(): Promise<string[]> {
+  try {
+    const files = await fs.readdir(PROJECT_SESSIONS_DIR);
+    const sessions = files.filter((f) => f.endsWith(".jsonl"));
+    const withMtime: { id: string; mtime: number }[] = [];
+    for (const f of sessions) {
+      const stat = await fs.stat(path.join(PROJECT_SESSIONS_DIR, f));
+      withMtime.push({ id: f.replace(/\.jsonl$/, ""), mtime: stat.mtimeMs });
+    }
+    return withMtime.sort((a, b) => b.mtime - a.mtime).map((s) => s.id);
+  } catch {
+    return [];
+  }
+}
+
+/** Fallback: quality-cache más reciente de CUALQUIER sesión (último recurso). */
+async function readFreshestQualityCacheGlobal(): Promise<Record<string, any> | null> {
   try {
     const files = await fs.readdir(TOKEN_OPT_DIR);
     const caches = files.filter((f) => f.startsWith("quality-cache-") && f.endsWith(".json"));
@@ -114,6 +134,24 @@ async function readFreshestQualityCache(): Promise<Record<string, any> | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * VITALS de la sesión de SIAST: busca la sesión de Claude más reciente de ESTE
+ * repo y lee su quality-cache. Si no hay (o token-optimizer aún no la cacheó),
+ * cae al más reciente global como último recurso.
+ */
+async function readFreshestQualityCache(): Promise<Record<string, any> | null> {
+  // Recorre las sesiones de SIAST de más reciente a más antigua y devuelve el
+  // primer quality-cache que exista. La sesión EN CURSO puede no estar cacheada
+  // todavía (token-optimizer la genera periódicamente), así que se usa la última
+  // sesión de SIAST que sí tenga vitals en vez de saltar a otro proyecto.
+  const sessionIds = await siastSessionIdsByRecency();
+  for (const id of sessionIds) {
+    const cache = await readQualityCacheById(id);
+    if (cache) return cache;
+  }
+  return readFreshestQualityCacheGlobal();
 }
 
 function buildVitals(q: Record<string, any> | null) {
@@ -191,21 +229,6 @@ function buildVitals(q: Record<string, any> | null) {
   };
 }
 
-async function readStatus(): Promise<OrchestratorStatus> {
-  try {
-    const raw = await fs.readFile(STATUS_FILE, "utf-8");
-    const parsed = JSON.parse(raw) as Partial<OrchestratorStatus>;
-    return { ...EMPTY_STATUS, ...parsed };
-  } catch {
-    // Archivo aún no creado o JSON inválido → estado vacío
-    return { ...EMPTY_STATUS };
-  }
-}
-
-async function writeStatus(status: OrchestratorStatus): Promise<void> {
-  await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2), "utf-8");
-}
-
 /**
  * GET /api/orchestrator/dashboard — sirve el HTML del dashboard de agentes.
  * Permite abrirlo vía túnel (Cloudflare/ngrok) desde internet usando el mismo
@@ -236,25 +259,29 @@ export const postAnswer = async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  const status = await readStatus();
-  const question = status.questions.find((q) => q.id === id);
-  if (!question) {
+  // Read first to validate existence and return 404 early
+  const preCheck = await readStatus();
+  if (!preCheck.questions.find((q) => q.id === id)) {
     res.status(404).json({ error: `No existe la pregunta '${id}'` });
     return;
   }
 
-  const now = new Date().toISOString();
-  question.answer = answer.trim();
-  question.answeredAt = now;
+  let savedQuestion: (typeof preCheck.questions)[number] | undefined;
+  await updateStatus((s) => {
+    const question = s.questions.find((q) => q.id === id);
+    if (!question) return; // race: should not happen, handled above
+    const now = new Date().toISOString();
+    question.answer = answer.trim();
+    question.answeredAt = now;
+    s.log = [
+      { ts: now, msg: `[${question.agent}] Jesse respondió: "${answer.trim()}"`, type: "success" },
+      ...(Array.isArray(s.log) ? s.log : []),
+    ].slice(0, 80);
+    s.updatedAt = now;
+    savedQuestion = question;
+  });
 
-  status.log = [
-    { ts: now, msg: `[${question.agent}] Jesse respondió: "${answer.trim()}"`, type: "success" },
-    ...(Array.isArray(status.log) ? status.log : []),
-  ].slice(0, 80);
-  status.updatedAt = now;
-
-  await writeStatus(status);
-  res.json({ ok: true, question });
+  res.json({ ok: true, question: savedQuestion });
 };
 
 /**
@@ -270,7 +297,6 @@ export const postAction = async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  const status = await readStatus();
   const now = new Date().toISOString();
   const command: OrchestratorCommand = {
     id,
@@ -279,16 +305,48 @@ export const postAction = async (req: Request, res: Response): Promise<void> => 
     ts: now,
     done: false,
   };
-  status.commands = [command, ...(Array.isArray(status.commands) ? status.commands : [])].slice(
-    0,
-    20,
-  );
-  status.log = [
-    { ts: now, msg: `Jesse solicitó: ${command.label}`, type: "warn" },
-    ...(Array.isArray(status.log) ? status.log : []),
-  ].slice(0, 80);
-  status.updatedAt = now;
 
-  await writeStatus(status);
+  await updateStatus((s) => {
+    s.commands = [command, ...(Array.isArray(s.commands) ? s.commands : [])].slice(0, 20);
+    s.log = [
+      { ts: now, msg: `Jesse solicitó: ${command.label}`, type: "warn" },
+      ...(Array.isArray(s.log) ? s.log : []),
+    ].slice(0, 80);
+    s.updatedAt = now;
+  });
+
   res.json({ ok: true, command });
+};
+
+/**
+ * POST /api/orchestrator/chat — chat agéntico real. Spawnea `claude -p` en el
+ * repo. SOLO-LOCAL salvo DASHBOARD_CHAT_REMOTE=true (ejecuta Claude con permisos
+ * amplios sobre el repo; no exponer por túnel sin querer). Asíncrono: responde
+ * 202 y la conversación aparece por el poll de /status.
+ * Body: { message: string }
+ */
+export const postChat = async (req: Request, res: Response): Promise<void> => {
+  const viaTunnel = Boolean(req.get("cf-connecting-ip"));
+  if (viaTunnel && process.env.DASHBOARD_CHAT_REMOTE !== "true") {
+    res.status(403).json({ error: "Chat no expuesto públicamente (solo-local)" });
+    return;
+  }
+
+  const { message } = req.body ?? {};
+  if (typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "Se requiere 'message' (texto no vacío)" });
+    return;
+  }
+
+  if (isBusy()) {
+    res.status(409).json({ error: "El orquestador está ocupado con otra solicitud" });
+    return;
+  }
+
+  const result = await startChat(message.trim());
+  if ("busy" in result) {
+    res.status(409).json({ error: "El orquestador está ocupado con otra solicitud" });
+    return;
+  }
+  res.status(202).json({ ok: true, jobId: result.jobId });
 };

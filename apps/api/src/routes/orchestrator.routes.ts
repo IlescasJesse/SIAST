@@ -17,5 +17,6 @@ router.get("/dashboard", ctrl.getDashboard);
 router.get("/status", ctrl.getStatus);
 router.post("/answer", ctrl.postAnswer);
 router.post("/action", ctrl.postAction);
+router.post("/chat", ctrl.postChat);
 
 export default router;
