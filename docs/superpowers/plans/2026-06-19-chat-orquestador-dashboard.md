@@ -813,9 +813,223 @@ git commit -m "docs(api): documenta DASHBOARD_CHAT_REMOTE" --allow-empty
 
 ---
 
+## Task 7: Vitals ligados al HP + distribución profesional + dinamismo
+
+**Files:**
+
+- Modify: `apps/api/src/controllers/orchestrator.controller.ts` (función `buildVitals`)
+- Modify: `agent-dashboard.html`
+
+**Interfaces:**
+
+- Consumes: `vitals.hp`, `vitals.suggestions` ya existentes en `GET /status`.
+- Produces: botones de acción cuyo `id`/`label`/`severity` dependen de la banda de HP.
+
+**Mapa de bandas (botón ↔ HP%):**
+
+| HP restante | Botón                              | severity |
+| ----------- | ---------------------------------- | -------- |
+| > 55%       | — (o 💤 Descansar si waste ≥ 8000) | warn     |
+| 35–55%      | 💤 Descansar                       | warn     |
+| 20–35%      | 📦 Compactar                       | warn     |
+| < 20%       | 🧹 Limpiar + 📦 Compactar          | crit     |
+
+- [ ] **Step 1: Reescribir las sugerencias de buildVitals por banda de HP**
+
+En `apps/api/src/controllers/orchestrator.controller.ts`, dentro de `buildVitals`,
+reemplazar el bloque que arranca en `// Sugerencias accionables a partir de las señales`
+(las declaraciones `waste/stale/dupes/densityScore/densityRatio` y los tres `if` de
+`suggestions.push`) por:
+
+```typescript
+// Sugerencias accionables ligadas a la BANDA DE HP (contexto restante).
+// HP = 100 - fillPct. Bandas: >55 sano · 35-55 descansar · 20-35 compactar · <20 limpiar.
+const suggestions: Suggestion[] = [];
+const waste = Number(q.breakdown?.total_estimated_waste_tokens ?? 0);
+
+if (hp < 20) {
+  suggestions.push({
+    id: "limpiar-contexto",
+    label: "🧹 Limpiar contexto",
+    reason: `HP ${hp}% — crítico: limpia el contexto (/clear) para recuperar HP`,
+    severity: "crit",
+    action: "Limpiar el contexto de la conversación (/clear)",
+  });
+  suggestions.push({
+    id: "compactar",
+    label: "📦 Compactar",
+    reason: `HP ${hp}% — compacta para no perder el hilo (/compact)`,
+    severity: "crit",
+    action: "Compactar la conversación (/compact)",
+  });
+} else if (hp < 35) {
+  suggestions.push({
+    id: "compactar",
+    label: "📦 Compactar",
+    reason: `HP ${hp}% — bajo: conviene compactar pronto (/compact)`,
+    severity: "warn",
+    action: "Compactar la conversación (/compact)",
+  });
+} else if (hp < 55) {
+  suggestions.push({
+    id: "descansar",
+    label: "💤 Descansar",
+    reason: `HP ${hp}% — descansa: limpia lecturas viejas y duplicados`,
+    severity: "warn",
+    action: "Descansar: limpiar lecturas obsoletas y duplicados del contexto",
+  });
+} else if (waste >= 8000) {
+  suggestions.push({
+    id: "descansar",
+    label: "💤 Descansar",
+    reason: `${waste.toLocaleString()} tokens en lecturas viejas — descansa para recuperar VIGOR`,
+    severity: "warn",
+    action: "Descansar: limpiar lecturas obsoletas y duplicados del contexto",
+  });
+}
+```
+
+> Las variables `stale`, `dupes`, `densityScore`, `densityRatio` quedan sin uso:
+> eliminarlas para que el build (sin `any` colgando) quede limpio.
+
+- [ ] **Step 2: Verificar build del API**
+
+Run: `npm run build -w @stf/api`
+Expected: build OK, sin variables sin usar.
+
+- [ ] **Step 3: Dar más altura a la barra de chat (distribución)**
+
+En `agent-dashboard.html`, en `.app { grid-template-rows: … }` (línea ~49), cambiar la
+fila `cm` de `82px` a `156px` para alojar el transcript sin recortar:
+
+```css
+grid-template-rows: 62px 1fr 80px 142px 156px 34px;
+```
+
+- [ ] **Step 4: Conteo animado de HP / VIGOR (dinamismo)**
+
+En `agent-dashboard.html`, antes de `function renderVitals()` (línea ~614), añadir el helper:
+
+```javascript
+// Tween de números (ease-out cúbico) para HP/VIGOR — más vivo que el salto seco.
+function animateNum(el, to, suffix = "") {
+  if (!el) return;
+  const from = parseInt(el.dataset.val ?? "0", 10) || 0;
+  el.dataset.val = String(to);
+  if (from === to) {
+    el.textContent = to + suffix;
+    return;
+  }
+  const start = performance.now(),
+    dur = 600;
+  function step(now) {
+    const t = Math.min(1, (now - start) / dur);
+    const v = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3)));
+    el.textContent = v + suffix;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+```
+
+Dentro de `renderVitals`, reemplazar `hpPct.textContent = hp + '%';` por:
+
+```javascript
+animateNum(hpPct, hp, "%");
+```
+
+y reemplazar `vigorPct.textContent = vigor + '%';` por:
+
+```javascript
+animateNum(vigorPct, vigor, "%");
+```
+
+- [ ] **Step 5: Pulso del label HP en zona crítica**
+
+En el `<style>`, tras `.bar-label.hp { color: var(--green); }` (línea ~126), añadir:
+
+```css
+.bar-label.hp.crit {
+  color: var(--red);
+  animation: blink 1s infinite;
+}
+```
+
+Dentro de `renderVitals`, tras calcular `hp`, añadir:
+
+```javascript
+document.querySelector(".bar-label.hp")?.classList.toggle("crit", hp < 20);
+```
+
+- [ ] **Step 6: Glow del panel de chat + puntos animados mientras "piensa"**
+
+En el `<style>`, tras el bloque `.cmdbar { … }` (línea ~271), añadir:
+
+```css
+.cmdbar.thinking {
+  animation: cmdGlow 1.3s ease-in-out infinite;
+}
+@keyframes cmdGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(0, 229, 255, 0);
+    border-color: var(--bright);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(0, 229, 255, 0.35);
+    border-color: var(--cyan);
+  }
+}
+.think-dots i {
+  animation: blink 1.2s infinite;
+}
+.think-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.think-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+```
+
+En `renderChat()` (de la Task 5), reemplazar la línea del placeholder `pensando…` por:
+
+```javascript
+if (chatPending) {
+  rows.push(
+    '<div class="chat-msg assistant pending"><span class="who">🧭 ORQ</span>pensando<span class="think-dots"><i>.</i><i>.</i><i>.</i></span></div>',
+  );
+}
+```
+
+y al final de `renderChat()`, antes del `el.scrollTop`, alternar el glow del panel:
+
+```javascript
+document.querySelector(".cmdbar")?.classList.toggle("thinking", chatPending);
+```
+
+- [ ] **Step 7: Verificación manual del dinamismo**
+
+Abrir el dashboard local. Verificar:
+
+1. HP/VIGOR cuentan suave al refrescar (no salto seco).
+2. Con HP simulado < 20% (o real bajo) el label HP parpadea en rojo y aparecen
+   🧹 Limpiar + 📦 Compactar.
+3. Al enviar una orden, el panel de chat hace glow y los puntos "…" se animan hasta
+   que llega la respuesta.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/api/src/controllers/orchestrator.controller.ts agent-dashboard.html
+git commit -m "feat(dashboard): vitals por banda de HP + distribución y dinamismo"
+```
+
+---
+
 ## Self-Review (cubierto)
 
 - **Cobertura del spec:** endpoint `/chat` (T4), chat.service spawn+parser (T3), transcript en status (T2/T3), render dashboard (T5), guard solo-local (T4), flag documentado (T6), un-job-a-la-vez (T3 `isBusy`), mutex de escritura (T2). ✓
+- **Cobertura de los extras de Jesse:** botones de acción por banda de HP (T7 S1), distribución profesional / altura del chat (T7 S3), dinamismo HP/VIGOR + glow chat + puntos animados + pulso HP crítico (T7 S4-S6). ✓
 - **Sin placeholders:** todos los pasos llevan código real o comando con salida esperada. ✓
-- **Consistencia de tipos:** `ChatMessage`, `OrchestratorStatus`, `parseStreamEvent`, `isBusy`, `startChat` usados con las mismas firmas entre T2→T3→T4→T5. ✓
+- **Consistencia de tipos:** `ChatMessage`, `OrchestratorStatus`, `parseStreamEvent`, `isBusy`, `startChat` usados con las mismas firmas entre T2→T3→T4→T5; `Suggestion` reutilizado en T7. ✓
 - **Seguridad:** prompt por stdin + args estáticos (sin inyección); solo-local por defecto. ✓
