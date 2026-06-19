@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { updateStatus, type ChatMessage } from "./status.service.js";
+import { updateStatus } from "./status.service.js";
 
 export type ChatStreamEvent =
   | { kind: "assistant_text"; text: string }
@@ -72,61 +72,66 @@ export async function startChat(message: string): Promise<{ jobId: string } | { 
   running = true;
   const jobId = `chat-${Date.now()}`;
 
-  await appendChat("user", message);
-  await appendLog("🧭 Orquestador: procesando solicitud…", "warn");
+  try {
+    await appendChat("user", message);
+    await appendLog("🧭 Orquestador: procesando solicitud…", "warn");
 
-  const child = spawn(
-    "claude",
-    ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"],
-    { cwd: REPO_ROOT, shell: true },
-  );
+    const child = spawn(
+      "claude",
+      ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"],
+      { cwd: REPO_ROOT, shell: true },
+    );
 
-  const killer = setTimeout(() => child.kill(), TIMEOUT_MS);
+    const killer = setTimeout(() => child.kill(), TIMEOUT_MS);
 
-  let buffer = "";
-  let finalText = "";
+    let buffer = "";
+    let finalText = "";
 
-  child.stdout.setEncoding("utf-8");
-  child.stdout.on("data", (chunk: string) => {
-    buffer += chunk;
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let obj: unknown;
-      try {
-        obj = JSON.parse(trimmed);
-      } catch {
-        continue;
+    child.stdout.setEncoding("utf-8");
+    child.stdout.on("data", (chunk: string) => {
+      buffer += chunk;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        let obj: unknown;
+        try {
+          obj = JSON.parse(trimmed);
+        } catch {
+          continue;
+        }
+        const ev = parseStreamEvent(obj);
+        if (!ev) continue;
+        if (ev.kind === "result") finalText = ev.text;
+        else if (ev.kind === "progress") void appendLog(ev.text, "info");
       }
-      const ev = parseStreamEvent(obj);
-      if (!ev) continue;
-      if (ev.kind === "result") finalText = ev.text;
-      else if (ev.kind === "progress") void appendLog(ev.text, "info");
-    }
-  });
+    });
 
-  child.on("close", (code) => {
-    clearTimeout(killer);
+    child.on("close", (code) => {
+      clearTimeout(killer);
+      running = false;
+      if (finalText) void appendChat("assistant", finalText);
+      else
+        void appendChat(
+          "assistant",
+          code === 0 ? "(sin respuesta)" : `⚠ El orquestador terminó con código ${code}`,
+        );
+      void appendLog("🧭 Orquestador: solicitud completada", "success");
+    });
+
+    child.on("error", (err) => {
+      clearTimeout(killer);
+      running = false;
+      void appendChat("assistant", `⚠ No se pudo iniciar claude: ${err.message}`);
+    });
+
+    child.stdin.write(message);
+    child.stdin.end();
+
+    return { jobId };
+  } catch (err) {
     running = false;
-    if (finalText) void appendChat("assistant", finalText);
-    else
-      void appendChat(
-        "assistant",
-        code === 0 ? "(sin respuesta)" : `⚠ El orquestador terminó con código ${code}`,
-      );
-    void appendLog("🧭 Orquestador: solicitud completada", "success");
-  });
-
-  child.on("error", (err) => {
-    clearTimeout(killer);
-    running = false;
-    void appendChat("assistant", `⚠ No se pudo iniciar claude: ${err.message}`);
-  });
-
-  child.stdin.write(message);
-  child.stdin.end();
-
-  return { jobId };
+    throw err;
+  }
 }
