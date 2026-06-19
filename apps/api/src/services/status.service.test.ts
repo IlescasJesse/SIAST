@@ -27,15 +27,12 @@ describe("status.service", () => {
     expect(s.chat).toEqual([]);
   });
 
-  it("writeStatus concurrente no pierde escrituras (mutex serializa)", async () => {
-    // 10 escrituras concurrentes que leen-modifican-escriben deben todas persistir
+  it("updateStatus concurrente no pierde escrituras (RMW serializado)", async () => {
     await Promise.all(
       Array.from({ length: 10 }, (_, i) =>
-        (async () => {
-          const s = await mod.readStatus();
+        mod.updateStatus((s) => {
           s.chat = [...(s.chat ?? []), { role: "user", text: `m${i}`, ts: "t" }];
-          await mod.writeStatus(s);
-        })(),
+        }),
       ),
     );
     const final = await mod.readStatus();

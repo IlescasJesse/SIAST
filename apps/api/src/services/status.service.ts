@@ -66,29 +66,30 @@ export async function readStatus(): Promise<OrchestratorStatus> {
   return _readStatusFromDisk();
 }
 
-// Mutex simple: encadena cada escritura tras la anterior para evitar que dos
-// writers (/answer, /action, /chat) se pisen al leer-modificar-escribir.
-// Cada write re-lee el estado actual del disco (dentro de la cadena) para
-// que escrituras concurrentes no se sobreescriban mutuamente.
-let writeChain: Promise<void> = Promise.resolve();
+// Cola de operaciones: serializa escrituras y read-modify-write para que
+// los tres writers (/answer, /action, /chat) no se pisen. updateStatus hace
+// el ciclo leer→mutar→escribir DENTRO de la cola, así cada operación ve el
+// resultado de la anterior (sirve para cualquier campo: chat, log, etc.).
+let opChain: Promise<void> = Promise.resolve();
 
 export function writeStatus(status: OrchestratorStatus): Promise<void> {
-  const incomingChat = status.chat ?? [];
   const run = async (): Promise<void> => {
-    // Re-read current state from disk inside the mutex so concurrent
-    // read-modify-write callers don't overwrite each other.
-    const current = await _readStatusFromDisk();
-    const currentChat = current.chat ?? [];
-    // Merge: keep existing chat messages, then append any new ones from
-    // the incoming status that aren't already in current.
-    const existingTexts = new Set(currentChat.map((m) => m.ts + m.text + m.role));
-    const newMessages = incomingChat.filter((m) => !existingTexts.has(m.ts + m.text + m.role));
-    const merged: OrchestratorStatus = {
-      ...status,
-      chat: [...currentChat, ...newMessages],
-    };
-    await fs.writeFile(STATUS_FILE, JSON.stringify(merged, null, 2), "utf-8");
+    await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2), "utf-8");
   };
-  writeChain = writeChain.then(run, run);
-  return writeChain;
+  opChain = opChain.then(run, run);
+  return opChain;
+}
+
+export function updateStatus(
+  mutator: (s: OrchestratorStatus) => void | OrchestratorStatus,
+): Promise<OrchestratorStatus> {
+  let result: OrchestratorStatus = EMPTY_STATUS;
+  const run = async (): Promise<void> => {
+    const current = await _readStatusFromDisk();
+    const mutated = mutator(current) ?? current;
+    result = mutated;
+    await fs.writeFile(STATUS_FILE, JSON.stringify(mutated, null, 2), "utf-8");
+  };
+  opChain = opChain.then(run, run);
+  return opChain.then(() => result);
 }
