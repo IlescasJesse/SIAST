@@ -16,6 +16,15 @@ export interface OrchestratorQuestion {
   options?: string[];
   answer?: string | null;
   answeredAt?: string | null;
+  preview?: string; // texto/ascii/markdown para comparar opciones (situacional)
+  image?: string; // URL de screenshot (ej. /api/orchestrator/media/foo.png)
+}
+
+export interface OrchestratorPhase {
+  id?: string;
+  title: string;
+  status?: "pending" | "active" | "done";
+  detail?: string;
 }
 
 export interface OrchestratorCommand {
@@ -32,6 +41,19 @@ export interface ChatMessage {
   ts: string;
 }
 
+export type TaskStatus = "pending" | "active" | "complete" | "blocked";
+
+export interface OrchestratorTask {
+  id: number | string;
+  name: string;
+  agent?: string;
+  model?: string;
+  status?: TaskStatus;
+  progress?: number;
+  action?: string;
+  depends?: (number | string)[];
+}
+
 export interface OrchestratorStatus {
   updatedAt: string | null;
   mission: string;
@@ -40,6 +62,7 @@ export interface OrchestratorStatus {
   questions: OrchestratorQuestion[];
   commands?: OrchestratorCommand[];
   chat?: ChatMessage[];
+  phases?: OrchestratorPhase[];
 }
 
 export const EMPTY_STATUS: OrchestratorStatus = {
@@ -50,6 +73,7 @@ export const EMPTY_STATUS: OrchestratorStatus = {
   questions: [],
   commands: [],
   chat: [],
+  phases: [],
 };
 
 async function _readStatusFromDisk(): Promise<OrchestratorStatus> {

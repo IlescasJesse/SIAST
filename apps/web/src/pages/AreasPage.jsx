@@ -3,15 +3,35 @@
  *
  * Ruta: /admin/areas  (solo ADMIN)
  *
- * Layout:
- *   Header (título + controles)
- *   Toggle Vista completa | Por zonas
- *   Grid (izquierda 67%) + Panel lateral con visor 3D o editor (derecha 33%)
+ * Layout v2 (sub-fase A):
+ *   DESKTOP  — iframe visor 3D a pantalla completa de fondo (z-index 0),
+ *               overlays glass flotantes encima (z-index 10–30):
+ *                 · TopBar (título, tabs de piso, toggle cámara, guardar)
+ *                 · ToolbarVert (herramientas selección/dibujo/mover/borrar) — placeholder B
+ *                 · PanelAreas (lista áreas del piso activo, "Nueva área")
+ *                 · PanelEditar (EditPanel del área seleccionada)
+ *                 · BottomBar (estado, modo, solapes)
+ *   MOBILE   — FloorPlanMobile a pantalla completa (sin Three.js) + mismos overlays.
  *
- * Integración visor 3D (iframe en panel lateral):
- *   - ROOM_CLICKED  → selecciona el área en el editor y navega al piso correcto
- *   - Al seleccionar/editar un área → llama showArea(id) en el visor
- *   - Al cargar el iframe → envía SET_THEME con el tema actual (fijo "light")
+ * Integración visor 3D:
+ *   React → Visor (postMessage):
+ *     SET_THEME { theme }        — al cargar el iframe (siempre "light")
+ *     GO_TO_FLOOR { floor }      — al cambiar piso en TopBar (floor 0=PB..3; -1 = edificio)
+ *     FLY_TO_AREA { areaId }     — al seleccionar área (animación edificio→área)
+ *     HIGHLIGHT_ROOM { roomId }  — al seleccionar área (fallback)
+ *     SET_CAMERA_MODE { mode }  — toggle órbita/cenital (emisor listo; consumidor en B)
+ *     SET_EDIT_TOOL { tool }    — toolbar herramientas (emisor listo; consumidor en B)
+ *   Visor → React (listeners):
+ *     ROOM_CLICKED { roomId, floor }    — selección (ya existía)
+ *     AREA_DRAWN { gridX1,gridY1,gridX2,gridY2,floor } — abrir modal con coords (B)
+ *     AREA_MOVED { areaId, ... }        — actualizar coords (lógica de guardado existente)
+ *     AREA_RESIZED { areaId, ... }      — actualizar coords (lógica de guardado existente)
+ *
+ * Sub-fase B pendiente:
+ *   - Dibujo táctil 3D real (SET_EDIT_TOOL dibujar + AREA_DRAWN del visor)
+ *   - Mover/resize desde el visor (AREA_MOVED/AREA_RESIZED)
+ *   - SET_CAMERA_MODE implementado en el visor Three.js
+ *   - AreaGridEditor accesible vía Drawer "Vista cuadrícula" (montado, ver TODO abajo)
  */
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -49,6 +69,7 @@ import {
   Badge,
   ToggleButton,
   ToggleButtonGroup,
+  Drawer,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -57,8 +78,15 @@ import SaveIcon from "@mui/icons-material/Save";
 import ThreeDRotationIcon from "@mui/icons-material/ThreeDRotation";
 import ChairIcon from "@mui/icons-material/Chair";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ViewComfyIcon from "@mui/icons-material/ViewComfy";
 import GridViewIcon from "@mui/icons-material/GridView";
+import ViewInArIcon from "@mui/icons-material/ViewInAr";
+import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
+import NearMeIcon from "@mui/icons-material/NearMe";
+import PanToolIcon from "@mui/icons-material/PanTool";
+import DrawIcon from "@mui/icons-material/Draw";
+import HighlightAltIcon from "@mui/icons-material/HighlightAlt";
+import CloseIcon from "@mui/icons-material/Close";
+import LayersIcon from "@mui/icons-material/Layers";
 import {
   getAreas,
   createArea,
@@ -96,7 +124,6 @@ const PISOS = [
 
 const PISO_LABELS = { PB: "PB", NIVEL_1: "2", NIVEL_2: "3", NIVEL_3: "4" };
 
-// Zonas del edificio: Ala Izquierda | Conector | Ala Derecha
 const ZONES = [
   { key: "izq", label: "ALA IZQUIERDA", colStart: 0, colCount: 14, color: "#3f51b5" },
   { key: "conector", label: "CONECTOR", colStart: 13, colCount: 6, color: "#7b1fa2" },
@@ -107,6 +134,13 @@ const defaultCoordsForZone = (zoneKey) => {
   if (zoneKey === "conector") return { gridX1: 14, gridY1: 14, gridX2: 18, gridY2: 22 };
   if (zoneKey === "der") return { gridX1: 20, gridY1: 10, gridX2: 25, gridY2: 15 };
   return { gridX1: 1, gridY1: 10, gridX2: 6, gridY2: 15 };
+};
+
+/** Zona/ala del edificio según la posición X en la cuadrícula — etiqueta acorde al visor 3D */
+const zonaForGridX = (gridX1, gridX2) => {
+  const cx = (Number(gridX1) + Number(gridX2)) / 2;
+  const zone = ZONES.find((z) => cx >= z.colStart && cx < z.colStart + z.colCount) ?? ZONES[0];
+  return zone.label;
 };
 
 const DEFAULT_COORDS = { gridX1: 1, gridY1: 1, gridX2: 6, gridY2: 5 };
@@ -136,6 +170,29 @@ const TIPO_AREA_COMUN_LABELS = {
   ARCHIVO: "Archivo",
   BODEGA: "Bodega",
   OTRO: "Otro",
+};
+
+// ── Glass overlay helpers ─────────────────────────────────────────────────────
+
+/** Estilo base para paneles glass flotantes sobre el 3D — tema claro institucional */
+const glassSx = {
+  backdropFilter: "blur(14px) saturate(1.6)",
+  WebkitBackdropFilter: "blur(14px) saturate(1.6)",
+  background: "rgba(255, 255, 255, 0.82)",
+  border: "1px solid rgba(157, 36, 73, 0.22)",
+  borderRadius: "10px",
+  color: "#1a0a10",
+  boxShadow: "0 4px 24px rgba(157, 36, 73, 0.08), 0 1px 4px rgba(0,0,0,0.08)",
+};
+
+/** Variante más compacta para barras — tema claro institucional */
+const glassBarSx = {
+  backdropFilter: "blur(16px) saturate(1.5)",
+  WebkitBackdropFilter: "blur(16px) saturate(1.5)",
+  background: "rgba(255, 255, 255, 0.88)",
+  borderBottom: "1px solid rgba(157, 36, 73, 0.18)",
+  color: "#1a0a10",
+  boxShadow: "0 2px 12px rgba(157, 36, 73, 0.06), 0 1px 3px rgba(0,0,0,0.06)",
 };
 
 // ── Helpers SIRH ──────────────────────────────────────────────────────────────
@@ -174,7 +231,7 @@ export const AreasPage = () => {
   const [alaIdx, setAlaIdx] = useState(0);
   const [pisoIdx, setPisoIdx] = useState(0);
 
-  // Vista completa vs por zonas
+  // Vista completa vs por zonas (usado en AreaGridEditor del Drawer)
   const [viewMode, setViewMode] = useState("zones"); // "full" | "zones"
 
   // Dirección de la transición de slide (para animación direccional)
@@ -192,22 +249,39 @@ export const AreasPage = () => {
   const visor3DRef = useRef(null);
   const [mueblesPorArea, setMueblesPorArea] = useState({});
 
+  // ── Estados nuevos sub-fase A ──────────────────────────────────────────────
+  /** Modo de cámara: 'orbita' (exploración) | 'cenital' (edición top-down) */
+  const [camMode, setCamMode] = useState("orbita");
+  /** Herramienta activa del toolbar flotante — lógica real en sub-fase B */
+  const [activeTool, setActiveTool] = useState("select");
+  /** Drawer con AreaGridEditor (fallback de precisión) */
+  const [gridDrawerOpen, setGridDrawerOpen] = useState(false);
+  /** Panel de lista de áreas flotante colapsado/expandido */
+  const [panelAreasOpen, setPanelAreasOpen] = useState(true);
+
   // ── Helper: comandar el visor 3D ──────────────────────────────────────────
-  // Se define aquí para que pueda ser invocado desde handleSelect (abajo).
-  const visorShowArea = useCallback((areaId) => {
+  const sendToVisor = useCallback((type, payload = {}) => {
     const iframe = visor3DRef.current;
     if (!iframe) return;
-    // Acceso directo vía contentWindow (mismo origen en desarrollo)
-    try {
-      if (iframe.contentWindow?.SIAST3D) {
-        iframe.contentWindow.SIAST3D.showArea(areaId);
-        return;
-      }
-    } catch {
-      // cross-origin: caer en postMessage
-    }
-    iframe.contentWindow?.postMessage({ type: "HIGHLIGHT_ROOM", payload: { roomId: areaId } }, "*");
+    iframe.contentWindow?.postMessage({ type, payload }, "*");
   }, []);
+
+  const visorShowArea = useCallback(
+    (areaId) => {
+      const iframe = visor3DRef.current;
+      if (!iframe) return;
+      try {
+        if (iframe.contentWindow?.SIAST3D) {
+          iframe.contentWindow.SIAST3D.showArea(areaId);
+          return;
+        }
+      } catch {
+        // cross-origin: caer en postMessage
+      }
+      sendToVisor("HIGHLIGHT_ROOM", { roomId: areaId });
+    },
+    [sendToVisor],
+  );
 
   // ── Cambios pendientes (batch save) ──────────────────────────────────────
   const [pendingChanges, setPendingChanges] = useState(() => {
@@ -330,13 +404,22 @@ export const AreasPage = () => {
     setEditForm(null);
   }, []);
 
-  const changePiso = useCallback((nextIdx) => {
-    setSlideDir(nextIdx > prevPisoRef.current ? "down" : "up");
-    prevPisoRef.current = nextIdx;
-    setPisoIdx(nextIdx);
-    setSelectedId(null);
-    setEditForm(null);
-  }, []);
+  const changePiso = useCallback(
+    (nextIdx) => {
+      setSlideDir(nextIdx > prevPisoRef.current ? "down" : "up");
+      prevPisoRef.current = nextIdx;
+      setPisoIdx(nextIdx);
+      setSelectedId(null);
+      setEditForm(null);
+      // Emisor GO_TO_FLOOR → visor (consumidor en main.js: showFloor / showBuilding)
+      const floor = PISOS[nextIdx]?.floor ?? 0;
+      sendToVisor("GO_TO_FLOOR", { floor });
+      try {
+        visor3DRef.current?.contentWindow?.SIAST3D?.showFloor?.(floor);
+      } catch {}
+    },
+    [sendToVisor],
+  );
 
   // ── Selección en el grid ───────────────────────────────────────────────────
 
@@ -352,38 +435,86 @@ export const AreasPage = () => {
         _dirty: false,
       });
       setSaveError("");
-      // Enfocar el área en el visor 3D
+      // Volar a la habitación y resaltarla en el visor 3D
+      sendToVisor("FLY_TO_AREA", { areaId: area.id, floor: area.floor });
       visorShowArea(area.id);
     },
-    [visorShowArea],
+    [visorShowArea, sendToVisor],
   );
 
-  // ── Escuchar ROOM_CLICKED desde el visor ──────────────────────────────────
-  // Se registra después de handleSelect para poder referenciarlo en las deps.
+  // ── Listeners postMessage del visor ───────────────────────────────────────
+
   useEffect(() => {
     const handler = (e) => {
-      if (e.data?.type !== "ROOM_CLICKED") return;
-      const { roomId, floor } = e.data.payload ?? {};
-      if (!roomId) return;
-      // Sincronizar piso en el editor 2D
-      const pisoItemIdx = PISOS.findIndex((p) => p.floor === floor);
-      if (pisoItemIdx >= 0) changePiso(pisoItemIdx);
-      // Seleccionar el área — usamos setAreas para leer el estado fresco
-      setAreas((prev) => {
-        const area = prev.find((a) => a.id === roomId);
-        if (area) {
-          // handleSelect es estable (useCallback), seguro llamar dentro del setter
-          handleSelect(area);
-        }
-        return prev;
-      });
+      const { type, payload } = e.data ?? {};
+      if (!type) return;
+
+      // ROOM_CLICKED — selección desde el visor (ya existía)
+      if (type === "ROOM_CLICKED") {
+        const { roomId, floor } = payload ?? {};
+        if (!roomId) return;
+        const pisoItemIdx = PISOS.findIndex((p) => p.floor === floor);
+        if (pisoItemIdx >= 0) changePiso(pisoItemIdx);
+        setAreas((prev) => {
+          const area = prev.find((a) => a.id === roomId);
+          if (area) handleSelect(area);
+          return prev;
+        });
+        return;
+      }
+
+      // AREA_DRAWN — el visor dibujó un área nueva (sub-fase B)
+      // TODO B: validar coordenadas, abrir modal con coords pre-cargadas
+      if (type === "AREA_DRAWN") {
+        const { gridX1, gridY1, gridX2, gridY2, floor } = payload ?? {};
+        const pisoItem = PISOS.find((p) => p.floor === (floor ?? 0)) ?? PISOS[0];
+        setNuevaForm((prev) => ({
+          ...prev,
+          piso: pisoItem.piso,
+          floor: pisoItem.floor,
+          gridX1: String(gridX1 ?? DEFAULT_COORDS.gridX1),
+          gridY1: String(gridY1 ?? DEFAULT_COORDS.gridY1),
+          gridX2: String(gridX2 ?? DEFAULT_COORDS.gridX2),
+          gridY2: String(gridY2 ?? DEFAULT_COORDS.gridY2),
+        }));
+        setNuevaError("");
+        setModalOpen(true);
+        return;
+      }
+
+      // AREA_MOVED — el visor movió un área (sub-fase B)
+      // TODO B: verificar dentroDelEdificio + persistir en pendingChanges
+      if (type === "AREA_MOVED") {
+        const { areaId, gridX1, gridY1, gridX2, gridY2 } = payload ?? {};
+        if (!areaId) return;
+        const coords = { gridX1, gridY1, gridX2, gridY2 };
+        if (!dentroDelEdificio({ x1: gridX1, y1: gridY1, x2: gridX2, y2: gridY2 })) return;
+        setAreas((prev) => prev.map((a) => (a.id === areaId ? { ...a, ...coords } : a)));
+        setEditForm((prev) =>
+          prev && prev.id === areaId ? { ...prev, ...coords, _dirty: true } : prev,
+        );
+        return;
+      }
+
+      // AREA_RESIZED — el visor redimensionó un área (sub-fase B)
+      // TODO B: misma lógica que AREA_MOVED
+      if (type === "AREA_RESIZED") {
+        const { areaId, gridX1, gridY1, gridX2, gridY2 } = payload ?? {};
+        if (!areaId) return;
+        const coords = { gridX1, gridY1, gridX2, gridY2 };
+        if (!dentroDelEdificio({ x1: gridX1, y1: gridY1, x2: gridX2, y2: gridY2 })) return;
+        setAreas((prev) => prev.map((a) => (a.id === areaId ? { ...a, ...coords } : a)));
+        setEditForm((prev) =>
+          prev && prev.id === areaId ? { ...prev, ...coords, _dirty: true } : prev,
+        );
+        return;
+      }
     };
+
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, [changePiso, handleSelect]);
 
-  // Rechaza coordenadas fuera de la huella del edificio: el rect se queda
-  // "pegado" en la última posición válida durante el drag.
   const handleResize = useCallback((id, coords) => {
     if (
       !dentroDelEdificio({
@@ -412,8 +543,6 @@ export const AreasPage = () => {
     setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
 
-  // Áreas que se solapan con otra del mismo piso — feedback rojo en el editor
-  // y bloqueo de "Guardar todo".
   const conflictIds = useMemo(() => {
     const ids = new Set();
     const conGeom = areas.filter((a) => a.activo !== false && a.gridX1 != null);
@@ -435,8 +564,6 @@ export const AreasPage = () => {
     const ids = Object.keys(pendingChanges);
     if (ids.length === 0) return;
 
-    // Pre-validación: huella del edificio + solapes sobre el estado proyectado
-    // (las mismas reglas que aplica el backend, para fallar con mensaje claro).
     const proyectadas = areas
       .filter((a) => a.activo !== false)
       .map((a) => (pendingChanges[a.id] ? { ...a, ...pendingChanges[a.id] } : a))
@@ -498,7 +625,24 @@ export const AreasPage = () => {
     setSaveError("");
   };
 
-  // ── Muebles ────────────────────────────────────────────────────────────────
+  // ── Toggle modo cámara ─────────────────────────────────────────────────────
+
+  const handleToggleCamMode = () => {
+    const next = camMode === "orbita" ? "cenital" : "orbita";
+    setCamMode(next);
+    // Emisor SET_CAMERA_MODE → visor (consumidor en sub-fase B)
+    sendToVisor("SET_CAMERA_MODE", { mode: next });
+  };
+
+  // ── Cambiar herramienta ────────────────────────────────────────────────────
+
+  const handleSetTool = (tool) => {
+    setActiveTool(tool);
+    // Emisor SET_EDIT_TOOL → visor (consumidor en sub-fase B)
+    sendToVisor("SET_EDIT_TOOL", { tool });
+  };
+
+  // ── Muebles / Módulos ──────────────────────────────────────────────────────
 
   const loadMuebles = useCallback(async (areaId) => {
     try {
@@ -591,20 +735,16 @@ export const AreasPage = () => {
   const setEdit = (k, v) =>
     setEditForm((prev) => (prev ? { ...prev, [k]: v, _dirty: true } : prev));
 
-  // ── Areas filtradas según vista ────────────────────────────────────────────
+  // ── Areas filtradas según piso activo ────────────────────────────────────
 
   const pisoActivo = PISOS[pisoIdx];
 
-  // ── Detección mobile/tablet ────────────────────────────────────────────────
-  // Se usa `pointer: coarse` (touch) como señal primaria. En dispositivos híbridos
-  // (Surface, iPad con teclado) también consideramos ancho < md.
-  // El iframe 3D se monta condicionalmente: fuera del árbol en mobile para que
-  // Three.js no se cargue ni ejecute.
-  const muiTheme = useTheme();
-  const isNarrow = useMediaQuery(muiTheme.breakpoints.down("md"));
-  const isCoarsePointer = useMediaQuery("(pointer: coarse)");
-  const isMobileView = isNarrow || isCoarsePointer;
+  const areasDelPiso = useMemo(
+    () => areas.filter((a) => a.floor === pisoActivo.floor),
+    [areas, pisoActivo.floor],
+  );
 
+  // Para el AreaGridEditor en el Drawer (mantiene la misma lógica anterior)
   const { areasFiltradas, gridConfig } = useMemo(() => {
     if (viewMode === "full") {
       return {
@@ -655,523 +795,965 @@ export const AreasPage = () => {
     },
   };
 
+  // ── Detección mobile/tablet ────────────────────────────────────────────────
+  const muiTheme = useTheme();
+  const isNarrow = useMediaQuery(muiTheme.breakpoints.down("md"));
+  const isCoarsePointer = useMediaQuery("(pointer: coarse)");
+  const isMobileView = isNarrow || isCoarsePointer;
+
+  // Número de áreas válidas (sin solape) en el piso activo
+  const areasValidasPiso = areasDelPiso.filter((a) => !conflictIds.has(a.id)).length;
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <Box>
-      {/* Header */}
+    /*
+     * Contenedor raíz: ocupa todo el viewport menos el AppShell.
+     * position: relative para que los overlays position: absolute queden
+     * confinados a este contenedor (no al viewport completo).
+     */
+    <Box
+      sx={{
+        position: "relative",
+        width: "100%",
+        height: "calc(100vh - 64px)", // 64px = altura AppShell header
+        overflow: "hidden",
+      }}
+    >
+      {/* ── FONDO: iframe visor 3D (desktop) o FloorPlanMobile (mobile) ── */}
+      {isMobileView ? (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            bgcolor: "#f5f0f2",
+            zIndex: 0,
+            overflow: "hidden",
+          }}
+        >
+          <FloorPlanMobile areas={areasDelPiso} selectedId={selectedId} onSelect={handleSelect} />
+        </Box>
+      ) : (
+        <iframe
+          ref={visor3DRef}
+          src="http://localhost:5174?editor=1"
+          title="Visor 3D Edificio"
+          onLoad={() => {
+            sendToVisor("SET_THEME", { theme: "light" });
+            // JWT para que el visor pueda cargar muebles (/api/admin/areas/:id/muebles)
+            const token = localStorage.getItem("siast_token");
+            if (token) sendToVisor("SET_TOKEN", { token });
+          }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            border: "none",
+            zIndex: 0,
+          }}
+        />
+      )}
+
+      {/* ── OVERLAY z=5: Alertas globales (errores, áreas sin mapear) ── */}
       <Box
         sx={{
+          position: "absolute",
+          top: 72, // debajo de la TopBar
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "min(560px, 90%)",
+          zIndex: 5,
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 0,
-          pb: 1.5,
-          flexWrap: "wrap",
-          gap: 1,
-          borderBottom: "2px solid",
-          borderColor: "divider",
+          flexDirection: "column",
+          gap: 0.75,
+          pointerEvents: "none",
+          "& .MuiAlert-root": { pointerEvents: "auto" },
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        {saveAllError && (
+          <Alert severity="error" onClose={() => setSaveAllError("")} sx={{ fontSize: 12 }}>
+            {saveAllError}
+          </Alert>
+        )}
+        {error && (
+          <Alert severity="error" sx={{ fontSize: 12 }}>
+            {error}
+          </Alert>
+        )}
+        {!loading &&
+          (() => {
+            const sinMapear = areas.filter(
+              (a) => a.gridX1 == null || a.gridY1 == null || a.gridX2 == null || a.gridY2 == null,
+            );
+            if (sinMapear.length === 0) return null;
+            return (
+              <Box
+                sx={{
+                  ...glassSx,
+                  p: 1.25,
+                  border: "1px solid rgba(237,108,2,0.35)",
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  fontWeight={700}
+                  sx={{ display: "block", mb: 0.75, color: "#b05a00", letterSpacing: 0.5 }}
+                >
+                  {sinMapear.length} ÁREA{sinMapear.length !== 1 ? "S" : ""} SIN MAPEAR
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                  {sinMapear.map((a) => (
+                    <Chip
+                      key={a.id}
+                      label={`Colocar: ${a.label}`}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        borderColor: "rgba(237,108,2,0.5)",
+                        color: "#b05a00",
+                        fontSize: 11,
+                        cursor: "pointer",
+                      }}
+                      onClick={() => {
+                        const zoneIdx = ZONES.findIndex((z) => {
+                          const x1 = a.gridX1 ?? -1;
+                          return x1 >= z.colStart && x1 < z.colStart + z.colCount;
+                        });
+                        const targetZoneIdx = zoneIdx >= 0 ? zoneIdx : 0;
+                        const defaultCoords = defaultCoordsForZone(ZONES[targetZoneIdx].key);
+                        const pisoItem = PISOS.find((p) => p.floor === a.floor) ?? PISOS[0];
+                        const withCoords = { ...a, ...defaultCoords, piso: pisoItem.piso };
+                        setAreas((prev) => prev.map((x) => (x.id === a.id ? withCoords : x)));
+                        const pIdx =
+                          PISOS.findIndex((p) => p.floor === a.floor) >= 0
+                            ? PISOS.findIndex((p) => p.floor === a.floor)
+                            : 0;
+                        changePiso(pIdx);
+                        if (viewMode === "zones") changeAla(targetZoneIdx);
+                        setSelectedId(a.id);
+                        setEditForm({ ...withCoords, _dirty: true });
+                        setSaveError("");
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            );
+          })()}
+        {loading && (
           <Box
             sx={{
-              p: 0.75,
-              borderRadius: "8px",
-              bgcolor: "primary.main",
+              ...glassSx,
               display: "flex",
               alignItems: "center",
+              gap: 1.5,
+              px: 2.5,
+              py: 1.5,
             }}
           >
-            <EditLocationAltIcon sx={{ color: "#fff", fontSize: 20 }} />
+            <CircularProgress size={18} sx={{ color: "#9d2449" }} />
+            <Typography variant="body2" sx={{ color: "rgba(60,20,35,0.8)" }}>
+              Cargando áreas…
+            </Typography>
           </Box>
-          <Box>
-            <Typography
-              variant="h5"
-              fontWeight={800}
+        )}
+      </Box>
+
+      {/* ── OVERLAY z=20: TopBar flotante ── */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          ...glassBarSx,
+          px: 2,
+          py: 0.75,
+          display: "flex",
+          alignItems: "center",
+          gap: 1.5,
+          flexWrap: "wrap",
+        }}
+      >
+        {/* Título */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mr: 1 }}>
+          <EditLocationAltIcon sx={{ fontSize: 18, color: "#c44e71" }} />
+          <Typography
+            variant="subtitle1"
+            fontWeight={800}
+            sx={{
+              background: "linear-gradient(135deg, #c44e71 0%, #e8789a 100%)",
+              backgroundClip: "text",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              lineHeight: 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Mapa de Áreas
+          </Typography>
+        </Box>
+
+        {/* Tabs de piso */}
+        <Box
+          sx={{
+            display: "flex",
+            gap: 0.5,
+            flex: 1,
+            justifyContent: "center",
+            minWidth: 0,
+            alignItems: "center",
+          }}
+        >
+          {/* Botón Edificio completo */}
+          <Tooltip title="Ver edificio completo (todos los pisos)">
+            <Button
+              size="small"
+              onClick={() => {
+                sendToVisor("GO_TO_FLOOR", { floor: -1 });
+                try {
+                  visor3DRef.current?.contentWindow?.SIAST3D?.showBuilding?.();
+                } catch {}
+                setSelectedId(null);
+                setEditForm(null);
+              }}
+              startIcon={<ViewInArIcon sx={{ fontSize: 13 }} />}
               sx={{
-                background: "linear-gradient(135deg, #9d2449 0%, #c0392b 60%, #e74c3c 100%)",
-                backgroundClip: "text",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                lineHeight: 1.1,
+                minWidth: 48,
+                fontWeight: 700,
+                fontSize: 11,
+                color: "rgba(60,20,35,0.65)",
+                bgcolor: "transparent",
+                border: "1px solid rgba(157,36,73,0.20)",
+                borderRadius: "6px",
+                py: 0.4,
+                px: 1,
+                mr: 0.5,
+                transition: "all 0.2s ease",
+                "&:hover": {
+                  bgcolor: "rgba(157,36,73,0.10)",
+                  color: "rgba(157,36,73,0.9)",
+                  borderColor: "rgba(157,36,73,0.45)",
+                },
               }}
             >
-              Mapa de Áreas
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.3 }}>
-              Editor de planta del edificio
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-          {/* Toggle vista */}
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={(_, v) => {
-              if (v) setViewMode(v);
-            }}
-            size="small"
-            sx={{ "& .MuiToggleButton-root": { py: 0.5, px: 1, fontSize: 11, fontWeight: 700 } }}
-          >
-            <ToggleButton value="zones" title="Ver por zonas (Ala Izq / Conector / Ala Der)">
-              <GridViewIcon sx={{ fontSize: 15, mr: 0.5 }} />
-              Zonas
-            </ToggleButton>
-            <ToggleButton value="full" title="Vista completa del piso (32×27)">
-              <ViewComfyIcon sx={{ fontSize: 15, mr: 0.5 }} />
-              Planta completa
-            </ToggleButton>
-          </ToggleButtonGroup>
+              Edificio
+            </Button>
+          </Tooltip>
 
+          {PISOS.map((p, i) => {
+            const isActive = pisoIdx === i;
+            const count = areas.filter((a) => a.floor === p.floor).length;
+            return (
+              <Button
+                key={p.piso}
+                size="small"
+                onClick={() => changePiso(i)}
+                sx={{
+                  minWidth: 52,
+                  fontWeight: isActive ? 800 : 500,
+                  fontSize: 11,
+                  color: isActive ? "#fff" : "rgba(60,20,35,0.65)",
+                  bgcolor: isActive ? "rgba(157,36,73,0.85)" : "transparent",
+                  border: isActive
+                    ? "1px solid rgba(157,36,73,0.9)"
+                    : "1px solid rgba(157,36,73,0.20)",
+                  borderRadius: "6px",
+                  py: 0.4,
+                  px: 1,
+                  transition: "all 0.2s ease",
+                  "&:hover": {
+                    bgcolor: isActive ? "rgba(157,36,73,0.95)" : "rgba(157,36,73,0.10)",
+                    color: isActive ? "#fff" : "rgba(157,36,73,0.9)",
+                  },
+                  gap: 0.5,
+                }}
+              >
+                PISO {p.label}
+                <Chip
+                  label={count}
+                  size="small"
+                  sx={{
+                    height: 14,
+                    fontSize: 9,
+                    fontWeight: 800,
+                    bgcolor: isActive ? "rgba(255,255,255,0.25)" : "rgba(157,36,73,0.10)",
+                    color: isActive ? "#fff" : "rgba(157,36,73,0.7)",
+                    "& .MuiChip-label": { px: 0.5 },
+                  }}
+                />
+              </Button>
+            );
+          })}
+        </Box>
+
+        {/* Acciones derechas */}
+        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Toggle órbita / cenital */}
+          <Tooltip
+            title={
+              camMode === "orbita"
+                ? "Cambiar a vista cenital (top-down de edición)"
+                : "Cambiar a vista órbita (exploración 3D)"
+            }
+          >
+            <Button
+              size="small"
+              variant={camMode === "cenital" ? "contained" : "outlined"}
+              startIcon={
+                camMode === "cenital" ? (
+                  <CenterFocusStrongIcon sx={{ fontSize: 15 }} />
+                ) : (
+                  <ViewInArIcon sx={{ fontSize: 15 }} />
+                )
+              }
+              onClick={handleToggleCamMode}
+              sx={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: camMode === "cenital" ? "#fff" : "rgba(60,20,35,0.75)",
+                borderColor: camMode === "cenital" ? "rgba(157,36,73,0.9)" : "rgba(157,36,73,0.35)",
+                bgcolor: camMode === "cenital" ? "rgba(157,36,73,0.85)" : "transparent",
+                py: 0.4,
+                "&:hover": {
+                  bgcolor: camMode === "cenital" ? "rgba(157,36,73,0.95)" : "rgba(157,36,73,0.10)",
+                },
+              }}
+            >
+              {camMode === "cenital" ? "Cenital" : "Órbita 3D"}
+            </Button>
+          </Tooltip>
+
+          {/* Vista cuadrícula (Drawer con AreaGridEditor) */}
+          <Tooltip title="Abrir editor de cuadrícula 2D (precisión)">
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<GridViewIcon sx={{ fontSize: 14 }} />}
+              onClick={() => setGridDrawerOpen(true)}
+              sx={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "rgba(60,20,35,0.70)",
+                borderColor: "rgba(157,36,73,0.30)",
+                py: 0.4,
+                "&:hover": { bgcolor: "rgba(157,36,73,0.08)", color: "rgba(157,36,73,0.9)" },
+              }}
+            >
+              Cuadrícula
+            </Button>
+          </Tooltip>
+
+          {/* Render */}
+          <Tooltip title="Recarga el modelo 3D desde la base de datos">
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ThreeDRotationIcon sx={{ fontSize: 14 }} />}
+              onClick={handleGenerarRender}
+              sx={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "rgba(60,20,35,0.70)",
+                borderColor: "rgba(157,36,73,0.30)",
+                py: 0.4,
+                "&:hover": { bgcolor: "rgba(157,36,73,0.08)", color: "rgba(157,36,73,0.9)" },
+              }}
+            >
+              Render
+            </Button>
+          </Tooltip>
+
+          {/* Guardar todo */}
           <Tooltip title="Persiste todos los cambios pendientes en la base de datos">
             <span>
               <Badge badgeContent={pendingCount} color="warning" max={99}>
                 <Button
                   variant={pendingCount > 0 ? "contained" : "outlined"}
-                  color="warning"
                   size="small"
                   startIcon={
-                    savingAll ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />
+                    savingAll ? (
+                      <CircularProgress size={13} color="inherit" />
+                    ) : (
+                      <SaveIcon sx={{ fontSize: 14 }} />
+                    )
                   }
                   onClick={handleGuardarTodo}
                   disabled={pendingCount === 0 || savingAll}
-                  sx={{ fontWeight: 700 }}
+                  sx={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    py: 0.4,
+                    bgcolor: pendingCount > 0 ? "rgba(237,108,2,0.75)" : "transparent",
+                    borderColor: pendingCount > 0 ? "rgba(237,108,2,0.9)" : "rgba(157,36,73,0.3)",
+                    color: pendingCount > 0 ? "#fff" : "rgba(60,20,35,0.70)",
+                    "&:hover": {
+                      bgcolor: pendingCount > 0 ? "rgba(237,108,2,0.9)" : "rgba(157,36,73,0.2)",
+                    },
+                  }}
                 >
-                  Guardar todo
+                  Guardar
                 </Button>
               </Badge>
             </span>
           </Tooltip>
-          <Tooltip title="Recarga el modelo 3D desde los datos guardados en la base de datos">
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<ThreeDRotationIcon />}
-              onClick={handleGenerarRender}
-            >
-              Render
-            </Button>
-          </Tooltip>
+
+          {/* Nueva área */}
           <Button
-            variant="contained"
-            startIcon={<AddIcon />}
             size="small"
+            variant="contained"
+            startIcon={<AddIcon sx={{ fontSize: 14 }} />}
             onClick={() => {
               setNuevaForm(EMPTY_NUEVA);
               setNuevaError("");
               setModalOpen(true);
             }}
+            sx={{
+              fontSize: 11,
+              fontWeight: 700,
+              py: 0.4,
+              bgcolor: "rgba(157,36,73,0.75)",
+              "&:hover": { bgcolor: "rgba(157,36,73,0.95)" },
+            }}
           >
-            Nueva Area
+            Nueva Área
           </Button>
         </Box>
       </Box>
 
-      {saveAllError && (
-        <Alert severity="error" sx={{ mt: 1.5, mb: 0.5 }} onClose={() => setSaveAllError("")}>
-          {saveAllError}
-        </Alert>
-      )}
-      {error && (
-        <Alert severity="error" sx={{ mt: 1.5, mb: 0.5 }}>
-          {error}
-        </Alert>
-      )}
-
-      {/* Áreas sin mapear */}
-      {!loading &&
-        (() => {
-          const sinMapear = areas.filter(
-            (a) => a.gridX1 == null || a.gridY1 == null || a.gridX2 == null || a.gridY2 == null,
-          );
-          if (sinMapear.length === 0) return null;
+      {/* ── OVERLAY z=15: Toolbar vertical de herramientas ── */}
+      <Box
+        sx={{
+          position: "absolute",
+          left: 12,
+          top: "50%",
+          transform: "translateY(-50%)",
+          zIndex: 15,
+          display: "flex",
+          flexDirection: "column",
+          gap: 0.5,
+          // Sin backdrop-filter para evitar pixelado sobre el canvas WebGL
+          background: "rgba(255, 255, 255, 0.94)",
+          border: "1px solid rgba(157, 36, 73, 0.22)",
+          borderRadius: "10px",
+          color: "#1a0a10",
+          boxShadow: "0 4px 24px rgba(157, 36, 73, 0.12), 0 1px 4px rgba(0,0,0,0.10)",
+          p: 0.75,
+        }}
+      >
+        {[
+          { tool: "select", icon: <NearMeIcon sx={{ fontSize: 17 }} />, label: "Seleccionar" },
+          { tool: "move", icon: <PanToolIcon sx={{ fontSize: 17 }} />, label: "Mover (B)" },
+          { tool: "draw", icon: <DrawIcon sx={{ fontSize: 17 }} />, label: "Dibujar área (B)" },
+          {
+            tool: "resize",
+            icon: <HighlightAltIcon sx={{ fontSize: 17 }} />,
+            label: "Redimensionar (B)",
+          },
+          { tool: "delete", icon: <DeleteIcon sx={{ fontSize: 17 }} />, label: "Borrar (B)" },
+        ].map(({ tool, icon, label }) => {
+          const isActive = activeTool === tool;
           return (
-            <Paper variant="outlined" sx={{ mb: 1.5, p: 1.25, borderColor: "warning.light" }}>
-              <Typography
-                variant="caption"
-                fontWeight={700}
-                color="warning.dark"
-                sx={{ display: "block", mb: 0.75, letterSpacing: 0.5 }}
-              >
-                {sinMapear.length} ÁREA{sinMapear.length !== 1 ? "S" : ""} SIN MAPEAR — haz clic en
-                "Colocar" para posicionarlas en el grid
-              </Typography>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-                {sinMapear.map((a) => (
-                  <Chip
-                    key={a.id}
-                    label={a.label}
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                    onClick={() => {
-                      const zoneIdx = ZONES.findIndex((z) => {
-                        const x1 = a.gridX1 ?? -1;
-                        return x1 >= z.colStart && x1 < z.colStart + z.colCount;
-                      });
-                      const targetZoneIdx = zoneIdx >= 0 ? zoneIdx : 0;
-                      const defaultCoords = defaultCoordsForZone(ZONES[targetZoneIdx].key);
-                      const pisoItem = PISOS.find((p) => p.floor === a.floor) ?? PISOS[0];
-                      const withCoords = { ...a, ...defaultCoords, piso: pisoItem.piso };
-                      setAreas((prev) => prev.map((x) => (x.id === a.id ? withCoords : x)));
-                      const pIdx =
-                        PISOS.findIndex((p) => p.floor === a.floor) >= 0
-                          ? PISOS.findIndex((p) => p.floor === a.floor)
-                          : 0;
-                      changePiso(pIdx);
-                      if (viewMode === "zones") changeAla(targetZoneIdx);
-                      setSelectedId(a.id);
-                      setEditForm({ ...withCoords, _dirty: true });
-                      setSaveError("");
-                    }}
-                    sx={{ cursor: "pointer" }}
-                    deleteIcon={<span style={{ fontSize: 10, paddingRight: 4 }}>Colocar</span>}
-                    onDelete={() => {}}
-                  />
-                ))}
-              </Box>
-            </Paper>
-          );
-        })()}
-
-      {/* Layout principal */}
-      {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <Box sx={{ display: "flex", gap: 0, alignItems: "flex-start" }}>
-          {/* Columna izquierda: grid */}
-          <Box sx={{ flex: "0 0 67%", minWidth: 0 }}>
-            <Paper sx={{ borderRadius: "10px", overflow: "hidden" }}>
-              {/* Tabs de zona — solo en modo "zones" */}
-              {viewMode === "zones" && (
-                <Box sx={{ borderBottom: "2px solid rgba(0,0,0,0.10)", bgcolor: "grey.50" }}>
-                  <Tabs
-                    value={alaIdx}
-                    onChange={(_, v) => changeAla(v)}
-                    sx={{ minHeight: 40 }}
-                    TabIndicatorProps={{ style: { height: 3 } }}
-                  >
-                    {ZONES.map((zone, i) => {
-                      const isActive = alaIdx === i;
-                      return (
-                        <Tab
-                          key={zone.key}
-                          label={zone.label}
-                          sx={{
-                            minHeight: 40,
-                            fontWeight: 700,
-                            fontSize: zone.key === "conector" ? 10 : 12,
-                            letterSpacing: 0.5,
-                            opacity: isActive ? 1 : 0.4,
-                            transition: "all 0.2s ease",
-                            bgcolor: isActive ? `${zone.color}12` : "transparent",
-                            color: isActive ? zone.color : "inherit",
-                            borderRadius: "6px 6px 0 0",
-                          }}
-                        />
-                      );
-                    })}
-                  </Tabs>
-                </Box>
-              )}
-
-              {/* Tabs de piso */}
-              <Box sx={{ borderBottom: "1px solid rgba(0,0,0,0.07)", bgcolor: "white" }}>
-                <Tabs
-                  value={pisoIdx}
-                  onChange={(_, v) => changePiso(v)}
-                  sx={{ minHeight: 36 }}
-                  variant="fullWidth"
-                >
-                  {PISOS.map((p, i) => {
-                    const count =
-                      viewMode === "full"
-                        ? areas.filter((a) => a.floor === p.floor).length
-                        : areas.filter((a) => {
-                            if (a.floor !== p.floor) return false;
-                            const zona = ZONES[alaIdx];
-                            const x1 = a.gridX1 ?? -1;
-                            return x1 >= zona.colStart && x1 < zona.colStart + zona.colCount;
-                          }).length;
-                    const isActive = pisoIdx === i;
-                    return (
-                      <Tab
-                        key={p.piso}
-                        label={
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                            <span>PISO {p.label}</span>
-                            <Chip
-                              label={count}
-                              size="small"
-                              sx={{
-                                height: 16,
-                                fontSize: 9,
-                                fontWeight: 800,
-                                bgcolor: isActive ? "primary.main" : "grey.300",
-                                color: isActive ? "#fff" : "text.primary",
-                                "& .MuiChip-label": { px: 0.5 },
-                              }}
-                            />
-                          </Box>
-                        }
-                        sx={{
-                          minHeight: 36,
-                          fontSize: 11,
-                          textTransform: "none",
-                          fontWeight: 600,
-                          opacity: isActive ? 1 : 0.45,
-                          transition: "all 0.2s ease",
-                          bgcolor: isActive ? "rgba(157,36,73,0.05)" : "transparent",
-                        }}
-                      />
-                    );
-                  })}
-                </Tabs>
-              </Box>
-
-              {/* Grid con animación de slide */}
-              <Box
-                key={gridKey}
+            <Tooltip key={tool} title={label} placement="right">
+              <IconButton
+                size="small"
+                onClick={() => handleSetTool(tool)}
                 sx={{
-                  p: viewMode === "full" ? 1 : 1.5,
-                  animation: "siast-slide 0.22s ease",
-                  ...slideKeyframes[slideDir],
+                  color: isActive ? "#fff" : "rgba(60,20,35,0.55)",
+                  bgcolor: isActive ? "rgba(157,36,73,0.85)" : "transparent",
+                  border: isActive
+                    ? "1px solid rgba(157,36,73,0.9)"
+                    : "1px solid rgba(157,36,73,0.12)",
+                  borderRadius: "6px",
+                  width: 34,
+                  height: 34,
+                  transition: "all 0.15s ease",
+                  "&:hover": {
+                    bgcolor: "rgba(157,36,73,0.12)",
+                    color: "rgba(157,36,73,0.9)",
+                    border: "1px solid rgba(157,36,73,0.35)",
+                  },
                 }}
               >
-                {/* Fondos de zona en vista completa */}
-                {viewMode === "full" && (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      gap: 0.5,
-                      mb: 0.75,
-                      px: 0.25,
-                      pointerEvents: "none",
-                    }}
-                  >
-                    {ZONES.map((z) => (
-                      <Box
-                        key={z.key}
-                        sx={{
-                          flex: z.colCount,
-                          py: 0.25,
-                          borderRadius: "4px",
-                          bgcolor: z.color + "12",
-                          border: `1px solid ${z.color}33`,
-                          textAlign: "center",
-                        }}
-                      >
-                        <Typography
-                          variant="caption"
-                          sx={{ fontSize: 8, fontWeight: 800, color: z.color, letterSpacing: 0.8 }}
-                        >
-                          {z.label}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
+                {icon}
+              </IconButton>
+            </Tooltip>
+          );
+        })}
+      </Box>
 
-                <AreaGridEditor
-                  areas={areasFiltradas}
-                  allAreas={areas}
-                  selectedId={selectedId}
-                  onSelect={handleSelect}
-                  onResize={handleResize}
-                  onMove={handleMove}
-                  floorLabel={
-                    viewMode === "full"
-                      ? `PISO ${pisoActivo.label} — PLANTA COMPLETA`
-                      : `PISO ${pisoActivo.label} — ${ZONES[alaIdx].label}`
-                  }
-                  colStart={gridConfig.colStart}
-                  colCount={gridConfig.colCount}
-                  zoneKey={gridConfig.zoneKey}
-                  mueblesPorArea={mueblesPorArea}
-                  pendingChanges={pendingChanges}
-                  conflictIds={conflictIds}
-                  flipY
-                  compact={viewMode === "full"}
-                />
-                {conflictIds.size > 0 && (
-                  <Alert severity="warning" sx={{ mt: 1 }}>
-                    Hay áreas solapadas (marcadas en rojo). Corrige el solape antes de guardar.
-                  </Alert>
-                )}
-              </Box>
-            </Paper>
-          </Box>
-
-          {/* Panel lateral único (1/3) — sticky */}
-          <Box
-            sx={{
-              flex: "0 0 33%",
-              position: "sticky",
-              top: 16,
-              maxHeight: "calc(100vh - 80px)",
-              pl: 1.5,
-            }}
-          >
-            <Paper
-              sx={{
-                borderRadius: "10px",
-                overflow: "hidden",
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-              }}
+      {/* ── OVERLAY z=15: Panel flotante izquierdo "Áreas del piso" ── */}
+      <Box
+        sx={{
+          position: "absolute",
+          left: 60,
+          top: 64,
+          zIndex: 15,
+          width: 220,
+          maxHeight: "calc(100vh - 160px)",
+          display: "flex",
+          flexDirection: "column",
+          ...glassSx,
+          overflow: "hidden",
+        }}
+      >
+        {/* Header del panel áreas */}
+        <Box
+          onClick={() => setPanelAreasOpen((v) => !v)}
+          sx={{
+            px: 1.5,
+            py: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            borderBottom: panelAreasOpen ? "1px solid rgba(157,36,73,0.25)" : "none",
+            "&:hover": { bgcolor: "rgba(157,36,73,0.15)" },
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+            <LayersIcon sx={{ fontSize: 14, color: "#c44e71" }} />
+            <Typography
+              variant="caption"
+              fontWeight={700}
+              sx={{ color: "#c44e71", letterSpacing: 0.8, fontSize: 10 }}
             >
-              {/*
-               * Vista de planta en el panel lateral:
-               *   - Desktop (mouse, ancho ≥ md) → iframe con visor 3D (Three.js).
-               *     El iframe SE MONTA solo en desktop: cuando isMobileView es true
-               *     el nodo no existe en el árbol y Three.js no se carga/ejecuta.
-               *   - Mobile/tablet (pointer coarse o ancho < md) → FloorPlanMobile,
-               *     SVG puro 2D sin dependencias pesadas.
-               */}
-              {isMobileView ? (
-                /* ── Vista mobile: planta SVG 2D ── */
-                <Box
-                  sx={{
-                    borderBottom: editForm ? "1px solid" : "none",
-                    borderColor: "divider",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Box
-                    sx={{
-                      px: 1.5,
-                      py: 0.75,
-                      bgcolor: "grey.50",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      borderBottom: "1px solid rgba(0,0,0,0.08)",
-                    }}
-                  >
-                    <EditLocationAltIcon sx={{ fontSize: 16, color: "primary.main" }} />
-                    <Typography
-                      variant="caption"
-                      fontWeight={700}
-                      color="primary.main"
-                      letterSpacing={0.5}
-                    >
-                      PLANTA 2D
-                    </Typography>
-                    {!editForm && (
-                      <Typography variant="caption" color="text.secondary">
-                        &nbsp;— toca un área para editarla
-                      </Typography>
-                    )}
-                    {editForm && (
-                      <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 0.5 }}>
-                        &nbsp;— {editForm.label || editForm.id}
-                      </Typography>
-                    )}
-                  </Box>
-                  <Box sx={{ p: 1, bgcolor: "#ffffff" }}>
-                    <FloorPlanMobile
-                      areas={areas.filter((a) => a.floor === pisoActivo.floor)}
-                      selectedId={selectedId}
-                      onSelect={handleSelect}
-                    />
-                  </Box>
-                </Box>
-              ) : (
-                /* ── Vista desktop: iframe Three.js ── */
-                <Box
-                  sx={{
-                    borderBottom: editForm ? "1px solid" : "none",
-                    borderColor: "divider",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Box
-                    sx={{
-                      px: 1.5,
-                      py: 0.75,
-                      bgcolor: "grey.50",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      borderBottom: "1px solid rgba(0,0,0,0.08)",
-                    }}
-                  >
-                    <ThreeDRotationIcon sx={{ fontSize: 16, color: "primary.main" }} />
-                    <Typography
-                      variant="caption"
-                      fontWeight={700}
-                      color="primary.main"
-                      letterSpacing={0.5}
-                    >
-                      VISOR 3D
-                    </Typography>
-                    {!editForm && (
-                      <Typography variant="caption" color="text.secondary">
-                        &nbsp;— haz clic en un área para editarla
-                      </Typography>
-                    )}
-                    {editForm && (
-                      <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 0.5 }}>
-                        &nbsp;— {editForm.label || editForm.id}
-                      </Typography>
-                    )}
-                  </Box>
-                  <iframe
-                    ref={visor3DRef}
-                    src="http://localhost:5174"
-                    title="Visor 3D Edificio"
-                    onLoad={() => {
-                      // Heredar tema al iframe cuando carga (app fija en "light")
-                      visor3DRef.current?.contentWindow?.postMessage(
-                        { type: "SET_THEME", payload: { theme: "light" } },
-                        "*",
-                      );
-                    }}
-                    style={{
-                      width: "100%",
-                      border: "none",
-                      display: "block",
-                      height: editForm ? "220px" : "360px",
-                      transition: "height 0.25s ease",
-                    }}
-                  />
-                </Box>
-              )}
-
-              {/* EditPanel — aparece debajo del visor/planta cuando hay selección */}
-              {editForm && (
-                <Box sx={{ flex: 1, overflow: "auto" }}>
-                  <EditPanel
-                    key={editForm.id}
-                    form={editForm}
-                    setEdit={setEdit}
-                    saveError={saveError}
-                    isPending={!!pendingChanges[editForm.id]}
-                    onCancelar={handleCancelar}
-                    onEliminar={handleEliminar}
-                    sirhLoading={sirhLoading}
-                    sirhError={sirhError}
-                    todasAdscripciones={todasAdscripciones}
-                    esSalaJuntas={editForm.esSalaJuntas ?? false}
-                    setEsSalaJuntas={(val) => setEdit("esSalaJuntas", val)}
-                    muebles={mueblesPorArea[editForm.id] ?? []}
-                    onMueblesChange={() => loadMuebles(editForm.id)}
-                  />
-                </Box>
-              )}
-            </Paper>
+              ÁREAS — PISO {pisoActivo.label}
+            </Typography>
+            <Chip
+              label={areasDelPiso.length}
+              size="small"
+              sx={{
+                height: 14,
+                fontSize: 9,
+                fontWeight: 800,
+                bgcolor: "rgba(157,36,73,0.15)",
+                color: "#9d2449",
+                "& .MuiChip-label": { px: 0.5 },
+              }}
+            />
           </Box>
+          <ExpandMoreIcon
+            sx={{
+              fontSize: 15,
+              color: "rgba(60,20,35,0.40)",
+              transition: "transform 0.2s",
+              transform: panelAreasOpen ? "rotate(180deg)" : "rotate(0deg)",
+            }}
+          />
+        </Box>
+
+        <Collapse in={panelAreasOpen}>
+          <Box sx={{ overflow: "auto", maxHeight: "calc(100vh - 260px)" }}>
+            {areasDelPiso.length === 0 ? (
+              <Typography
+                variant="caption"
+                sx={{ color: "rgba(60,20,35,0.38)", px: 1.5, py: 1, display: "block" }}
+              >
+                Sin áreas en este piso
+              </Typography>
+            ) : (
+              <List dense disablePadding>
+                {areasDelPiso.map((a) => {
+                  const isSelected = selectedId === a.id;
+                  const hasConflict = conflictIds.has(a.id);
+                  return (
+                    <ListItem
+                      key={a.id}
+                      disablePadding
+                      onClick={() => handleSelect(a)}
+                      sx={{
+                        cursor: "pointer",
+                        px: 1.25,
+                        py: 0.5,
+                        bgcolor: isSelected ? "rgba(157,36,73,0.35)" : "transparent",
+                        borderLeft: isSelected
+                          ? "3px solid rgba(157,36,73,0.9)"
+                          : "3px solid transparent",
+                        "&:hover": { bgcolor: "rgba(157,36,73,0.2)" },
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          bgcolor: hasConflict ? "#f44336" : "#9d2449",
+                          mr: 1,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <ListItemText
+                        primary={
+                          <Typography
+                            variant="body2"
+                            fontWeight={isSelected ? 700 : 500}
+                            sx={{
+                              fontSize: 11,
+                              color: hasConflict
+                                ? "#b71c1c"
+                                : isSelected
+                                  ? "#5c0a22"
+                                  : "rgba(30,10,18,0.75)",
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            {a.label || a.id}
+                          </Typography>
+                        }
+                        secondary={
+                          a.esComun ? (
+                            <Typography
+                              variant="caption"
+                              sx={{ fontSize: 9, color: "rgba(60,20,35,0.40)" }}
+                            >
+                              Área común
+                            </Typography>
+                          ) : null
+                        }
+                      />
+                    </ListItem>
+                  );
+                })}
+              </List>
+            )}
+          </Box>
+
+          {/* Botón nueva área en el panel */}
+          <Box sx={{ p: 1, borderTop: "1px solid rgba(157,36,73,0.2)" }}>
+            <Button
+              fullWidth
+              size="small"
+              startIcon={<AddIcon sx={{ fontSize: 13 }} />}
+              onClick={() => {
+                setNuevaForm(EMPTY_NUEVA);
+                setNuevaError("");
+                setModalOpen(true);
+              }}
+              sx={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: "rgba(157,36,73,0.75)",
+                borderColor: "rgba(157,36,73,0.30)",
+                borderStyle: "dashed",
+                py: 0.4,
+                "&:hover": {
+                  bgcolor: "rgba(157,36,73,0.08)",
+                  borderColor: "rgba(157,36,73,0.60)",
+                  color: "#9d2449",
+                },
+              }}
+              variant="outlined"
+            >
+              Nueva área
+            </Button>
+          </Box>
+        </Collapse>
+      </Box>
+
+      {/* ── OVERLAY z=15: Panel flotante derecho "Editar área" ── */}
+      {editForm && (
+        <Box
+          sx={{
+            position: "absolute",
+            right: 12,
+            top: 64,
+            zIndex: 15,
+            width: 340,
+            maxHeight: "calc(100vh - 140px)",
+            display: "flex",
+            flexDirection: "column",
+            ...glassSx,
+            overflow: "hidden",
+          }}
+        >
+          <EditPanel
+            key={editForm.id}
+            form={editForm}
+            setEdit={setEdit}
+            saveError={saveError}
+            isPending={!!pendingChanges[editForm.id]}
+            onCancelar={handleCancelar}
+            onEliminar={handleEliminar}
+            sirhLoading={sirhLoading}
+            sirhError={sirhError}
+            todasAdscripciones={todasAdscripciones}
+            esSalaJuntas={editForm.esSalaJuntas ?? false}
+            setEsSalaJuntas={(val) => setEdit("esSalaJuntas", val)}
+            muebles={mueblesPorArea[editForm.id] ?? []}
+            onMueblesChange={() => loadMuebles(editForm.id)}
+            glass
+          />
         </Box>
       )}
 
-      {/* Modal Nueva Area */}
+      {/* ── OVERLAY z=15: BottomBar de estado ── */}
+      <Box
+        sx={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 15,
+          ...glassBarSx,
+          borderBottom: "none",
+          borderTop: "1px solid rgba(157,36,73,0.3)",
+          px: 2,
+          py: 0.6,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          flexWrap: "wrap",
+        }}
+      >
+        {/* Área activa */}
+        <Typography variant="caption" sx={{ color: "rgba(30,10,18,0.55)", fontSize: 10 }}>
+          {editForm ? (
+            <span>
+              <span style={{ color: "#9d2449", fontWeight: 700 }}>
+                {editForm.label || editForm.id}
+              </span>
+              {" — "}
+              {editForm.gridX1 != null
+                ? `${zonaForGridX(editForm.gridX1, editForm.gridX2)} · PISO ${PISO_LABELS[editForm.piso] ?? editForm.piso}`
+                : "sin ubicación"}
+            </span>
+          ) : (
+            <span style={{ color: "rgba(30,10,18,0.30)" }}>Sin área seleccionada</span>
+          )}
+        </Typography>
+
+        <Box sx={{ flex: 1 }} />
+
+        {/* Modo cámara */}
+        <Typography
+          variant="caption"
+          sx={{
+            fontSize: 10,
+            color: camMode === "cenital" ? "#9d2449" : "rgba(30,10,18,0.45)",
+            fontWeight: 700,
+          }}
+        >
+          CAM: {camMode.toUpperCase()}
+        </Typography>
+
+        {/* Herramienta activa */}
+        <Typography
+          variant="caption"
+          sx={{ fontSize: 10, color: "rgba(30,10,18,0.45)", fontWeight: 700 }}
+        >
+          TOOL: {activeTool.toUpperCase()}
+        </Typography>
+
+        {/* Contador de áreas válidas / solapes */}
+        <Typography variant="caption" sx={{ fontSize: 10, color: "rgba(30,10,18,0.45)" }}>
+          Piso {pisoActivo.label}:{" "}
+          <span style={{ color: "#2e7d32", fontWeight: 700 }}>{areasValidasPiso} válidas</span>
+          {conflictIds.size > 0 && (
+            <span style={{ color: "#b71c1c", fontWeight: 700 }}>
+              {" "}
+              · {conflictIds.size} con solape
+            </span>
+          )}
+        </Typography>
+      </Box>
+
+      {/* ── DRAWER: AreaGridEditor (editor cuadrícula 2D de precisión) ── */}
+      <Drawer
+        anchor="bottom"
+        open={gridDrawerOpen}
+        onClose={() => setGridDrawerOpen(false)}
+        PaperProps={{
+          sx: {
+            maxHeight: "80vh",
+            bgcolor: "#fdf8fa",
+            color: "#1a0a10",
+            borderTop: "2px solid rgba(157,36,73,0.50)",
+            boxShadow: "0 -4px 24px rgba(157,36,73,0.10)",
+          },
+        }}
+      >
+        <Box sx={{ p: 1.5 }}>
+          {/* Header del Drawer */}
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 1,
+              pb: 1,
+              borderBottom: "1px solid rgba(157,36,73,0.25)",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <GridViewIcon sx={{ fontSize: 16, color: "#c44e71" }} />
+              <Typography variant="subtitle2" fontWeight={800} sx={{ color: "#1a0a10" }}>
+                Editor cuadrícula 2D — Piso {pisoActivo.label}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "rgba(30,10,18,0.45)", fontSize: 10 }}>
+                (modo precisión)
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              {/* Toggle zona */}
+              <ToggleButtonGroup
+                value={viewMode}
+                exclusive
+                onChange={(_, v) => {
+                  if (v) setViewMode(v);
+                }}
+                size="small"
+                sx={{
+                  "& .MuiToggleButton-root": {
+                    py: 0.3,
+                    px: 0.75,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "rgba(30,10,18,0.55)",
+                    borderColor: "rgba(157,36,73,0.25)",
+                  },
+                  "& .MuiToggleButton-root.Mui-selected": {
+                    color: "#fff",
+                    bgcolor: "rgba(157,36,73,0.80)",
+                  },
+                }}
+              >
+                <ToggleButton value="zones">Zonas</ToggleButton>
+                <ToggleButton value="full">Planta completa</ToggleButton>
+              </ToggleButtonGroup>
+
+              <IconButton
+                size="small"
+                onClick={() => setGridDrawerOpen(false)}
+                sx={{ color: "rgba(30,10,18,0.50)" }}
+              >
+                <CloseIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+          </Box>
+
+          {/* Tabs de zona (solo en modo "zones") */}
+          {viewMode === "zones" && (
+            <Tabs
+              value={alaIdx}
+              onChange={(_, v) => changeAla(v)}
+              sx={{ minHeight: 32, mb: 0.5 }}
+              TabIndicatorProps={{ style: { height: 2, backgroundColor: "#9d2449" } }}
+            >
+              {ZONES.map((zone, i) => (
+                <Tab
+                  key={zone.key}
+                  label={zone.label}
+                  sx={{
+                    minHeight: 32,
+                    fontWeight: 700,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                    color: alaIdx === i ? zone.color : "rgba(30,10,18,0.40)",
+                    opacity: 1,
+                  }}
+                />
+              ))}
+            </Tabs>
+          )}
+
+          {/* Tabs de piso */}
+          <Tabs
+            value={pisoIdx}
+            onChange={(_, v) => changePiso(v)}
+            sx={{ minHeight: 30, mb: 1 }}
+            variant="fullWidth"
+            TabIndicatorProps={{ style: { height: 2, backgroundColor: "#9d2449" } }}
+          >
+            {PISOS.map((p, i) => (
+              <Tab
+                key={p.piso}
+                label={`PISO ${p.label}`}
+                sx={{
+                  minHeight: 30,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: pisoIdx === i ? "#9d2449" : "rgba(30,10,18,0.40)",
+                  opacity: 1,
+                }}
+              />
+            ))}
+          </Tabs>
+
+          {/* Vista completa fondos de zona */}
+          {viewMode === "full" && (
+            <Box sx={{ display: "flex", gap: 0.5, mb: 0.75, px: 0.25 }}>
+              {ZONES.map((z) => (
+                <Box
+                  key={z.key}
+                  sx={{
+                    flex: z.colCount,
+                    py: 0.2,
+                    borderRadius: "4px",
+                    bgcolor: z.color + "20",
+                    border: `1px solid ${z.color}40`,
+                    textAlign: "center",
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{ fontSize: 8, fontWeight: 800, color: z.color }}
+                  >
+                    {z.label}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {/* Grid editor */}
+          <Box
+            key={gridKey}
+            sx={{
+              animation: "siast-slide 0.22s ease",
+              ...slideKeyframes[slideDir],
+            }}
+          >
+            <AreaGridEditor
+              areas={areasFiltradas}
+              allAreas={areas}
+              selectedId={selectedId}
+              onSelect={(area) => {
+                handleSelect(area);
+                // No cerrar el drawer para que el usuario pueda seguir editando en cuadrícula
+              }}
+              onResize={handleResize}
+              onMove={handleMove}
+              floorLabel={
+                viewMode === "full"
+                  ? `PISO ${pisoActivo.label} — PLANTA COMPLETA`
+                  : `PISO ${pisoActivo.label} — ${ZONES[alaIdx].label}`
+              }
+              colStart={gridConfig.colStart}
+              colCount={gridConfig.colCount}
+              zoneKey={gridConfig.zoneKey}
+              mueblesPorArea={mueblesPorArea}
+              pendingChanges={pendingChanges}
+              conflictIds={conflictIds}
+              flipY
+              compact={viewMode === "full"}
+            />
+          </Box>
+
+          {conflictIds.size > 0 && (
+            <Alert severity="warning" sx={{ mt: 1, fontSize: 12 }}>
+              Hay áreas solapadas (marcadas en rojo). Corrige el solape antes de guardar.
+            </Alert>
+          )}
+        </Box>
+      </Drawer>
+
+      {/* ── Modal Nueva Área ── */}
       <Dialog open={modalOpen} onClose={() => setModalOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Nueva Area</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Nueva Área</DialogTitle>
         <DialogContent
           sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}
         >
@@ -1286,16 +1868,16 @@ export const AreasPage = () => {
                 size="small"
               />
             }
-            label={<Typography variant="body2">Es Area Comun</Typography>}
+            label={<Typography variant="body2">Es Área Común</Typography>}
           />
 
           {(nuevaForm.esComun ?? false) && (
             <>
               <FormControl fullWidth size="small">
-                <InputLabel>Tipo de Area Comun</InputLabel>
+                <InputLabel>Tipo de Área Común</InputLabel>
                 <Select
                   value={nuevaForm.tipoComun ?? ""}
-                  label="Tipo de Area Comun"
+                  label="Tipo de Área Común"
                   onChange={(e) => setNueva("tipoComun", e.target.value || "")}
                 >
                   <MenuItem value="">
@@ -1324,7 +1906,7 @@ export const AreasPage = () => {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setModalOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={handleNuevaGuardar} disabled={nuevaSaving}>
-            {nuevaSaving ? <CircularProgress size={18} /> : "Crear Area"}
+            {nuevaSaving ? <CircularProgress size={18} /> : "Crear Área"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1334,7 +1916,7 @@ export const AreasPage = () => {
   );
 };
 
-// ── Constantes de tipos de mueble ────────────────────────────────────────────
+// ── Constantes de tipos de módulo (renombrado visual: Mueble → Módulo) ────────
 
 const TIPOS_MUEBLE = [
   { value: "CUBICULO", label: "Cubículo", color: "#4caf50" },
@@ -1358,7 +1940,6 @@ const MUEBLE_EMPTY = {
   ancho: "0.15",
   alto: "0.15",
   rotacion: 0,
-  // Modo fila
   modo: "uno", // "uno" | "fila"
   cantidad: "4",
   orientacion: "H",
@@ -1371,6 +1952,10 @@ const ROTACIONES = [
   { value: 270, label: "270°" },
 ];
 
+/**
+ * EditPanel — panel de edición del área seleccionada.
+ * Acepta prop `glass` para adaptar colores al fondo oscuro del overlay.
+ */
 function EditPanel({
   form,
   setEdit,
@@ -1385,20 +1970,27 @@ function EditPanel({
   setEsSalaJuntas,
   muebles,
   onMueblesChange,
+  glass = false,
 }) {
   const [adscripcion, setAdscripcion] = useState(null);
-  const [mueblesExpanded, setMueblesExpanded] = useState(false);
-  const [addingMueble, setAddingMueble] = useState(false);
+  const [modulosExpanded, setModulosExpanded] = useState(false);
+  const [addingModulo, setAddingModulo] = useState(false);
   const [muebleForm, setMuebleForm] = useState(MUEBLE_EMPTY);
   const [muebleSaving, setMuebleSaving] = useState(false);
   const [muebleError, setMuebleError] = useState("");
+
+  const textColor = glass ? "#1a0a10" : "inherit";
+  const secondaryColor = glass ? "rgba(30,10,18,0.55)" : "text.secondary";
+  const dividerColor = glass ? "rgba(157,36,73,0.18)" : "divider";
+  const bgAccent = glass ? "rgba(157,36,73,0.07)" : "action.hover";
+  const borderAccent = glass ? "rgba(157,36,73,0.22)" : "divider";
 
   const handleAdscripcionChange = (_, val) => {
     setAdscripcion(val);
     if (val) setEdit("label", val.nombre);
   };
 
-  const handleGuardarMueble = async () => {
+  const handleGuardarModulo = async () => {
     if (!muebleForm.label.trim()) {
       setMuebleError("El nombre es obligatorio");
       return;
@@ -1437,16 +2029,16 @@ function EditPanel({
         await createMueble(form.id, { ...base, label: muebleForm.label.trim() });
       }
       setMuebleForm(MUEBLE_EMPTY);
-      setAddingMueble(false);
+      setAddingModulo(false);
       onMueblesChange();
     } catch (err) {
-      setMuebleError(err.response?.data?.error ?? "Error al guardar mueble");
+      setMuebleError(err.response?.data?.error ?? "Error al guardar módulo");
     } finally {
       setMuebleSaving(false);
     }
   };
 
-  const handleEliminarMueble = async (muebleId) => {
+  const handleEliminarModulo = async (muebleId) => {
     try {
       await deleteMueble(muebleId);
       onMueblesChange();
@@ -1455,94 +2047,81 @@ function EditPanel({
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "auto" }}>
-      {/* Header del panel */}
+      {/* Barra mínima: solo cerrar + chip pendiente — sin duplicar nombre/id */}
       <Box
         sx={{
-          px: 2,
-          py: 1.25,
-          borderBottom: "2px solid",
-          borderColor: "primary.main",
+          px: 1.25,
+          py: 0.5,
+          borderBottom: "1px solid rgba(157,36,73,0.25)",
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           alignItems: "center",
-          background: "linear-gradient(135deg, rgba(157,36,73,0.08) 0%, rgba(157,36,73,0.03) 100%)",
+          gap: 0.5,
+          flexShrink: 0,
         }}
       >
-        <Box>
-          <Typography
-            variant="subtitle1"
-            fontWeight={800}
-            noWrap
-            sx={{ maxWidth: 160, lineHeight: 1.2 }}
-          >
-            {form.label || form.id}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-            {form.id}
-          </Typography>
-        </Box>
-        <Box
-          sx={{
-            display: "flex",
-            gap: 0.5,
-            alignItems: "center",
-            flexWrap: "wrap",
-            justifyContent: "flex-end",
-          }}
-        >
-          {isPending && (
-            <Chip
-              label="Pendiente"
-              size="small"
-              color="warning"
-              sx={{
-                fontWeight: 700,
-                fontSize: 10,
-                height: 20,
-                "& .MuiChip-label": { px: 1 },
-                animation: "siast-pulse 1.5s ease infinite",
-                "@keyframes siast-pulse": {
-                  "0%,100%": { boxShadow: "0 0 0 0 rgba(237,108,2,0.35)" },
-                  "50%": { boxShadow: "0 0 0 4px rgba(237,108,2,0)" },
-                },
-              }}
-            />
-          )}
+        {isPending && (
           <Chip
-            label={`PISO ${PISO_LABELS[form.piso] ?? form.piso}`}
+            label="Pendiente"
             size="small"
-            color="primary"
-            variant="filled"
-            sx={{ fontWeight: 700, fontSize: 11, height: 20, "& .MuiChip-label": { px: 1 } }}
+            color="warning"
+            sx={{
+              fontWeight: 700,
+              fontSize: 10,
+              height: 18,
+              "& .MuiChip-label": { px: 0.75 },
+              animation: "siast-pulse 1.5s ease infinite",
+              "@keyframes siast-pulse": {
+                "0%,100%": { boxShadow: "0 0 0 0 rgba(237,108,2,0.35)" },
+                "50%": { boxShadow: "0 0 0 4px rgba(237,108,2,0)" },
+              },
+            }}
           />
-        </Box>
+        )}
+        <IconButton size="small" onClick={onCancelar} sx={{ color: secondaryColor }}>
+          <CloseIcon sx={{ fontSize: 14 }} />
+        </IconButton>
       </Box>
 
       <Box
         sx={{
           flex: 1,
           overflow: "auto",
-          p: 1.75,
+          p: 1.5,
           display: "flex",
           flexDirection: "column",
-          gap: 1.25,
+          gap: 1,
         }}
       >
         {saveError && (
-          <Alert severity="error" sx={{ fontSize: 12 }}>
+          <Alert severity="error" sx={{ fontSize: 11, py: 0.25 }}>
             {saveError}
           </Alert>
         )}
 
-        <SectionLabel>DATOS DEL AREA</SectionLabel>
+        <GlassSectionLabel color={secondaryColor}>DATOS DEL ÁREA</GlassSectionLabel>
 
         <TextField
-          label="Nombre del area"
+          label="Nombre del área"
           value={form.label}
           onChange={(e) => setEdit("label", e.target.value)}
           fullWidth
           size="small"
           required
+          InputLabelProps={glass ? { sx: { color: secondaryColor } } : undefined}
+          inputProps={{ style: glass ? { color: textColor } : undefined }}
+          sx={
+            glass
+              ? {
+                  "& .MuiOutlinedInput-root": {
+                    "& fieldset": { borderColor: borderAccent },
+                    "&:hover fieldset": { borderColor: "rgba(157,36,73,0.6)" },
+                    "&.Mui-focused fieldset": { borderColor: "#9d2449" },
+                    color: textColor,
+                  },
+                }
+              : {}
+          }
         />
 
         <FormControlLabel
@@ -1554,11 +2133,11 @@ function EditPanel({
             />
           }
           label={
-            <Typography variant="body2" color="text.secondary">
-              Sala de juntas (legacy)
+            <Typography variant="body2" sx={{ fontSize: 11, color: secondaryColor }}>
+              Marcar como Sala de Juntas
             </Typography>
           }
-          sx={{ ml: 0 }}
+          sx={{ ml: 0, my: 0 }}
         />
 
         <FormControlLabel
@@ -1570,11 +2149,11 @@ function EditPanel({
             />
           }
           label={
-            <Typography variant="body2" color="text.secondary">
-              Es Area Comun
+            <Typography variant="body2" sx={{ fontSize: 11, color: secondaryColor }}>
+              Es Área Común
             </Typography>
           }
-          sx={{ ml: 0 }}
+          sx={{ ml: 0, my: 0 }}
         />
 
         {(form.esComun ?? false) && (
@@ -1582,18 +2161,20 @@ function EditPanel({
             sx={{
               display: "flex",
               flexDirection: "column",
-              gap: 1.25,
+              gap: 1,
               pl: 1,
-              borderLeft: "3px solid",
-              borderColor: "info.light",
+              borderLeft: "3px solid rgba(157,36,73,0.4)",
             }}
           >
             <FormControl fullWidth size="small">
-              <InputLabel>Tipo de Area Comun</InputLabel>
+              <InputLabel sx={glass ? { color: secondaryColor } : undefined}>
+                Tipo de Área Común
+              </InputLabel>
               <Select
                 value={form.tipoComun ?? ""}
-                label="Tipo de Area Comun"
+                label="Tipo de Área Común"
                 onChange={(e) => setEdit("tipoComun", e.target.value || null)}
+                sx={glass ? { color: textColor } : undefined}
               >
                 <MenuItem value="">
                   <em>Sin tipo</em>
@@ -1614,16 +2195,29 @@ function EditPanel({
               size="small"
               placeholder="ej: Sala Oaxaca, Bano Norte..."
               helperText="Nombre especifico del espacio (opcional)"
+              InputLabelProps={glass ? { sx: { color: secondaryColor } } : undefined}
+              inputProps={{ style: glass ? { color: textColor } : undefined }}
+              sx={
+                glass
+                  ? {
+                      "& .MuiOutlinedInput-root": {
+                        "& fieldset": { borderColor: borderAccent },
+                        color: textColor,
+                      },
+                      "& .MuiFormHelperText-root": { color: "rgba(30,10,18,0.40)" },
+                    }
+                  : {}
+              }
             />
           </Box>
         )}
 
-        <Divider sx={{ my: 0.25 }} />
+        <Divider sx={{ my: 0.25, borderColor: dividerColor }} />
 
-        <SectionLabel>ADSCRIPCION SIRH</SectionLabel>
+        <GlassSectionLabel color={secondaryColor}>ADSCRIPCION SIRH</GlassSectionLabel>
 
         {sirhError ? (
-          <Alert severity="warning" sx={{ fontSize: 11 }}>
+          <Alert severity="warning" sx={{ fontSize: 11, py: 0.25 }}>
             {sirhError}
           </Alert>
         ) : (
@@ -1643,6 +2237,7 @@ function EditPanel({
                   {...params}
                   label="Buscar adscripción SIRH"
                   helperText="Subsecretaría, dirección, coordinación o departamento"
+                  InputLabelProps={glass ? { sx: { color: secondaryColor } } : undefined}
                   InputProps={{
                     ...params.InputProps,
                     endAdornment: (
@@ -1656,26 +2251,29 @@ function EditPanel({
               )}
             />
             {adscripcion && (
-              <Typography variant="caption" color="success.main" fontWeight={600}>
+              <Typography
+                variant="caption"
+                sx={{ color: glass ? "#2e7d32" : "success.main", fontWeight: 600, fontSize: 10 }}
+              >
                 Al guardar: {adscripcion.nombre}
               </Typography>
             )}
           </>
         )}
 
-        <Divider sx={{ my: 0.25 }} />
+        <Divider sx={{ my: 0.25, borderColor: dividerColor }} />
 
-        <SectionLabel>POSICION EN CUADRICULA</SectionLabel>
+        <GlassSectionLabel color={secondaryColor}>POSICION EN CUADRICULA</GlassSectionLabel>
         <Box
           sx={{
-            p: 1.25,
+            p: 1,
             borderRadius: "6px",
-            bgcolor: "action.hover",
+            bgcolor: bgAccent,
             border: "1px solid",
-            borderColor: "divider",
+            borderColor: borderAccent,
           }}
         >
-          <Box sx={{ display: "flex", gap: 1 }}>
+          <Box sx={{ display: "flex", gap: 0.75 }}>
             {["gridX1", "gridY1", "gridX2", "gridY2"].map((field) => (
               <TextField
                 key={field}
@@ -1687,18 +2285,29 @@ function EditPanel({
                 size="small"
                 type="number"
                 inputProps={{ min: 0, max: field.startsWith("gridX") ? 31 : 26 }}
-                sx={{ flex: 1 }}
+                sx={{
+                  flex: 1,
+                  ...(glass
+                    ? {
+                        "& .MuiOutlinedInput-root": {
+                          "& fieldset": { borderColor: borderAccent },
+                          color: textColor,
+                        },
+                        "& label": { color: secondaryColor },
+                      }
+                    : {}),
+                }}
               />
             ))}
           </Box>
         </Box>
 
-        <Divider sx={{ my: 0.25 }} />
+        <Divider sx={{ my: 0.25, borderColor: dividerColor }} />
 
-        {/* Muebles colapsable */}
+        {/* Módulos (renombrado visual de Muebles) */}
         <Box>
           <Box
-            onClick={() => setMueblesExpanded((v) => !v)}
+            onClick={() => setModulosExpanded((v) => !v)}
             sx={{
               display: "flex",
               alignItems: "center",
@@ -1706,72 +2315,82 @@ function EditPanel({
               cursor: "pointer",
               py: 0.5,
               borderRadius: "4px",
-              "&:hover": { bgcolor: "action.hover" },
               px: 0.5,
+              "&:hover": { bgcolor: bgAccent },
             }}
           >
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-              <ChairIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+              <ChairIcon sx={{ fontSize: 13, color: secondaryColor }} />
               <Typography
                 variant="caption"
                 fontWeight={700}
-                color="text.secondary"
-                sx={{ letterSpacing: 0.8, fontSize: 11 }}
+                sx={{ color: secondaryColor, letterSpacing: 0.8, fontSize: 10 }}
               >
-                MUEBLES / CUBICULOS
+                MÓDULOS
               </Typography>
               {muebles.length > 0 && (
                 <Chip
                   label={muebles.length}
                   size="small"
                   sx={{
-                    height: 16,
-                    fontSize: 10,
+                    height: 14,
+                    fontSize: 9,
                     fontWeight: 800,
-                    bgcolor: "primary.main",
-                    color: "#fff",
-                    "& .MuiChip-label": { px: 0.75 },
+                    bgcolor: "rgba(157,36,73,0.12)",
+                    color: "#9d2449",
+                    "& .MuiChip-label": { px: 0.5 },
                   }}
                 />
               )}
             </Box>
             <ExpandMoreIcon
               sx={{
-                fontSize: 18,
-                color: "text.secondary",
+                fontSize: 16,
+                color: secondaryColor,
                 transition: "transform 0.2s",
-                transform: mueblesExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                transform: modulosExpanded ? "rotate(180deg)" : "rotate(0deg)",
               }}
             />
           </Box>
 
-          <Collapse in={mueblesExpanded}>
-            <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Collapse in={modulosExpanded}>
+            <Box sx={{ mt: 0.75, display: "flex", flexDirection: "column", gap: 0.75 }}>
               {muebles.length > 0 && (
-                <Paper variant="outlined" sx={{ borderRadius: "6px", overflow: "hidden" }}>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    borderRadius: "6px",
+                    overflow: "hidden",
+                    bgcolor: glass ? "rgba(157,36,73,0.04)" : undefined,
+                    borderColor: borderAccent,
+                  }}
+                >
                   <List dense disablePadding>
                     {muebles.map((m, idx) => (
                       <ListItem
                         key={m.id}
                         divider={idx < muebles.length - 1}
                         secondaryAction={
-                          <Tooltip title="Eliminar mueble">
+                          <Tooltip title="Eliminar módulo">
                             <IconButton
                               edge="end"
                               size="small"
                               color="error"
-                              onClick={() => handleEliminarMueble(m.id)}
+                              onClick={() => handleEliminarModulo(m.id)}
                             >
-                              <DeleteIcon sx={{ fontSize: 14 }} />
+                              <DeleteIcon sx={{ fontSize: 13 }} />
                             </IconButton>
                           </Tooltip>
                         }
-                        sx={{ py: 0.5 }}
+                        sx={{
+                          py: 0.4,
+                          "& .MuiDivider-root": { borderColor: borderAccent },
+                        }}
                       >
                         <Box
                           sx={{
-                            width: 10,
-                            height: 10,
+                            width: 8,
+                            height: 8,
                             borderRadius: "50%",
                             bgcolor: colorMueble(m.tipo),
                             mr: 1,
@@ -1780,7 +2399,11 @@ function EditPanel({
                         />
                         <ListItemText
                           primary={
-                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>
+                            <Typography
+                              variant="body2"
+                              fontWeight={600}
+                              sx={{ fontSize: 11, color: textColor }}
+                            >
                               {m.label}
                             </Typography>
                           }
@@ -1789,13 +2412,13 @@ function EditPanel({
                               label={labelMueble(m.tipo)}
                               size="small"
                               sx={{
-                                height: 14,
+                                height: 13,
                                 fontSize: 9,
                                 fontWeight: 700,
                                 bgcolor: colorMueble(m.tipo) + "22",
                                 color: colorMueble(m.tipo),
-                                "& .MuiChip-label": { px: 0.75 },
-                                mt: 0.25,
+                                "& .MuiChip-label": { px: 0.5 },
+                                mt: 0.2,
                               }}
                             />
                           }
@@ -1806,15 +2429,17 @@ function EditPanel({
                 </Paper>
               )}
 
-              {addingMueble ? (
+              {addingModulo ? (
                 <Paper
                   variant="outlined"
                   sx={{
-                    p: 1.5,
+                    p: 1.25,
                     borderRadius: "6px",
                     display: "flex",
                     flexDirection: "column",
-                    gap: 1,
+                    gap: 0.75,
+                    bgcolor: glass ? "rgba(157,36,73,0.04)" : undefined,
+                    borderColor: borderAccent,
                   }}
                 >
                   {muebleError && (
@@ -1822,7 +2447,7 @@ function EditPanel({
                       {muebleError}
                     </Alert>
                   )}
-                  <Box sx={{ display: "flex", gap: 1 }}>
+                  <Box sx={{ display: "flex", gap: 0.75 }}>
                     <TextField
                       label={muebleForm.modo === "fila" ? "Prefijo (ej. Cubículo)" : "Nombre"}
                       value={muebleForm.label}
@@ -1831,24 +2456,34 @@ function EditPanel({
                       fullWidth
                       autoFocus
                       required
+                      InputLabelProps={glass ? { sx: { color: secondaryColor } } : undefined}
+                      inputProps={{ style: glass ? { color: textColor } : undefined }}
+                      sx={
+                        glass
+                          ? {
+                              "& .MuiOutlinedInput-root": {
+                                "& fieldset": { borderColor: borderAccent },
+                                color: textColor,
+                              },
+                            }
+                          : {}
+                      }
                     />
-                    <FormControl size="small" sx={{ minWidth: 110 }}>
-                      <InputLabel>Tipo</InputLabel>
+                    <FormControl size="small" sx={{ minWidth: 100 }}>
+                      <InputLabel sx={glass ? { color: secondaryColor } : undefined}>
+                        Tipo de módulo
+                      </InputLabel>
                       <Select
                         value={muebleForm.tipo}
-                        label="Tipo"
+                        label="Tipo de módulo"
                         onChange={(e) => setMuebleForm((p) => ({ ...p, tipo: e.target.value }))}
+                        sx={glass ? { color: textColor } : undefined}
                       >
                         {TIPOS_MUEBLE.map((t) => (
                           <MenuItem key={t.value} value={t.value}>
                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                               <Box
-                                sx={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: "50%",
-                                  bgcolor: t.color,
-                                }}
+                                sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: t.color }}
                               />
                               {t.label}
                             </Box>
@@ -1857,6 +2492,7 @@ function EditPanel({
                       </Select>
                     </FormControl>
                   </Box>
+
                   {/* Modo: módulo solo o fila de módulos */}
                   <ToggleButtonGroup
                     value={muebleForm.modo}
@@ -1864,14 +2500,25 @@ function EditPanel({
                     size="small"
                     fullWidth
                     onChange={(_, v) => v && setMuebleForm((p) => ({ ...p, modo: v }))}
-                    sx={{ "& .MuiToggleButton-root": { py: 0.4, fontSize: 11, fontWeight: 700 } }}
+                    sx={{
+                      "& .MuiToggleButton-root": {
+                        py: 0.3,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: glass ? "rgba(30,10,18,0.55)" : undefined,
+                        borderColor: glass ? borderAccent : undefined,
+                      },
+                      "& .MuiToggleButton-root.Mui-selected": glass
+                        ? { color: "#fff", bgcolor: "rgba(157,36,73,0.75)" }
+                        : {},
+                    }}
                   >
                     <ToggleButton value="uno">Módulo solo</ToggleButton>
                     <ToggleButton value="fila">Fila de módulos</ToggleButton>
                   </ToggleButtonGroup>
 
                   {muebleForm.modo === "fila" && (
-                    <Box sx={{ display: "flex", gap: 1 }}>
+                    <Box sx={{ display: "flex", gap: 0.75 }}>
                       <TextField
                         label="Cantidad"
                         value={muebleForm.cantidad}
@@ -1886,13 +2533,16 @@ function EditPanel({
                         inputProps={{ inputMode: "numeric" }}
                       />
                       <FormControl size="small" sx={{ flex: 1 }}>
-                        <InputLabel>Orientación</InputLabel>
+                        <InputLabel sx={glass ? { color: secondaryColor } : undefined}>
+                          Orientación
+                        </InputLabel>
                         <Select
                           value={muebleForm.orientacion}
                           label="Orientación"
                           onChange={(e) =>
                             setMuebleForm((p) => ({ ...p, orientacion: e.target.value }))
                           }
+                          sx={glass ? { color: textColor } : undefined}
                         >
                           <MenuItem value="H">Horizontal →</MenuItem>
                           <MenuItem value="V">Vertical ↓</MenuItem>
@@ -1901,7 +2551,7 @@ function EditPanel({
                     </Box>
                   )}
 
-                  <Box sx={{ display: "flex", gap: 1 }}>
+                  <Box sx={{ display: "flex", gap: 0.75 }}>
                     {[
                       { field: "gridX", label: "Pos X (0-1)" },
                       { field: "gridY", label: "Pos Y (0-1)" },
@@ -1920,20 +2570,35 @@ function EditPanel({
                         }
                         size="small"
                         inputProps={{ inputMode: "decimal" }}
-                        sx={{ flex: 1 }}
+                        sx={{
+                          flex: 1,
+                          ...(glass
+                            ? {
+                                "& .MuiOutlinedInput-root": {
+                                  "& fieldset": { borderColor: borderAccent },
+                                  color: textColor,
+                                  fontSize: 11,
+                                },
+                                "& label": { color: secondaryColor, fontSize: 11 },
+                              }
+                            : {}),
+                        }}
                         placeholder="0-1"
                       />
                     ))}
                   </Box>
 
                   <FormControl size="small" fullWidth>
-                    <InputLabel>Rotación</InputLabel>
+                    <InputLabel sx={glass ? { color: secondaryColor } : undefined}>
+                      Rotación
+                    </InputLabel>
                     <Select
                       value={muebleForm.rotacion}
                       label="Rotación"
                       onChange={(e) =>
                         setMuebleForm((p) => ({ ...p, rotacion: Number(e.target.value) }))
                       }
+                      sx={glass ? { color: textColor } : undefined}
                     >
                       {ROTACIONES.map((r) => (
                         <MenuItem key={r.value} value={r.value}>
@@ -1942,24 +2607,31 @@ function EditPanel({
                       ))}
                     </Select>
                   </FormControl>
-                  <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
+
+                  <Box sx={{ display: "flex", gap: 0.75, justifyContent: "flex-end" }}>
                     <Button
                       size="small"
                       onClick={() => {
-                        setAddingMueble(false);
+                        setAddingModulo(false);
                         setMuebleForm(MUEBLE_EMPTY);
                         setMuebleError("");
                       }}
+                      sx={glass ? { color: "rgba(30,10,18,0.55)" } : undefined}
                     >
                       Cancelar
                     </Button>
                     <Button
                       size="small"
                       variant="contained"
-                      onClick={handleGuardarMueble}
+                      onClick={handleGuardarModulo}
                       disabled={muebleSaving}
                       startIcon={
                         muebleSaving ? <CircularProgress size={12} color="inherit" /> : null
+                      }
+                      sx={
+                        glass
+                          ? { bgcolor: "rgba(157,36,73,0.75)", "&:hover": { bgcolor: "#9d2449" } }
+                          : undefined
                       }
                     >
                       Guardar
@@ -1970,12 +2642,23 @@ function EditPanel({
                 <Button
                   size="small"
                   variant="outlined"
-                  startIcon={<AddIcon />}
-                  onClick={() => setAddingMueble(true)}
+                  startIcon={<AddIcon sx={{ fontSize: 13 }} />}
+                  onClick={() => setAddingModulo(true)}
                   fullWidth
-                  sx={{ borderStyle: "dashed" }}
+                  sx={{
+                    borderStyle: "dashed",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    ...(glass
+                      ? {
+                          color: "rgba(157,36,73,0.75)",
+                          borderColor: borderAccent,
+                          "&:hover": { bgcolor: bgAccent, color: "#9d2449" },
+                        }
+                      : {}),
+                  }}
                 >
-                  Agregar mueble
+                  Agregar módulo
                 </Button>
               )}
             </Box>
@@ -1983,51 +2666,59 @@ function EditPanel({
         </Box>
       </Box>
 
-      {/* Acciones */}
+      {/* Acciones del panel */}
       <Box
         sx={{
-          p: 1.5,
+          p: 1.25,
           borderTop: "1px solid",
-          borderColor: "divider",
+          borderColor: dividerColor,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          gap: 1,
-          bgcolor: "grey.50",
+          gap: 0.75,
+          bgcolor: glass ? "rgba(157,36,73,0.08)" : "grey.50",
+          flexShrink: 0,
         }}
       >
-        <Tooltip title="Desactivar area">
+        <Tooltip title="Desactivar área">
           <IconButton size="small" color="error" onClick={onEliminar}>
-            <DeleteIcon fontSize="small" />
+            <DeleteIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
           {isPending && (
             <Typography
               variant="caption"
-              color="warning.dark"
-              fontWeight={700}
-              sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+              sx={{
+                fontSize: 10,
+                color: glass ? "#e65100" : "warning.dark",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+              }}
             >
-              <SaveIcon sx={{ fontSize: 13 }} /> Auto-guardado
+              <SaveIcon sx={{ fontSize: 12 }} /> Pendiente
             </Typography>
           )}
-          <Button size="small" onClick={onCancelar}>
-            Cerrar
-          </Button>
         </Box>
       </Box>
     </Box>
   );
 }
 
-function SectionLabel({ children }) {
+function GlassSectionLabel({ children, color }) {
   return (
     <Typography
       variant="caption"
       fontWeight={700}
-      color="text.secondary"
-      sx={{ letterSpacing: 0.8, fontSize: 10, display: "block", mt: 0.25 }}
+      sx={{
+        letterSpacing: 0.8,
+        fontSize: 10,
+        display: "block",
+        mt: 0.25,
+        color: color ?? "text.secondary",
+      }}
     >
       {children}
     </Typography>

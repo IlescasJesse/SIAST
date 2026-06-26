@@ -118,6 +118,7 @@ app.use(errorMiddleware);
 httpServer.listen(port, "0.0.0.0", () => {
   console.log(`🚀 SIAST API lista en http://localhost:${port}`);
   console.log(`🔌 Socket.IO activo`);
+  console.log(`🛰️  Dashboard agentes: http://localhost:${port}/api/orchestrator/dashboard`);
 
   // Inicializar cliente WhatsApp para OTP
   initWhatsApp();

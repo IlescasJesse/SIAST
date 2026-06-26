@@ -154,8 +154,55 @@ async function readFreshestQualityCache(): Promise<Record<string, any> | null> {
   return readFreshestQualityCacheGlobal();
 }
 
-function buildVitals(q: Record<string, any> | null) {
-  if (!q) {
+/**
+ * Llenado de contexto REAL y EN VIVO: lee la cola del transcript de la sesión
+ * de SIAST más reciente y toma el `usage` del último mensaje del asistente. La
+ * suma input + cache_read + cache_creation = tamaño del prompt que se envía cada
+ * turno = contexto ocupado ahora mismo. Más fiable y fresco que el quality-cache
+ * (que token-optimizer regenera con retraso → el HP "se quedaba congelado").
+ */
+async function readLiveContextTokens(): Promise<{ tokens: number; window: number } | null> {
+  try {
+    const ids = await siastSessionIdsByRecency();
+    if (!ids.length) return null;
+    const file = path.join(PROJECT_SESSIONS_DIR, `${ids[0]}.jsonl`);
+    const fh = await fs.open(file, "r");
+    try {
+      const { size } = await fh.stat();
+      const len = Math.min(size, 256 * 1024); // solo la cola (eficiente)
+      const buf = Buffer.alloc(len);
+      await fh.read(buf, 0, len, size - len);
+      const lines = buf.toString("utf-8").split("\n").filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        let o: any;
+        try {
+          o = JSON.parse(lines[i]);
+        } catch {
+          continue; // primera línea puede venir cortada por el tail
+        }
+        const u = o?.message?.usage;
+        if (u && typeof u.cache_read_input_tokens === "number") {
+          const tokens =
+            (u.input_tokens || 0) +
+            (u.cache_read_input_tokens || 0) +
+            (u.cache_creation_input_tokens || 0);
+          return { tokens, window: 1_000_000 };
+        }
+      }
+      return null;
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+function buildVitals(
+  q: Record<string, any> | null,
+  live: { tokens: number; window: number } | null,
+) {
+  if (!q && !live) {
     return {
       available: false,
       vigor: null,
@@ -169,23 +216,25 @@ function buildVitals(q: Record<string, any> | null) {
       suggestions: [] as Suggestion[],
     };
   }
-  const vigor = Math.round(q.score ?? 0);
-  const fillPct = Number(q.fill_pct ?? 0);
-  const tokensMax = Number(
-    q.breakdown?.context_fill_degradation?.model_context_window ?? 1_000_000,
-  );
-  const tokensUsed = Math.round((fillPct / 100) * tokensMax);
+  const vigor = q ? Math.round(q.score ?? 0) : null;
+  // Ventana: la del contexto en vivo o la del cache (default 1M)
+  const tokensMax = live
+    ? live.window
+    : Number(q?.breakdown?.context_fill_degradation?.model_context_window ?? 1_000_000);
+  // Llenado: PREFERIR el conteo en vivo del transcript (fresco) sobre el cache.
+  const fillPct = live ? Math.min(100, (live.tokens / tokensMax) * 100) : Number(q?.fill_pct ?? 0);
+  const tokensUsed = live ? live.tokens : Math.round((fillPct / 100) * tokensMax);
   const tokensLeft = Math.max(0, tokensMax - tokensUsed);
   const hp = Math.max(0, Math.round(100 - fillPct));
   const dead = hp <= 0;
 
   // Sugerencias accionables a partir de las señales de calidad
   const suggestions: Suggestion[] = [];
-  const waste = Number(q.breakdown?.total_estimated_waste_tokens ?? 0);
-  const stale = Number(q.breakdown?.stale_reads?.count ?? 0);
-  const dupes = Number(q.breakdown?.duplicates?.count ?? 0);
-  const densityScore = Number(q.signals?.decision_density ?? 100);
-  const densityRatio = Number(q.breakdown?.decision_density?.ratio ?? 1);
+  const waste = Number(q?.breakdown?.total_estimated_waste_tokens ?? 0);
+  const stale = Number(q?.breakdown?.stale_reads?.count ?? 0);
+  const dupes = Number(q?.breakdown?.duplicates?.count ?? 0);
+  const densityScore = Number(q?.signals?.decision_density ?? 100);
+  const densityRatio = Number(q?.breakdown?.decision_density?.ratio ?? 1);
 
   if (waste >= 3000 || stale >= 2 || dupes >= 1) {
     suggestions.push({
@@ -218,7 +267,7 @@ function buildVitals(q: Record<string, any> | null) {
   return {
     available: true,
     vigor,
-    grade: q.grade ?? null,
+    grade: q?.grade ?? null,
     hp,
     fillPct,
     tokensUsed,
@@ -243,8 +292,12 @@ export const getDashboard = async (_req: Request, res: Response): Promise<void> 
 
 /** GET /api/orchestrator/status — estado completo + vitals (VIGOR/HP) para el dashboard */
 export const getStatus = async (_req: Request, res: Response): Promise<void> => {
-  const [status, qcache] = await Promise.all([readStatus(), readFreshestQualityCache()]);
-  res.json({ ...status, vitals: buildVitals(qcache) });
+  const [status, qcache, live] = await Promise.all([
+    readStatus(),
+    readFreshestQualityCache(),
+    readLiveContextTokens(),
+  ]);
+  res.json({ ...status, vitals: buildVitals(qcache, live) });
 };
 
 /**
@@ -349,4 +402,151 @@ export const postChat = async (req: Request, res: Response): Promise<void> => {
     return;
   }
   res.status(202).json({ ok: true, jobId: result.jobId });
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// TABLERO DINÁMICO — el orquestador (claude -p) publica/actualiza misiones,
+// fases, decisiones y screenshots a TRAVÉS de estos endpoints (mismo proceso →
+// mismo mutex que el chat/log, sin condiciones de carrera con agent-status.json).
+// ════════════════════════════════════════════════════════════════════════════
+
+/** POST /tasks — define o actualiza misiones. Body: { tasks:[{name,agent,model,status,progress,action,depends}], replaceAll?, task? } */
+export const postTasks = async (req: Request, res: Response): Promise<void> => {
+  const body = req.body ?? {};
+  const incoming = Array.isArray(body.tasks) ? body.tasks : body.task ? [body.task] : null;
+  if (!incoming || !incoming.length) {
+    res.status(400).json({ error: "Se requiere 'tasks' (array) o 'task'" });
+    return;
+  }
+  for (const t of incoming) {
+    if (!t || typeof t.name !== "string" || !t.name.trim()) {
+      res.status(400).json({ error: "cada task requiere 'name' (texto)" });
+      return;
+    }
+  }
+  const replaceAll = body.replaceAll === true;
+  const saved: any[] = [];
+  await updateStatus((s) => {
+    const tasks = replaceAll ? [] : Array.isArray(s.tasks) ? [...(s.tasks as any[])] : [];
+    let maxId = tasks.reduce((m: number, t: any) => {
+      const n = Number(t?.id);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    for (const inc of incoming) {
+      const norm: any = { status: "pending", progress: 0, action: "", ...inc };
+      if (norm.id === undefined || norm.id === null || norm.id === "") norm.id = ++maxId;
+      const idx = tasks.findIndex((t: any) => String(t?.id) === String(norm.id));
+      if (idx >= 0) tasks[idx] = { ...tasks[idx], ...norm };
+      else tasks.push(norm);
+      saved.push(norm);
+    }
+    s.tasks = tasks;
+    const now = new Date().toISOString();
+    s.log = [
+      { ts: now, msg: `🧭 Orquestador definió ${incoming.length} misión(es)`, type: "warn" },
+      ...(Array.isArray(s.log) ? s.log : []),
+    ].slice(0, 80);
+    s.updatedAt = now;
+  });
+  // Devuelve los ids asignados para que el orquestador haga PATCH /tasks/:id
+  res.json({ ok: true, count: saved.length, tasks: saved });
+};
+
+/** PATCH /tasks/:id — actualiza una misión (status/progress/action/agent/model). */
+export const patchTask = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const patch = req.body ?? {};
+  let found: any = null;
+  await updateStatus((s) => {
+    const tasks = Array.isArray(s.tasks) ? (s.tasks as any[]) : [];
+    const t = tasks.find((x: any) => String(x?.id) === String(id));
+    if (!t) return;
+    const prev = t.status;
+    Object.assign(t, patch);
+    found = t;
+    const now = new Date().toISOString();
+    if (patch.status && patch.status !== prev) {
+      const verb =
+        patch.status === "active"
+          ? "▶ inició"
+          : patch.status === "complete"
+            ? "✓ completó"
+            : patch.status === "blocked"
+              ? "⛔ bloqueó"
+              : patch.status;
+      s.log = [
+        {
+          ts: now,
+          msg: `[${t.agent || "orquestador"}] ${verb}: ${t.name}`,
+          type: patch.status === "complete" ? "success" : "info",
+        },
+        ...(Array.isArray(s.log) ? s.log : []),
+      ].slice(0, 80);
+    }
+    s.updatedAt = now;
+  });
+  if (!found) {
+    res.status(404).json({ error: `No existe la tarea '${id}'` });
+    return;
+  }
+  res.json({ ok: true, task: found });
+};
+
+/** POST /phases — fija las fases mostradas en el dashboard. Body: { phases:[{title,status,detail}] } */
+export const postPhases = async (req: Request, res: Response): Promise<void> => {
+  const phases = Array.isArray(req.body?.phases) ? req.body.phases : null;
+  if (!phases) {
+    res.status(400).json({ error: "Se requiere 'phases' (array)" });
+    return;
+  }
+  for (const p of phases) {
+    if (!p || typeof p.title !== "string") {
+      res.status(400).json({ error: "cada phase requiere 'title'" });
+      return;
+    }
+  }
+  await updateStatus((s) => {
+    s.phases = phases.map((p: any) => ({ status: "pending", ...p }));
+    s.updatedAt = new Date().toISOString();
+  });
+  res.json({ ok: true, count: phases.length });
+};
+
+/** POST /questions — el orquestador pide una decisión a Jesse (con preview/screenshot opcional). */
+export const postQuestion = async (req: Request, res: Response): Promise<void> => {
+  const b = req.body ?? {};
+  if (typeof b.text !== "string" || !b.text.trim()) {
+    res.status(400).json({ error: "Se requiere 'text'" });
+    return;
+  }
+  const q = {
+    id: typeof b.id === "string" && b.id ? b.id : `q-${Date.now()}`,
+    agent: typeof b.agent === "string" ? b.agent : "orquestador",
+    text: b.text.trim(),
+    options: Array.isArray(b.options) ? b.options : undefined,
+    preview: typeof b.preview === "string" ? b.preview : undefined,
+    image: typeof b.image === "string" ? b.image : undefined,
+    answer: null,
+    answeredAt: null,
+  };
+  await updateStatus((s) => {
+    s.questions = [...(Array.isArray(s.questions) ? s.questions : []), q];
+    const now = new Date().toISOString();
+    s.log = [
+      { ts: now, msg: `[${q.agent}] ❓ ${q.text}`, type: "warn" },
+      ...(Array.isArray(s.log) ? s.log : []),
+    ].slice(0, 80);
+    s.updatedAt = now;
+  });
+  res.status(201).json({ ok: true, question: q });
+};
+
+// Carpeta de screenshots que el orquestador puede generar y referenciar como
+// /api/orchestrator/media/<archivo>. basename() evita path traversal.
+const MEDIA_DIR = path.join(REPO_ROOT, ".orchestrator-media");
+export const getMedia = async (req: Request, res: Response): Promise<void> => {
+  const file = path.basename(String(req.params.file ?? ""));
+  res.sendFile(path.join(MEDIA_DIR, file), (err) => {
+    if (err && !res.headersSent) res.status(404).send("media no encontrada");
+  });
 };

@@ -52,36 +52,21 @@ let _jwtToken = null;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.getElementById("canvas-container").appendChild(renderer.domElement);
 
 // ════════════════════════════════════════════════════════════
-// ESCENA — fondo con gradiente vertical sutil + niebla de profundidad
+// ESCENA — fondo neutro institucional claro (blanco hueso #f5f4f2)
+// Sin gradiente ni cielo — se funde con la UI clara de SIAST.
 // ════════════════════════════════════════════════════════════
 const scene = new THREE.Scene();
 
-/** Crea una textura de gradiente vertical para el fondo (cielo → horizonte). */
-const makeGradientBackground = (top, bottom) => {
-  const c = document.createElement("canvas");
-  c.width = 2;
-  c.height = 256;
-  const ctx = c.getContext("2d");
-  const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, top);
-  g.addColorStop(1, bottom);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 2, 256);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-};
-
-scene.background = makeGradientBackground("#eef3f9", "#cdd9e6");
-scene.fog = new THREE.Fog(0xcdd9e6, 90, 230);
+scene.background = new THREE.Color(0xf5f4f2);
+// Niebla muy suave del mismo tono para que los bordes no se corten abruptamente.
+scene.fog = new THREE.Fog(0xf5f4f2, 100, 250);
 
 // ── Tema activo (se sincroniza con el toggle de la UI) ──────────────────────
 let _currentTheme = "light";
@@ -97,20 +82,10 @@ pmrem.dispose(); // la textura del environment persiste; el generador no se nece
 const hemi = new THREE.HemisphereLight(0xdcecff, 0xb8a98f, 0.55);
 scene.add(hemi);
 
-// Luz principal (sol): proyecta sombras suaves PCFSoft a 2048.
+// Luz principal (sol): sin sombras.
 const dirLight = new THREE.DirectionalLight(0xfff4e6, 2.1);
 dirLight.position.set(38, 64, 44);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.set(2048, 2048);
-dirLight.shadow.camera.near = 0.5;
-dirLight.shadow.camera.far = 220;
-dirLight.shadow.camera.left = -70;
-dirLight.shadow.camera.right = 70;
-dirLight.shadow.camera.top = 70;
-dirLight.shadow.camera.bottom = -70;
-dirLight.shadow.bias = -0.0004;
-dirLight.shadow.normalBias = 0.02;
-dirLight.shadow.radius = 3;
+dirLight.castShadow = false;
 scene.add(dirLight);
 
 // Luz de relleno fría opuesta, baja intensidad, sin sombras (modela el ambiente).
@@ -339,7 +314,13 @@ renderer.domElement.addEventListener("click", onPointerClick);
 // ════════════════════════════════════════════════════════════
 const panel = document.getElementById("info-panel");
 
+// En /admin/areas el visor se embebe con ?editor=1: el EditPanel de React ya
+// muestra nombre/piso/ID/cuadrícula, así que el info-panel del visor sobra y
+// quedaba como "tarjeta fantasma" detrás del EditPanel (con datos undefined).
+const EDITOR_MODE = new URLSearchParams(window.location.search).has("editor");
+
 const showInfoPanel = ({ roomId, label, floor, x1, y1, x2, y2 }) => {
+  if (EDITOR_MODE) return; // suprimido en el editor de áreas
   document.getElementById("panel-area-name").textContent = label;
   document.getElementById("panel-floor").textContent = FLOOR_LABELS[floor] ?? floor;
   document.getElementById("panel-id").textContent = roomId;
@@ -439,6 +420,16 @@ window.SIAST3D = {
     flyToArea(camera, controls, room);
     // Notificar a la UI (tab bar + badge) del cambio de nivel, incluyendo el label del área
     _dispatchViewChange("area", activeFloor, room.label);
+
+    // Reintento de muebles: si no hay ninguno cargado (probable falta de JWT al arrancar),
+    // intentar carga silenciosa usando el token actual (puede ser null — el servidor decide).
+    if (furniture.entries.size === 0) {
+      refreshMuebles(
+        Object.values(liveRoomMap)
+          .filter((r) => r.x1 != null)
+          .map((r) => ({ id: r.id })),
+      );
+    }
   },
 
   setEmbedMode(enabled) {
@@ -451,12 +442,9 @@ window.SIAST3D = {
     setCameraLoginMode(enabled);
     controls.enabled = !enabled;
     document.getElementById("login-overlay").classList.toggle("visible", enabled);
-    // Ocultar toda la chrome de navegación y utilidades en modo login/embed
-    const hideInLogin = ["floor-controls", "level-badge", "theme-toggle"];
-    for (const id of hideInLogin) {
-      const el = document.getElementById(id);
-      if (el) el.style.display = enabled ? "none" : "";
-    }
+    // Ocultar badge de nivel en modo login (floor-controls y theme-toggle ya no existen)
+    const el = document.getElementById("level-badge");
+    if (el) el.style.display = enabled ? "none" : "";
   },
 
   /**
@@ -466,32 +454,26 @@ window.SIAST3D = {
    * @param {'light'|'dark'} theme
    */
   setTheme(theme) {
+    // El visor usa tema claro por defecto para integrarse con la UI de SIAST.
+    // SET_THEME vía postMessage aún funciona pero el default inicial es siempre "light".
     _currentTheme = theme;
 
     if (theme === "dark") {
-      // Fondo oscuro: cielo noche → horizonte casi negro
-      scene.background = makeGradientBackground("#0f1626", "#070b14");
-      // Niebla oscura acorde al horizonte
+      // Fondo oscuro: noche
+      scene.background = new THREE.Color(0x070b14);
       scene.fog.color.setHex(0x0a0f1a);
-      // Bajar ligeramente la luz directa para evitar sobreexposición en oscuro
       dirLight.intensity = 1.6;
       hemi.intensity = 0.35;
       ambient.intensity = 0.18;
-      // En modo holograma las sombras sólidas lucen extrañas sobre materiales
-      // casi transparentes con emissive alto; se desactivan para coherencia visual.
-      renderer.shadowMap.enabled = false;
     } else {
-      // Fondo claro: cielo suave → horizonte gris-azul
-      scene.background = makeGradientBackground("#eef3f9", "#cdd9e6");
-      // Niebla clara original
-      scene.fog.color.setHex(0xcdd9e6);
-      // Restaurar intensidades originales
+      // Fondo neutro institucional (blanco hueso) — mismo que la escena inicial
+      scene.background = new THREE.Color(0xf5f4f2);
+      scene.fog.color.setHex(0xf5f4f2);
       dirLight.intensity = 2.1;
       hemi.intensity = 0.55;
       ambient.intensity = 0.25;
-      // Restaurar sombras en modo claro
-      renderer.shadowMap.enabled = true;
     }
+    // shadowMap permanece deshabilitado en todos los temas
 
     // Reconfigurar materiales y aristas para el look holográfico (oscuro) o limpio (claro)
     applyHologramStyle(scene, theme === "dark");
@@ -662,10 +644,10 @@ window.addEventListener("message", (e) => {
       window.SIAST3D.goToFloor(payload.floor);
       break;
     case "SET_THEME":
+      // Permite que React cambie el tema del visor explícitamente.
+      // El default es siempre "light"; SET_THEME sobrescribe eso.
       if (payload?.theme === "light" || payload?.theme === "dark") {
-        window._siast3dApplyTheme
-          ? window._siast3dApplyTheme(payload.theme)
-          : window.SIAST3D.setTheme(payload.theme);
+        window.SIAST3D.setTheme(payload.theme);
       }
       break;
     case "SHOW_TICKET_PIN":
@@ -682,6 +664,14 @@ window.addEventListener("message", (e) => {
     }
     case "HIDE_MUEBLE_PIN":
       window.SIAST3D.hideMueblePin();
+      break;
+    case "FLY_TO_AREA":
+      // Transición de cámara suave desde cualquier nivel hasta el área indicada.
+      // Payload: { areaId: string }
+      // Equivale a llamar window.SIAST3D.showArea(areaId) que ya incluye flyToArea.
+      if (payload?.areaId) {
+        window.SIAST3D.showArea(payload.areaId);
+      }
       break;
   }
 });
@@ -821,15 +811,10 @@ window.addEventListener("resize", () => {
 animateEntry();
 render();
 
-// Aplicar tema guardado en localStorage (o deducido del sistema) a la escena.
-// El script inline de index.html ya aplicó el data-theme en el DOM antes de
-// que este módulo cargara; aquí solo sincronizamos la escena Three.js.
-(function sincronizarTemaInicial() {
-  const saved = localStorage.getItem("siast3d-theme");
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const inicial = saved ?? (prefersDark ? "dark" : "light");
-  window.SIAST3D.setTheme(inicial);
-})();
+// Forzar siempre tema claro al arrancar — el visor se integra con
+// la UI institucional clara de SIAST. El modo oscuro/holograma queda
+// disponible vía setTheme("dark") / SET_THEME pero no es el default.
+window.SIAST3D.setTheme("light");
 
 // Despachar el viewLevel inicial para que la tab bar arranque con "Edificio" activo
 _dispatchViewChange("building", -1);

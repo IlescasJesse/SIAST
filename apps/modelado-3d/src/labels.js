@@ -3,24 +3,29 @@ import { FLOOR_Y } from "./building.js";
 
 const _labels = new Map(); // roomId → sprite
 
+// Resolución interna del canvas — 4× para nitidez a baja distancia (HiDPI/zoom).
+const LABEL_W = 1024;
+const LABEL_H = 256;
+
 const makeSprite = (text, floor) => {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = LABEL_W;
+  canvas.height = LABEL_H;
   const ctx = canvas.getContext("2d");
 
-  ctx.clearRect(0, 0, 256, 64);
-  ctx.fillStyle = "rgba(10,18,40,0.78)";
-  ctx.roundRect(4, 4, 248, 56, 8);
+  ctx.clearRect(0, 0, LABEL_W, LABEL_H);
+  ctx.fillStyle = "rgba(10,18,40,0.82)";
+  ctx.roundRect(8, 8, LABEL_W - 16, LABEL_H - 16, 20);
   ctx.fill();
 
-  ctx.font = "bold 18px Segoe UI, sans-serif";
-  ctx.fillStyle = "#90cdf4";
+  ctx.font = "bold 72px Segoe UI, sans-serif";
+  ctx.fillStyle = "#e2f0fb";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, 128, 32, 240);
+  ctx.fillText(text, LABEL_W / 2, LABEL_H / 2, LABEL_W - 40);
 
   const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8; // filtrado anisotrópico para lectura en ángulo
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(8, 2, 1);
@@ -29,24 +34,26 @@ const makeSprite = (text, floor) => {
 
 const redrawSpriteText = (sprite, text) => {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = LABEL_W;
+  canvas.height = LABEL_H;
   const ctx = canvas.getContext("2d");
 
-  ctx.clearRect(0, 0, 256, 64);
-  ctx.fillStyle = "rgba(10,18,40,0.78)";
-  ctx.roundRect(4, 4, 248, 56, 8);
+  ctx.clearRect(0, 0, LABEL_W, LABEL_H);
+  ctx.fillStyle = "rgba(10,18,40,0.82)";
+  ctx.roundRect(8, 8, LABEL_W - 16, LABEL_H - 16, 20);
   ctx.fill();
 
-  ctx.font = "bold 18px Segoe UI, sans-serif";
-  ctx.fillStyle = "#90cdf4";
+  ctx.font = "bold 72px Segoe UI, sans-serif";
+  ctx.fillStyle = "#e2f0fb";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, 128, 32, 240);
+  ctx.fillText(text, LABEL_W / 2, LABEL_H / 2, LABEL_W - 40);
 
   // Dispose old texture and replace
   if (sprite.material.map) sprite.material.map.dispose();
-  sprite.material.map = new THREE.CanvasTexture(canvas);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  sprite.material.map = tex;
   sprite.material.needsUpdate = true;
 };
 
@@ -110,9 +117,14 @@ export const ensureRoomLabel = (scene, roomId, label, mesh) => {
 
 export const updateLabelVisibility = (camera, floorGroups, activeFloor) => {
   for (const [roomId, sprite] of _labels) {
-    const floor = sprite.position.y > FLOOR_Y(3) ? 3
-      : sprite.position.y > FLOOR_Y(2) ? 2
-      : sprite.position.y > FLOOR_Y(1) ? 1 : 0;
+    const floor =
+      sprite.position.y > FLOOR_Y(3)
+        ? 3
+        : sprite.position.y > FLOOR_Y(2)
+          ? 2
+          : sprite.position.y > FLOOR_Y(1)
+            ? 1
+            : 0;
 
     const isActive = activeFloor === -1 || floor === activeFloor;
     const dist = camera.position.distanceTo(sprite.position);

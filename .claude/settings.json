@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/prettier-on-edit.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/prettier-on-edit.js\"",
             "timeout": 30,
             "statusMessage": "Formateando con Prettier..."
           }
@@ -66,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/check-unpushed.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-unpushed.js\"",
             "timeout": 10
           }
         ]

@@ -19,4 +19,11 @@ router.post("/answer", ctrl.postAnswer);
 router.post("/action", ctrl.postAction);
 router.post("/chat", ctrl.postChat);
 
+// Tablero dinámico que el orquestador (claude -p) actualiza en vivo
+router.post("/tasks", ctrl.postTasks);
+router.patch("/tasks/:id", ctrl.patchTask);
+router.post("/phases", ctrl.postPhases);
+router.post("/questions", ctrl.postQuestion);
+router.get("/media/:file", ctrl.getMedia);
+
 export default router;
