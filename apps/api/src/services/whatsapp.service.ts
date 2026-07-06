@@ -42,6 +42,14 @@ export function getWaStatus(): { state: ClientState; reason: string } {
 // ── Inicialización (se llama desde index.ts al arrancar) ──────────────────────
 
 export function initWhatsApp(): void {
+  // WA_ENABLED=false en .env → no iniciar cliente; los OTP salen por consola (solo en dev)
+  if (process.env.WA_ENABLED === "false") {
+    console.warn("[WhatsApp] Deshabilitado por WA_ENABLED=false — modo CONSOLA activo");
+    clientState = "failed";
+    waFailReason = "deshabilitado por configuración (WA_ENABLED=false)";
+    return;
+  }
+
   let wweb: any;
   try {
     wweb = require("whatsapp-web.js");
