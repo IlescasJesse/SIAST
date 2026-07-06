@@ -673,6 +673,10 @@ export function AreaGridEditor({
   function handleResizeStart(e, area, corner) {
     e.stopPropagation();
     e.preventDefault();
+    // Sin esto, redimensionar un área que aún no estaba seleccionada
+    // (p.ej. tomar la esquina directo con el dedo) no actualizaba editForm
+    // en AreasPage, y el cambio se veía en pantalla pero nunca se guardaba.
+    if (area.id !== selectedId) onSelect(area);
     dragRef.current = {
       type: "resize",
       areaId: area.id,

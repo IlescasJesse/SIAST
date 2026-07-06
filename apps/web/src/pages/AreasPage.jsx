@@ -604,6 +604,11 @@ export const AreasPage = () => {
       await loadAreas();
     } catch (err) {
       setSaveAllError(err.response?.data?.error ?? "Error al guardar cambios");
+      // Si algunas áreas ya se guardaron antes de que una fallara, releer del
+      // servidor para no dejar la UI mostrando cambios como "pendientes" que
+      // en realidad ya quedaron aplicados (loadAreas limpia pendingChanges
+      // que ya coinciden con lo que hay en el servidor).
+      await loadAreas();
     } finally {
       setSavingAll(false);
     }
