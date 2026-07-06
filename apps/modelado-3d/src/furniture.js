@@ -35,7 +35,7 @@ const MUEBLE_H = 0.5;
 // La escala del edificio es 1 unidad = 1 celda (~3.5 m). El edificio mide
 // 32×27 unidades; vista general la cámara está a >40 u. Un valor de 22 hace
 // que los muebles aparezcan al acercarse a un área concreta, no en vista global.
-export const MUEBLE_LOD_DISTANCE = 22;
+export const MUEBLE_LOD_DISTANCE = 32;
 
 const MUEBLE_COLORS = {
   CUBICULO: 0x9d2549, // guinda institucional (color de la mampara)
@@ -118,8 +118,6 @@ export const areaToWorldBox = (area) => {
 const addBox = (group, mat, w, h, d, x, y, z) => {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   mesh.position.set(x, y, z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
   group.add(mesh);
   return mesh;
 };

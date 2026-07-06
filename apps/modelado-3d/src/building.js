@@ -59,8 +59,6 @@ export const createRoomMesh = (room) => {
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(px, yBase + ROOM_H / 2, pz);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
   mesh.userData = {
     roomId: room.id,
     floor: room.floor,
@@ -144,8 +142,6 @@ const createSlab = (floor) => {
     const geo = new THREE.BoxGeometry(w * CELL, SLAB_H, d * CELL);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(cx, yPos, cz);
-    mesh.receiveShadow = true;
-    mesh.castShadow = true;
     // Marca que permite distinguir losa de mesh de área en setViewLevel.
     mesh.userData = { isSlab: true, baseOpacity: 1 };
     // Borde definido para legibilidad arquitectónica.
@@ -173,33 +169,31 @@ const CORRIDOR_STRIPS = [
 ];
 
 /**
- * Marca los pasillos sobre la losa de un piso — solo líneas punteadas en los
- * bordes de cada franja, sin volumen, para no competir con las áreas.
+ * Dibuja los pasillos sobre la losa de un piso como planos de color sólido.
+ * Relleno color corredor (gris-azulado institucional) apenas elevado sobre la losa
+ * para evitar z-fighting. Cada franja es un PlaneGeometry con MeshStandardMaterial.
  */
 const createCorridorLines = (floor) => {
   const group = new THREE.Group();
-  const mat = new THREE.LineDashedMaterial({
-    color: 0x64748f,
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x8fa8bf,
+    roughness: 0.9,
+    metalness: 0,
     transparent: true,
-    opacity: 0.55,
-    dashSize: 0.45,
-    gapSize: 0.3,
+    opacity: 0.38,
   });
-  mat.userData = { baseOpacity: 0.55 }; // respetada por setFloorVisibility (isEdge)
-  const y = FLOOR_Y(floor) + 0.02; // apenas sobre la losa para evitar z-fighting
+  mat.userData = { baseOpacity: 0.38, isCorridor: true };
+  const y = FLOOR_Y(floor) + 0.025; // apenas sobre la losa para evitar z-fighting
 
   for (const strip of CORRIDOR_STRIPS) {
     const { w, d, px, pz } = gridToScene(strip.x1, strip.y1, strip.x2, strip.y2);
-    for (const dx of [-w / 2, w / 2]) {
-      const geo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(px + dx, y, pz - d / 2),
-        new THREE.Vector3(px + dx, y, pz + d / 2),
-      ]);
-      const line = new THREE.Line(geo, mat);
-      line.computeLineDistances(); // requerido por LineDashedMaterial
-      line.userData = { isEdge: true };
-      group.add(line);
-    }
+    const geo = new THREE.PlaneGeometry(w, d);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(px, y, pz);
+    // isEdge=true para que setViewLevel lo gestione como elemento del pasillo
+    mesh.userData = { isEdge: true, isCorridor: true };
+    group.add(mesh);
   }
   return group;
 };
@@ -385,8 +379,6 @@ export const createConnectorMesh = (floor) => {
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(px, yBase + ROOM_H / 2, pz);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
   mesh.userData = {
     isConnector: true,
     label: "Conector",
@@ -407,24 +399,13 @@ export const createConnectorMesh = (floor) => {
 };
 
 /**
- * Crea el suelo de la escena: un plano grande que SOLO recibe sombras
- * (ShadowMaterial) para una sombra de contacto suave bajo el edificio, más
- * una huella tenue del footprint para anclar visualmente el volumen.
- * Devuelve un Group { ground (ShadowMaterial) + footprint }.
+ * Crea la huella tenue del edificio en el suelo para anclar visualmente el volumen.
+ * Sin sombras — shadowMap está deshabilitado en el visor.
+ * Devuelve un Group con userData.isFootprint.
  */
 export const createBuildingFootprint = () => {
   const group = new THREE.Group();
   group.userData = { isFootprint: true };
-
-  // Plano receptor de sombras de contacto (invisible salvo por la sombra).
-  const shadowPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(120, 120),
-    new THREE.ShadowMaterial({ opacity: 0.22 }),
-  );
-  shadowPlane.rotation.x = -Math.PI / 2;
-  shadowPlane.position.y = -0.05;
-  shadowPlane.receiveShadow = true;
-  group.add(shadowPlane);
 
   // Huella tenue del edificio para definir el perímetro en el suelo.
   const fp = new THREE.Mesh(
@@ -439,7 +420,6 @@ export const createBuildingFootprint = () => {
   );
   fp.rotation.x = -Math.PI / 2;
   fp.position.y = -0.04;
-  fp.receiveShadow = true;
   group.add(fp);
 
   return group;
@@ -671,18 +651,20 @@ export const createPerimeterWalls = (floor) => {
     { x1: -3, z1: -2.5, x2: -3, z2: 13.5, axis: "z" },
     // Cara derecha del vano del patio (X = +3, de Z=+13.5 a Z=-2.5)
     { x1: 3, z1: 13.5, x2: 3, z2: -2.5, axis: "z" },
+    // Frente del conector (Z = -2.5, de X=-3 a X=+3) — cierra el fondo del patio
+    { x1: -3, z1: -2.5, x2: 3, z2: -2.5, axis: "x" },
     // Frente del ala derecha (Z = +13.5, de X=+3 a X=+16)
     { x1: 3, z1: 13.5, x2: 16, z2: 13.5, axis: "x" },
     // Lado exterior derecho (X = +16, de Z=+13.5 a Z=-13.5)
     { x1: 16, z1: 13.5, x2: 16, z2: -13.5, axis: "z" },
     // Fondo ala derecha (Z = -13.5, de X=+16 a X=+3)
     { x1: 16, z1: -13.5, x2: 3, z2: -13.5, axis: "x" },
-    // Fondo conector derecho interior (X = +3, de Z=-2.5 a Z=-13.5)
-    // (omitido — queda solapado por las alas en world-space; el conector
-    //  comparte X=+3 con el ala, no hay muro extra aquí)
-    // Fondo del conector (Z = -13.5, de X=+3 a X=-3)  — incluido en fondo alas
-    // Fondo conector izquierdo interior (X = -3, de Z=-13.5 a Z=-2.5)
-    // (igual que arriba — omitido porque X=-3 es el borde del ala)
+    // Lado interior derecho del conector (X = +3, de Z=-2.5 a Z=-13.5)
+    { x1: 3, z1: -2.5, x2: 3, z2: -13.5, axis: "z" },
+    // Fondo del conector (Z = -13.5, de X=+3 a X=-3) — cierra el fondo del conector
+    { x1: 3, z1: -13.5, x2: -3, z2: -13.5, axis: "x" },
+    // Lado interior izquierdo del conector (X = -3, de Z=-13.5 a Z=-2.5)
+    { x1: -3, z1: -13.5, x2: -3, z2: -2.5, axis: "z" },
     // Fondo ala izquierda (Z = -13.5, de X=-3 a X=-16)
     { x1: -3, z1: -13.5, x2: -16, z2: -13.5, axis: "x" },
     // Lado exterior izquierdo (X = -16, de Z=-13.5 a Z=+13.5)
