@@ -1123,7 +1123,7 @@ export const AreasPage = () => {
                   </Box>
                   <iframe
                     ref={visor3DRef}
-                    src="http://localhost:5174"
+                    src={import.meta.env.VITE_VIEWER_URL ?? `http://${window.location.hostname}:5174`}
                     title="Visor 3D Edificio"
                     onLoad={() => {
                       // Heredar tema al iframe cuando carga (app fija en "light")
