@@ -190,10 +190,11 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
   return (
     <svg
       viewBox={viewBox}
+      preserveAspectRatio="xMidYMid meet"
       style={{
         display: "block",
         width: "100%",
-        maxHeight: "60vh",
+        height: "100%",
         fontFamily: "Inter, Roboto, sans-serif",
         background: "transparent",
         touchAction: "manipulation",
