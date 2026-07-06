@@ -27,7 +27,7 @@ import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
 import { createComposer, resizeComposer } from "./postprocessing.js";
 
-const API_BASE = `http://${window.location.hostname}:5101`;
+const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:5101`;
 
 // Color fallback por piso cuando la API no trae colorHex
 const FLOOR_COLORS = {
