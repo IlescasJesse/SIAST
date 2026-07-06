@@ -801,10 +801,11 @@ export const AreasPage = () => {
   };
 
   // ── Detección mobile/tablet ────────────────────────────────────────────────
+  // Antes cualquier touch (isCoarsePointer) forzaba el visor 2D, incluyendo
+  // tablets grandes. Ahora solo pantallas angostas (celulares) usan el 2D;
+  // tablets (>= breakpoint "sm") ya usan el visor 3D con controles táctiles.
   const muiTheme = useTheme();
-  const isNarrow = useMediaQuery(muiTheme.breakpoints.down("md"));
-  const isCoarsePointer = useMediaQuery("(pointer: coarse)");
-  const isMobileView = isNarrow || isCoarsePointer;
+  const isMobileView = useMediaQuery(muiTheme.breakpoints.down("sm"));
 
   // Número de áreas válidas (sin solape) en el piso activo
   const areasValidasPiso = areasDelPiso.filter((a) => !conflictIds.has(a.id)).length;
