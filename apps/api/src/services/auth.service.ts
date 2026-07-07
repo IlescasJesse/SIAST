@@ -133,6 +133,7 @@ export const loginStaff = async (usuario: string, password: string, meta: Reques
       nombre: user.nombre,
       apellidos: user.apellidos,
       email: user.email,
+      areaSoporteId: user.areaSoporteId ?? undefined,
       rol: user.rol,
     },
   };

@@ -35,6 +35,7 @@ const corsOrigins = process.env.CORS_ORIGINS.split(",")
 // ─────────────────────────────────────────────────────────────────────────────
 
 const app = express();
+app.set("trust proxy", 1); // necesario para express-rate-limit detrás de proxy/reverse proxy
 const httpServer = createServer(app);
 const port = Number(process.env.PORT ?? 5101);
 
