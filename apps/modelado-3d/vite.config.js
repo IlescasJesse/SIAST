@@ -1,6 +1,9 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  // Servido bajo la ruta /visor3d/ del dominio principal (siast.local/visor3d/)
+  // para no depender de un subdominio propio que cada PC tendria que resolver.
+  base: "/visor3d/",
   server: {
     port: 5174,
     host: true,
