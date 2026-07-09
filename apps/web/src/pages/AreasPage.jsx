@@ -17,21 +17,25 @@
  *   React → Visor (postMessage):
  *     SET_THEME { theme }        — al cargar el iframe (siempre "light")
  *     GO_TO_FLOOR { floor }      — al cambiar piso en TopBar (floor 0=PB..3; -1 = edificio)
+ *                                  también se emite al activar la herramienta "draw"
  *     FLY_TO_AREA { areaId }     — al seleccionar área (animación edificio→área)
  *     HIGHLIGHT_ROOM { roomId }  — al seleccionar área (fallback)
- *     SET_CAMERA_MODE { mode }  — toggle órbita/cenital (emisor listo; consumidor en B)
- *     SET_EDIT_TOOL { tool }    — toolbar herramientas (emisor listo; consumidor en B)
+ *     SET_CAMERA_MODE { mode }   — toggle órbita/cenital
+ *     SET_EDIT_TOOL { tool }     — toolbar: select | move | draw | resize | delete
  *   Visor → React (listeners):
- *     ROOM_CLICKED { roomId, floor }    — selección (ya existía)
- *     AREA_DRAWN { gridX1,gridY1,gridX2,gridY2,floor } — abrir modal con coords (B)
- *     AREA_MOVED { areaId, ... }        — actualizar coords (lógica de guardado existente)
- *     AREA_RESIZED { areaId, ... }      — actualizar coords (lógica de guardado existente)
+ *     ROOM_CLICKED { roomId, floor }    — selección desde el visor
+ *     AREA_MOVED   { areaId, gridX1..gridY2, floor, live } — live:true durante el drag
+ *                    (solo actualiza state para el minimapa); live:false al soltar
+ *                    (valida solape + entra a pendingChanges vía handleMove)
+ *     AREA_RESIZED { areaId, gridX1..gridY2, floor, live } — igual que AREA_MOVED
+ *     AREA_DRAWN   { gridX1..gridY2, floor } — abre el modal "Nueva Área" con coords
+ *                    prellenadas; el visor NO crea el área
+ *     AREA_DELETE_REQUEST { areaId, label, floor } — abre confirmación de desactivar
  *
- * Sub-fase B pendiente:
- *   - Dibujo táctil 3D real (SET_EDIT_TOOL dibujar + AREA_DRAWN del visor)
- *   - Mover/resize desde el visor (AREA_MOVED/AREA_RESIZED)
- *   - SET_CAMERA_MODE implementado en el visor Three.js
- *   - AreaGridEditor accesible vía Drawer "Vista cuadrícula" (montado, ver TODO abajo)
+ *   El visor solo valida la huella del edificio; el solape entre áreas se valida
+ *   aquí. Si el rect final (live:false) solapa otra área del piso se revierte a
+ *   las coords originales y se re-sincroniza el visor con
+ *   SIAST3D.updateAreaGeometry(areaId, x1, y1, x2, y2, floor).
  */
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -60,8 +64,6 @@ import {
   DialogContent,
   DialogActions,
   Chip,
-  Tabs,
-  Tab,
   Collapse,
   List,
   ListItem,
@@ -69,16 +71,16 @@ import {
   Badge,
   ToggleButton,
   ToggleButtonGroup,
-  Drawer,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
 import SaveIcon from "@mui/icons-material/Save";
 import ThreeDRotationIcon from "@mui/icons-material/ThreeDRotation";
 import ChairIcon from "@mui/icons-material/Chair";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import GridViewIcon from "@mui/icons-material/GridView";
+import MapIcon from "@mui/icons-material/Map";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
 import NearMeIcon from "@mui/icons-material/NearMe";
@@ -98,7 +100,6 @@ import {
   createFilaMuebles,
   deleteMueble,
 } from "../api/catalogos.js";
-import { AreaGridEditor } from "../components/areas/AreaGridEditor.jsx";
 import { FloorPlanMobile } from "../components/areas/FloorPlanMobile.jsx";
 import { dentroDelEdificio, seSolapan, validarGeometriaArea } from "@stf/shared";
 
@@ -227,17 +228,8 @@ export const AreasPage = () => {
   const [editForm, setEditForm] = useState(null);
   const [saveError, setSaveError] = useState("");
 
-  // Navegación: zona + piso
-  const [alaIdx, setAlaIdx] = useState(0);
+  // Navegación: piso activo
   const [pisoIdx, setPisoIdx] = useState(0);
-
-  // Vista completa vs por zonas (usado en AreaGridEditor del Drawer)
-  const [viewMode, setViewMode] = useState("zones"); // "full" | "zones"
-
-  // Dirección de la transición de slide (para animación direccional)
-  const [slideDir, setSlideDir] = useState("right"); // "right" | "left" | "up" | "down"
-  const prevAlaRef = useRef(0);
-  const prevPisoRef = useRef(0);
 
   // Modal Nueva Área
   const [modalOpen, setModalOpen] = useState(false);
@@ -252,12 +244,19 @@ export const AreasPage = () => {
   // ── Estados nuevos sub-fase A ──────────────────────────────────────────────
   /** Modo de cámara: 'orbita' (exploración) | 'cenital' (edición top-down) */
   const [camMode, setCamMode] = useState("orbita");
-  /** Herramienta activa del toolbar flotante — lógica real en sub-fase B */
+  /** Herramienta activa del toolbar flotante — se replica al visor vía SET_EDIT_TOOL */
   const [activeTool, setActiveTool] = useState("select");
-  /** Drawer con AreaGridEditor (fallback de precisión) */
-  const [gridDrawerOpen, setGridDrawerOpen] = useState(false);
   /** Panel de lista de áreas flotante colapsado/expandido */
   const [panelAreasOpen, setPanelAreasOpen] = useState(true);
+  /** Minimapa 2D en tiempo real (solo desktop) colapsado/expandido */
+  const [miniMapOpen, setMiniMapOpen] = useState(true);
+  /** Solicitud de borrado proveniente del visor (tool delete) — abre Dialog de confirmación */
+  const [deleteRequest, setDeleteRequest] = useState(null); // { id, label } | null
+
+  /** Coords originales por área al iniciar un drag en el visor (para revertir solapes) */
+  const dragOriginalsRef = useRef({});
+  /** Espejo de `areas` para leer estado actual dentro del listener de postMessage */
+  const areasRef = useRef([]);
 
   // ── Helper: comandar el visor 3D ──────────────────────────────────────────
   const sendToVisor = useCallback((type, payload = {}) => {
@@ -394,20 +393,15 @@ export const AreasPage = () => {
     loadSirh();
   }, []);
 
-  // ── Cambio de zona con dirección ──────────────────────────────────────────
+  // Espejo de areas para el listener de postMessage (evita closures obsoletos)
+  useEffect(() => {
+    areasRef.current = areas;
+  }, [areas]);
 
-  const changeAla = useCallback((nextIdx) => {
-    setSlideDir(nextIdx > prevAlaRef.current ? "right" : "left");
-    prevAlaRef.current = nextIdx;
-    setAlaIdx(nextIdx);
-    setSelectedId(null);
-    setEditForm(null);
-  }, []);
+  // ── Cambio de piso ────────────────────────────────────────────────────────
 
   const changePiso = useCallback(
     (nextIdx) => {
-      setSlideDir(nextIdx > prevPisoRef.current ? "down" : "up");
-      prevPisoRef.current = nextIdx;
       setPisoIdx(nextIdx);
       setSelectedId(null);
       setEditForm(null);
@@ -442,78 +436,7 @@ export const AreasPage = () => {
     [visorShowArea, sendToVisor],
   );
 
-  // ── Listeners postMessage del visor ───────────────────────────────────────
-
-  useEffect(() => {
-    const handler = (e) => {
-      const { type, payload } = e.data ?? {};
-      if (!type) return;
-
-      // ROOM_CLICKED — selección desde el visor (ya existía)
-      if (type === "ROOM_CLICKED") {
-        const { roomId, floor } = payload ?? {};
-        if (!roomId) return;
-        const pisoItemIdx = PISOS.findIndex((p) => p.floor === floor);
-        if (pisoItemIdx >= 0) changePiso(pisoItemIdx);
-        setAreas((prev) => {
-          const area = prev.find((a) => a.id === roomId);
-          if (area) handleSelect(area);
-          return prev;
-        });
-        return;
-      }
-
-      // AREA_DRAWN — el visor dibujó un área nueva (sub-fase B)
-      // TODO B: validar coordenadas, abrir modal con coords pre-cargadas
-      if (type === "AREA_DRAWN") {
-        const { gridX1, gridY1, gridX2, gridY2, floor } = payload ?? {};
-        const pisoItem = PISOS.find((p) => p.floor === (floor ?? 0)) ?? PISOS[0];
-        setNuevaForm((prev) => ({
-          ...prev,
-          piso: pisoItem.piso,
-          floor: pisoItem.floor,
-          gridX1: String(gridX1 ?? DEFAULT_COORDS.gridX1),
-          gridY1: String(gridY1 ?? DEFAULT_COORDS.gridY1),
-          gridX2: String(gridX2 ?? DEFAULT_COORDS.gridX2),
-          gridY2: String(gridY2 ?? DEFAULT_COORDS.gridY2),
-        }));
-        setNuevaError("");
-        setModalOpen(true);
-        return;
-      }
-
-      // AREA_MOVED — el visor movió un área (sub-fase B)
-      // TODO B: verificar dentroDelEdificio + persistir en pendingChanges
-      if (type === "AREA_MOVED") {
-        const { areaId, gridX1, gridY1, gridX2, gridY2 } = payload ?? {};
-        if (!areaId) return;
-        const coords = { gridX1, gridY1, gridX2, gridY2 };
-        if (!dentroDelEdificio({ x1: gridX1, y1: gridY1, x2: gridX2, y2: gridY2 })) return;
-        setAreas((prev) => prev.map((a) => (a.id === areaId ? { ...a, ...coords } : a)));
-        setEditForm((prev) =>
-          prev && prev.id === areaId ? { ...prev, ...coords, _dirty: true } : prev,
-        );
-        return;
-      }
-
-      // AREA_RESIZED — el visor redimensionó un área (sub-fase B)
-      // TODO B: misma lógica que AREA_MOVED
-      if (type === "AREA_RESIZED") {
-        const { areaId, gridX1, gridY1, gridX2, gridY2 } = payload ?? {};
-        if (!areaId) return;
-        const coords = { gridX1, gridY1, gridX2, gridY2 };
-        if (!dentroDelEdificio({ x1: gridX1, y1: gridY1, x2: gridX2, y2: gridY2 })) return;
-        setAreas((prev) => prev.map((a) => (a.id === areaId ? { ...a, ...coords } : a)));
-        setEditForm((prev) =>
-          prev && prev.id === areaId ? { ...prev, ...coords, _dirty: true } : prev,
-        );
-        return;
-      }
-    };
-
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, [changePiso, handleSelect]);
+  // ── Move / Resize (validación de huella + pendingChanges vía editForm) ───
 
   const handleResize = useCallback((id, coords) => {
     if (
@@ -542,6 +465,189 @@ export const AreasPage = () => {
     setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...coords } : a)));
     setEditForm((prev) => (prev && prev.id === id ? { ...prev, ...coords, _dirty: true } : prev));
   }, []);
+
+  /** Revierte la geometría de un área en el state y re-sincroniza el visor 3D */
+  const revertGeometry = useCallback((areaId, original, floor) => {
+    setAreas((prev) => prev.map((a) => (a.id === areaId ? { ...a, ...original } : a)));
+    setEditForm((prev) => (prev && prev.id === areaId ? { ...prev, ...original } : prev));
+    try {
+      visor3DRef.current?.contentWindow?.SIAST3D?.updateAreaGeometry?.(
+        areaId,
+        original.gridX1,
+        original.gridY1,
+        original.gridX2,
+        original.gridY2,
+        floor,
+      );
+    } catch {
+      // cross-origin: el visor se re-sincroniza en el próximo fetch/rebuild
+    }
+  }, []);
+
+  // ── Listeners postMessage del visor ───────────────────────────────────────
+
+  useEffect(() => {
+    const handler = (e) => {
+      const { type, payload } = e.data ?? {};
+      if (!type) return;
+
+      // ROOM_CLICKED — selección desde el visor (ya existía)
+      if (type === "ROOM_CLICKED") {
+        const { roomId, floor } = payload ?? {};
+        if (!roomId) return;
+        const pisoItemIdx = PISOS.findIndex((p) => p.floor === floor);
+        if (pisoItemIdx >= 0) changePiso(pisoItemIdx);
+        setAreas((prev) => {
+          const area = prev.find((a) => a.id === roomId);
+          if (area) handleSelect(area);
+          return prev;
+        });
+        return;
+      }
+
+      // AREA_DRAWN — el visor terminó un dibujo; abre el modal "Nueva Área"
+      // con las coords prellenadas (el visor NO crea el área, la crea la API)
+      if (type === "AREA_DRAWN") {
+        const { gridX1, gridY1, gridX2, gridY2, floor } = payload ?? {};
+        const pisoItem = PISOS.find((p) => p.floor === (floor ?? 0)) ?? PISOS[0];
+        setNuevaForm({
+          ...EMPTY_NUEVA,
+          piso: pisoItem.piso,
+          floor: pisoItem.floor,
+          gridX1: String(gridX1 ?? DEFAULT_COORDS.gridX1),
+          gridY1: String(gridY1 ?? DEFAULT_COORDS.gridY1),
+          gridX2: String(gridX2 ?? DEFAULT_COORDS.gridX2),
+          gridY2: String(gridY2 ?? DEFAULT_COORDS.gridY2),
+        });
+        setNuevaAdscripcion(null);
+        setNuevaError("");
+        setModalOpen(true);
+        return;
+      }
+
+      // AREA_MOVED / AREA_RESIZED — drag en el visor 3D
+      //   live:true  → solo actualizar `areas` (minimapa en tiempo real)
+      //   live:false → validar solape y pasar por handleMove/handleResize
+      //                (pendingChanges + editForm._dirty → "Guardar todo")
+      if (type === "AREA_MOVED" || type === "AREA_RESIZED") {
+        const { areaId, gridX1, gridY1, gridX2, gridY2, floor, live } = payload ?? {};
+        if (!areaId) return;
+        const coords = { gridX1, gridY1, gridX2, gridY2 };
+        const areaState = areasRef.current.find((a) => a.id === areaId);
+        if (!areaState) return;
+        const areaFloor = areaState.floor ?? floor ?? 0;
+
+        if (live) {
+          // Capturar coords originales al primer evento live del drag (para revertir)
+          if (!dragOriginalsRef.current[areaId]) {
+            dragOriginalsRef.current[areaId] = {
+              gridX1: areaState.gridX1,
+              gridY1: areaState.gridY1,
+              gridX2: areaState.gridX2,
+              gridY2: areaState.gridY2,
+            };
+          }
+          // Solo state → el minimapa 2D se mueve en tiempo real; sin pendingChanges
+          setAreas((prev) => prev.map((a) => (a.id === areaId ? { ...a, ...coords } : a)));
+          return;
+        }
+
+        // live:false — rect final
+        const original = dragOriginalsRef.current[areaId] ?? null;
+        delete dragOriginalsRef.current[areaId];
+
+        // Drag terminó sin cambio (el visor devuelve las coords originales)
+        if (
+          original &&
+          original.gridX1 === gridX1 &&
+          original.gridY1 === gridY1 &&
+          original.gridX2 === gridX2 &&
+          original.gridY2 === gridY2
+        ) {
+          revertGeometry(areaId, original, areaFloor);
+          return;
+        }
+
+        // Click sin arrastre (sin eventos live) y coords idénticas → no-op,
+        // no ensuciar pendingChanges
+        if (
+          !original &&
+          areaState.gridX1 === gridX1 &&
+          areaState.gridY1 === gridY1 &&
+          areaState.gridX2 === gridX2 &&
+          areaState.gridY2 === gridY2
+        )
+          return;
+
+        // El visor solo valida huella; el solape entre áreas se valida aquí
+        const rect = {
+          id: areaId,
+          floor: areaFloor,
+          x1: gridX1,
+          y1: gridY1,
+          x2: gridX2,
+          y2: gridY2,
+        };
+        const overlaps = areasRef.current.some(
+          (a) =>
+            a.id !== areaId &&
+            a.activo !== false &&
+            a.floor === areaFloor &&
+            a.gridX1 != null &&
+            seSolapan(rect, areaToRect(a)),
+        );
+        const fueraDeHuella = !dentroDelEdificio({
+          x1: gridX1,
+          y1: gridY1,
+          x2: gridX2,
+          y2: gridY2,
+        });
+
+        if ((overlaps || fueraDeHuella) && original) {
+          revertGeometry(areaId, original, areaFloor);
+          setSaveAllError(
+            `"${areaState.label ?? areaId}" ${overlaps ? "se solapa con otra área del piso" : "queda fuera de la huella del edificio"} — cambio revertido`,
+          );
+          return;
+        }
+        if (overlaps || fueraDeHuella) return; // sin original: no aplicar el rect inválido
+
+        // Seleccionar el área para que el cambio entre a pendingChanges (el efecto
+        // de editForm._dirty solo persiste el área actualmente en edición)
+        setSelectedId(areaId);
+        setEditForm((prev) =>
+          prev && prev.id === areaId
+            ? prev
+            : {
+                ...areaState,
+                esSalaJuntas: areaState.esSalaJuntas ?? false,
+                esComun: areaState.esComun ?? false,
+                tipoComun: areaState.tipoComun ?? null,
+                nombrePropio: areaState.nombrePropio ?? null,
+                _dirty: false,
+              },
+        );
+        if (type === "AREA_MOVED") handleMove(areaId, coords);
+        else handleResize(areaId, coords);
+        return;
+      }
+
+      // AREA_DELETE_REQUEST — click con tool delete en el visor.
+      // NUNCA borra directo: selecciona el área y abre Dialog de confirmación.
+      if (type === "AREA_DELETE_REQUEST") {
+        const { areaId } = payload ?? {};
+        if (!areaId) return;
+        const area = areasRef.current.find((a) => a.id === areaId);
+        if (!area) return;
+        handleSelect(area);
+        setDeleteRequest({ id: area.id, label: area.label || area.id });
+        return;
+      }
+    };
+
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [changePiso, handleSelect, handleMove, handleResize, revertGeometry]);
 
   const conflictIds = useMemo(() => {
     const ids = new Set();
@@ -643,7 +749,12 @@ export const AreasPage = () => {
 
   const handleSetTool = (tool) => {
     setActiveTool(tool);
-    // Emisor SET_EDIT_TOOL → visor (consumidor en sub-fase B)
+    // Al dibujar, asegurar que el visor esté en el piso activo (recomendación
+    // del visor: el rect dibujado se ancla al piso visible)
+    if (tool === "draw") {
+      const floor = PISOS[pisoIdx]?.floor ?? 0;
+      sendToVisor("GO_TO_FLOOR", { floor });
+    }
     sendToVisor("SET_EDIT_TOOL", { tool });
   };
 
@@ -674,6 +785,20 @@ export const AreasPage = () => {
       handleCancelar();
     } catch (err) {
       setSaveError(err.response?.data?.error ?? "Error al eliminar");
+    }
+  };
+
+  /** Confirmación del Dialog abierto por AREA_DELETE_REQUEST (tool delete del visor) */
+  const handleConfirmDeleteRequest = async () => {
+    if (!deleteRequest) return;
+    const { id } = deleteRequest;
+    setDeleteRequest(null);
+    try {
+      await deleteArea(id);
+      await loadAreas();
+      handleCancelar();
+    } catch (err) {
+      setSaveAllError(err.response?.data?.error ?? "Error al eliminar el área");
     }
   };
 
@@ -748,57 +873,6 @@ export const AreasPage = () => {
     () => areas.filter((a) => a.floor === pisoActivo.floor),
     [areas, pisoActivo.floor],
   );
-
-  // Para el AreaGridEditor en el Drawer (mantiene la misma lógica anterior)
-  const { areasFiltradas, gridConfig } = useMemo(() => {
-    if (viewMode === "full") {
-      return {
-        areasFiltradas: areas.filter((a) => a.floor === pisoActivo.floor),
-        gridConfig: { colStart: 0, colCount: 32, zoneKey: "full" },
-      };
-    }
-    const zona = ZONES[alaIdx];
-    return {
-      areasFiltradas: areas.filter((a) => {
-        if (a.floor !== pisoActivo.floor) return false;
-        const x1 = a.gridX1 ?? -1;
-        if (x1 < 0) return false;
-        return x1 >= zona.colStart && x1 < zona.colStart + zona.colCount;
-      }),
-      gridConfig: { colStart: zona.colStart, colCount: zona.colCount, zoneKey: zona.key },
-    };
-  }, [areas, viewMode, pisoIdx, alaIdx, pisoActivo.floor]);
-
-  const gridKey = `${viewMode}-${alaIdx}-${pisoIdx}`;
-
-  // ── Slide animation keyframe según dirección ──────────────────────────────
-
-  const slideKeyframes = {
-    right: {
-      "@keyframes siast-slide": {
-        from: { opacity: 0, transform: "translateX(18px)" },
-        to: { opacity: 1, transform: "translateX(0)" },
-      },
-    },
-    left: {
-      "@keyframes siast-slide": {
-        from: { opacity: 0, transform: "translateX(-18px)" },
-        to: { opacity: 1, transform: "translateX(0)" },
-      },
-    },
-    down: {
-      "@keyframes siast-slide": {
-        from: { opacity: 0, transform: "translateY(14px)" },
-        to: { opacity: 1, transform: "translateY(0)" },
-      },
-    },
-    up: {
-      "@keyframes siast-slide": {
-        from: { opacity: 0, transform: "translateY(-14px)" },
-        to: { opacity: 1, transform: "translateY(0)" },
-      },
-    },
-  };
 
   // ── Detección mobile/tablet ────────────────────────────────────────────────
   // Antes cualquier touch (isCoarsePointer) forzaba el visor 2D, incluyendo
@@ -936,7 +1010,6 @@ export const AreasPage = () => {
                             ? PISOS.findIndex((p) => p.floor === a.floor)
                             : 0;
                         changePiso(pIdx);
-                        if (viewMode === "zones") changeAla(targetZoneIdx);
                         setSelectedId(a.id);
                         setEditForm({ ...withCoords, _dirty: true });
                         setSaveError("");
@@ -1132,26 +1205,6 @@ export const AreasPage = () => {
             </Button>
           </Tooltip>
 
-          {/* Vista cuadrícula (Drawer con AreaGridEditor) */}
-          <Tooltip title="Abrir editor de cuadrícula 2D (precisión)">
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<GridViewIcon sx={{ fontSize: 14 }} />}
-              onClick={() => setGridDrawerOpen(true)}
-              sx={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "rgba(60,20,35,0.70)",
-                borderColor: "rgba(157,36,73,0.30)",
-                py: 0.4,
-                "&:hover": { bgcolor: "rgba(157,36,73,0.08)", color: "rgba(157,36,73,0.9)" },
-              }}
-            >
-              Cuadrícula
-            </Button>
-          </Tooltip>
-
           {/* Render */}
           <Tooltip title="Recarga el modelo 3D desde la base de datos">
             <Button
@@ -1251,35 +1304,45 @@ export const AreasPage = () => {
       >
         {[
           { tool: "select", icon: <NearMeIcon sx={{ fontSize: 17 }} />, label: "Seleccionar" },
-          { tool: "move", icon: <PanToolIcon sx={{ fontSize: 17 }} />, label: "Mover (B)" },
-          { tool: "draw", icon: <DrawIcon sx={{ fontSize: 17 }} />, label: "Dibujar área (B)" },
+          { tool: "move", icon: <PanToolIcon sx={{ fontSize: 17 }} />, label: "Mover" },
+          { tool: "draw", icon: <DrawIcon sx={{ fontSize: 17 }} />, label: "Dibujar área" },
           {
             tool: "resize",
             icon: <HighlightAltIcon sx={{ fontSize: 17 }} />,
-            label: "Redimensionar (B)",
+            label: "Redimensionar",
           },
-          { tool: "delete", icon: <DeleteIcon sx={{ fontSize: 17 }} />, label: "Borrar (B)" },
-        ].map(({ tool, icon, label }) => {
+          {
+            tool: "delete",
+            icon: <DeleteOutlineIcon sx={{ fontSize: 17 }} />,
+            label: "Borrar área",
+            danger: true,
+          },
+        ].map(({ tool, icon, label, danger }) => {
           const isActive = activeTool === tool;
+          // El tool "delete" usa paleta de advertencia (rojo) en vez del guinda
+          const activeBg = danger ? "rgba(198,40,40,0.88)" : "rgba(157,36,73,0.85)";
+          const activeBorder = danger ? "rgba(198,40,40,0.95)" : "rgba(157,36,73,0.9)";
+          const idleColor = danger ? "rgba(183,28,28,0.75)" : "rgba(60,20,35,0.55)";
+          const hoverBg = danger ? "rgba(198,40,40,0.12)" : "rgba(157,36,73,0.12)";
+          const hoverColor = danger ? "#b71c1c" : "rgba(157,36,73,0.9)";
+          const hoverBorder = danger ? "rgba(198,40,40,0.40)" : "rgba(157,36,73,0.35)";
           return (
             <Tooltip key={tool} title={label} placement="right">
               <IconButton
                 size="small"
                 onClick={() => handleSetTool(tool)}
                 sx={{
-                  color: isActive ? "#fff" : "rgba(60,20,35,0.55)",
-                  bgcolor: isActive ? "rgba(157,36,73,0.85)" : "transparent",
-                  border: isActive
-                    ? "1px solid rgba(157,36,73,0.9)"
-                    : "1px solid rgba(157,36,73,0.12)",
+                  color: isActive ? "#fff" : idleColor,
+                  bgcolor: isActive ? activeBg : "transparent",
+                  border: isActive ? `1px solid ${activeBorder}` : "1px solid rgba(157,36,73,0.12)",
                   borderRadius: "6px",
                   width: 34,
                   height: 34,
                   transition: "all 0.15s ease",
                   "&:hover": {
-                    bgcolor: "rgba(157,36,73,0.12)",
-                    color: "rgba(157,36,73,0.9)",
-                    border: "1px solid rgba(157,36,73,0.35)",
+                    bgcolor: isActive ? activeBg : hoverBg,
+                    color: isActive ? "#fff" : hoverColor,
+                    border: `1px solid ${hoverBorder}`,
                   },
                 }}
               >
@@ -1567,195 +1630,86 @@ export const AreasPage = () => {
         </Typography>
       </Box>
 
-      {/* ── DRAWER: AreaGridEditor (editor cuadrícula 2D de precisión) ── */}
-      <Drawer
-        anchor="bottom"
-        open={gridDrawerOpen}
-        onClose={() => setGridDrawerOpen(false)}
-        PaperProps={{
-          sx: {
-            maxHeight: "80vh",
-            bgcolor: "#fdf8fa",
-            color: "#1a0a10",
-            borderTop: "2px solid rgba(157,36,73,0.50)",
-            boxShadow: "0 -4px 24px rgba(157,36,73,0.10)",
-          },
-        }}
-      >
-        <Box sx={{ p: 1.5 }}>
-          {/* Header del Drawer */}
+      {/* ── OVERLAY z=12: Minimapa 2D en tiempo real (solo desktop) ── */}
+      {/* Reactivo al state `areas`: los eventos live del visor lo mueven en vivo. */}
+      {!isMobileView &&
+        (miniMapOpen ? (
           <Box
             sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mb: 1,
-              pb: 1,
-              borderBottom: "1px solid rgba(157,36,73,0.25)",
+              position: "absolute",
+              left: 12,
+              bottom: 40,
+              zIndex: 12, // sobre el iframe (0), bajo toolbar/paneles (15)
+              width: 300,
+              bgcolor: "#fff",
+              border: "1px solid rgba(157,36,73,0.22)",
+              borderRadius: 2,
+              boxShadow: "0 4px 18px rgba(157,36,73,0.14), 0 1px 4px rgba(0,0,0,0.10)",
+              overflow: "hidden",
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <GridViewIcon sx={{ fontSize: 16, color: "#c44e71" }} />
-              <Typography variant="subtitle2" fontWeight={800} sx={{ color: "#1a0a10" }}>
-                Editor cuadrícula 2D — Piso {pisoActivo.label}
-              </Typography>
-              <Typography variant="caption" sx={{ color: "rgba(30,10,18,0.45)", fontSize: 10 }}>
-                (modo precisión)
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              {/* Toggle zona */}
-              <ToggleButtonGroup
-                value={viewMode}
-                exclusive
-                onChange={(_, v) => {
-                  if (v) setViewMode(v);
-                }}
-                size="small"
-                sx={{
-                  "& .MuiToggleButton-root": {
-                    py: 0.3,
-                    px: 0.75,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: "rgba(30,10,18,0.55)",
-                    borderColor: "rgba(157,36,73,0.25)",
-                  },
-                  "& .MuiToggleButton-root.Mui-selected": {
-                    color: "#fff",
-                    bgcolor: "rgba(157,36,73,0.80)",
-                  },
-                }}
-              >
-                <ToggleButton value="zones">Zonas</ToggleButton>
-                <ToggleButton value="full">Planta completa</ToggleButton>
-              </ToggleButtonGroup>
-
-              <IconButton
-                size="small"
-                onClick={() => setGridDrawerOpen(false)}
-                sx={{ color: "rgba(30,10,18,0.50)" }}
-              >
-                <CloseIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Box>
-          </Box>
-
-          {/* Tabs de zona (solo en modo "zones") */}
-          {viewMode === "zones" && (
-            <Tabs
-              value={alaIdx}
-              onChange={(_, v) => changeAla(v)}
-              sx={{ minHeight: 32, mb: 0.5 }}
-              TabIndicatorProps={{ style: { height: 2, backgroundColor: "#9d2449" } }}
-            >
-              {ZONES.map((zone, i) => (
-                <Tab
-                  key={zone.key}
-                  label={zone.label}
-                  sx={{
-                    minHeight: 32,
-                    fontWeight: 700,
-                    fontSize: 10,
-                    letterSpacing: 0.5,
-                    color: alaIdx === i ? zone.color : "rgba(30,10,18,0.40)",
-                    opacity: 1,
-                  }}
-                />
-              ))}
-            </Tabs>
-          )}
-
-          {/* Tabs de piso */}
-          <Tabs
-            value={pisoIdx}
-            onChange={(_, v) => changePiso(v)}
-            sx={{ minHeight: 30, mb: 1 }}
-            variant="fullWidth"
-            TabIndicatorProps={{ style: { height: 2, backgroundColor: "#9d2449" } }}
-          >
-            {PISOS.map((p, i) => (
-              <Tab
-                key={p.piso}
-                label={`PISO ${p.label}`}
-                sx={{
-                  minHeight: 30,
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: pisoIdx === i ? "#9d2449" : "rgba(30,10,18,0.40)",
-                  opacity: 1,
-                }}
-              />
-            ))}
-          </Tabs>
-
-          {/* Vista completa fondos de zona */}
-          {viewMode === "full" && (
-            <Box sx={{ display: "flex", gap: 0.5, mb: 0.75, px: 0.25 }}>
-              {ZONES.map((z) => (
-                <Box
-                  key={z.key}
-                  sx={{
-                    flex: z.colCount,
-                    py: 0.2,
-                    borderRadius: "4px",
-                    bgcolor: z.color + "20",
-                    border: `1px solid ${z.color}40`,
-                    textAlign: "center",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    sx={{ fontSize: 8, fontWeight: 800, color: z.color }}
-                  >
-                    {z.label}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          )}
-
-          {/* Grid editor */}
-          <Box
-            key={gridKey}
-            sx={{
-              animation: "siast-slide 0.22s ease",
-              ...slideKeyframes[slideDir],
-            }}
-          >
-            <AreaGridEditor
-              areas={areasFiltradas}
-              allAreas={areas}
-              selectedId={selectedId}
-              onSelect={(area) => {
-                handleSelect(area);
-                // No cerrar el drawer para que el usuario pueda seguir editando en cuadrícula
+            <Box
+              sx={{
+                px: 1.25,
+                py: 0.5,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                borderBottom: "1px solid rgba(157,36,73,0.15)",
               }}
-              onResize={handleResize}
-              onMove={handleMove}
-              floorLabel={
-                viewMode === "full"
-                  ? `PISO ${pisoActivo.label} — PLANTA COMPLETA`
-                  : `PISO ${pisoActivo.label} — ${ZONES[alaIdx].label}`
-              }
-              colStart={gridConfig.colStart}
-              colCount={gridConfig.colCount}
-              zoneKey={gridConfig.zoneKey}
-              mueblesPorArea={mueblesPorArea}
-              pendingChanges={pendingChanges}
-              conflictIds={conflictIds}
-              flipY
-              compact={viewMode === "full"}
-            />
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <MapIcon sx={{ fontSize: 13, color: "#c44e71" }} />
+                <Typography
+                  variant="caption"
+                  fontWeight={700}
+                  sx={{ color: "#c44e71", letterSpacing: 0.8, fontSize: 9 }}
+                >
+                  PLANTA — PISO {pisoActivo.label}
+                </Typography>
+              </Box>
+              <Tooltip title="Ocultar minimapa">
+                <IconButton
+                  size="small"
+                  onClick={() => setMiniMapOpen(false)}
+                  sx={{ color: "rgba(60,20,35,0.45)", p: 0.25 }}
+                >
+                  <ExpandMoreIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            {/* 300 × 254 ≈ proporción del viewBox del plano (464 × 394) */}
+            <Box sx={{ height: 254 }}>
+              <FloorPlanMobile
+                areas={areasDelPiso}
+                selectedId={selectedId}
+                onSelect={handleSelect}
+              />
+            </Box>
           </Box>
-
-          {conflictIds.size > 0 && (
-            <Alert severity="warning" sx={{ mt: 1, fontSize: 12 }}>
-              Hay áreas solapadas (marcadas en rojo). Corrige el solape antes de guardar.
-            </Alert>
-          )}
-        </Box>
-      </Drawer>
+        ) : (
+          <Tooltip title="Mostrar minimapa 2D" placement="right">
+            <IconButton
+              onClick={() => setMiniMapOpen(true)}
+              sx={{
+                position: "absolute",
+                left: 12,
+                bottom: 40,
+                zIndex: 12,
+                bgcolor: "rgba(255,255,255,0.94)",
+                border: "1px solid rgba(157,36,73,0.22)",
+                borderRadius: "8px",
+                boxShadow: "0 2px 10px rgba(157,36,73,0.12)",
+                color: "#9d2449",
+                width: 36,
+                height: 36,
+                "&:hover": { bgcolor: "rgba(157,36,73,0.10)" },
+              }}
+            >
+              <MapIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+        ))}
 
       {/* ── Modal Nueva Área ── */}
       <Dialog open={modalOpen} onClose={() => setModalOpen(false)} maxWidth="sm" fullWidth>
@@ -1913,6 +1867,29 @@ export const AreasPage = () => {
           <Button onClick={() => setModalOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={handleNuevaGuardar} disabled={nuevaSaving}>
             {nuevaSaving ? <CircularProgress size={18} /> : "Crear Área"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Dialog: confirmar borrado solicitado desde el visor (tool delete) ── */}
+      <Dialog open={!!deleteRequest} onClose={() => setDeleteRequest(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Desactivar área</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            ¿Desactivar el área <strong style={{ color: "#9d2449" }}>{deleteRequest?.label}</strong>
+            ? El área dejará de mostrarse en el visor (borrado lógico, se puede reactivar desde la
+            base de datos).
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteRequest(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
+            onClick={handleConfirmDeleteRequest}
+          >
+            Desactivar
           </Button>
         </DialogActions>
       </Dialog>

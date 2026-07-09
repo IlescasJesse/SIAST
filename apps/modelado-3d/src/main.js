@@ -26,6 +26,7 @@ import { addLabels, updateLabelVisibility, updateRoomLabel, ensureRoomLabel } fr
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
 import { createComposer, resizeComposer } from "./postprocessing.js";
+import { initEditor3D, setEditTool, isEditToolIntercepting } from "./editor3d.js";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:5101`;
 
@@ -271,6 +272,8 @@ let clickableMeshes = [...roomMeshes.values()];
 
 const onPointerClick = (e) => {
   if (embedMode) return;
+  // Con herramienta de edición activa (≠ select) los clicks los gestiona editor3d.js
+  if (isEditToolIntercepting()) return;
   pointer.x = (e.clientX / innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
@@ -609,6 +612,31 @@ window.SIAST3D = {
 };
 
 // ════════════════════════════════════════════════════════════
+// EDITOR 3D DE ÁREAS — solo con ?editor=1
+// Herramientas move/draw/resize/delete vía mensaje SET_EDIT_TOOL.
+// Toda la lógica (validación de huella, snap, handles, drags) vive
+// en editor3d.js; aquí solo se inyectan las referencias de la escena.
+// ════════════════════════════════════════════════════════════
+if (EDITOR_MODE) {
+  initEditor3D({
+    renderer,
+    camera,
+    controls,
+    scene,
+    roomMeshes,
+    liveRoomMap,
+    getActiveFloor: () => activeFloor,
+    // Aplica la geometría final tras un move/resize válido: reconstruye el
+    // mesh (rebuildRoomGeometry + muebles) y reancla el label flotante.
+    applyGeometry: (areaId, rect, floor) => {
+      window.SIAST3D.updateAreaGeometry(areaId, rect.x1, rect.y1, rect.x2, rect.y2, floor);
+      const mesh = roomMeshes.get(areaId);
+      if (mesh) ensureRoomLabel(scene, areaId, mesh.userData.label, mesh);
+    },
+  });
+}
+
+// ════════════════════════════════════════════════════════════
 // postMessage listener (integración con frontend React)
 // ════════════════════════════════════════════════════════════
 window.addEventListener("message", (e) => {
@@ -664,6 +692,13 @@ window.addEventListener("message", (e) => {
     }
     case "HIDE_MUEBLE_PIN":
       window.SIAST3D.hideMueblePin();
+      break;
+    case "SET_EDIT_TOOL":
+      // Herramientas de edición de áreas — solo activas con ?editor=1.
+      // Payload: { tool: 'select'|'move'|'draw'|'resize'|'delete' }
+      if (EDITOR_MODE && payload?.tool) {
+        setEditTool(payload.tool);
+      }
       break;
     case "FLY_TO_AREA":
       // Transición de cámara suave desde cualquier nivel hasta el área indicada.
