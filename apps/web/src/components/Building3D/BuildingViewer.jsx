@@ -2,7 +2,12 @@ import { useEffect, useRef } from "react";
 import { Box } from "@mui/material";
 import { useAuthStore } from "../../store/auth.js";
 
-const VIEWER_URL = import.meta.env.VITE_VIEWER_URL ?? `http://${window.location.hostname}:5174`;
+const VIEWER_URL = (() => {
+  const envUrl = import.meta.env.VITE_VIEWER_URL;
+  // Acepta URL absoluta (http://...) o ruta relativa same-origin (/visor3d/)
+  if (envUrl && typeof envUrl === "string" && envUrl.length > 0) return envUrl;
+  return `http://${window.location.hostname}:5174`;
+})();
 
 /**
  * Wrapper del iframe 3D con helpers postMessage.
@@ -16,7 +21,16 @@ export const BuildingViewer = ({ onRoomClick, autoHighlight, loginMode = false, 
   const token = useAuthStore((s) => s.token);
 
   const send = (type, payload) => {
-    ref.current?.contentWindow?.postMessage({ type, payload }, new URL(VIEWER_URL).origin);
+    try {
+      // Origin destino: si VIEWER_URL es absoluto usa su origin; si es relativo
+      // (/visor3d/) el visor corre en el mismo origen que esta página.
+      const origin = VIEWER_URL.startsWith("http")
+        ? new URL(VIEWER_URL).origin
+        : window.location.origin;
+      ref.current?.contentWindow?.postMessage({ type, payload }, origin);
+    } catch {
+      // viewer no disponible
+    }
   };
 
   // Escuchar mensajes desde el viewer
