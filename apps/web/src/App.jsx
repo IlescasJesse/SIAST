@@ -93,9 +93,9 @@ export const App = () => {
               </Route>
 
               {/* Solicitudes — cualquier usuario autenticado; backend filtra por rol */}
-              <Route path="/solicitudes" element={<SolicitudListPage />} />
-              <Route path="/solicitudes/nueva" element={<SolicitudNewPage />} />
-              <Route path="/solicitudes/:id" element={<SolicitudDetailPage />} />
+              <Route path="/solicitudes" element={<PageErrorBoundary><SolicitudListPage /></PageErrorBoundary>} />
+              <Route path="/solicitudes/nueva" element={<PageErrorBoundary><SolicitudNewPage /></PageErrorBoundary>} />
+              <Route path="/solicitudes/:id" element={<PageErrorBoundary><SolicitudDetailPage /></PageErrorBoundary>} />
 
               {/* Usuarios — mantener ruta legacy para compatibilidad */}
               <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
