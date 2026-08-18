@@ -28,12 +28,14 @@ import PropTypes from "prop-types";
 
 const ROLES_RESPONSABLE = [
   "RESPONSABLE_TI",
+  "RESPONSABLE_SISTEMAS",
   "RESPONSABLE_REDES",
   "RESPONSABLE_MANTENIMIENTO",
   "RESPONSABLE_RECURSOS_MATERIALES",
 ];
 const ROLES_TECNICO = [
   "TECNICO_TI",
+  "TECNICO_SISTEMAS",
   "TECNICO_REDES",
   "TECNICO_ELECTRICISTA",
   "TECNICO_PLOMERO",
@@ -41,7 +43,7 @@ const ROLES_TECNICO = [
 ];
 
 // Orden de sub-tabs de área: TI primero
-const AREA_PRIORITY = ["TI", "TECNOLOG", "REDES", "MANTENIMIENTO", "RECURSOS"];
+const AREA_PRIORITY = ["TI", "SISTEMAS", "TECNOLOG", "REDES", "MANTENIMIENTO", "RECURSOS"];
 
 function sortAreas(areas) {
   return [...areas].sort((a, b) => {
@@ -113,9 +115,7 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
       })
       .catch(() => {});
     getUsuarios()
-      .then((all) =>
-        setTecnicos(all.filter((u) => ROLES_TECNICO.includes(u.rol) && u.activo)),
-      )
+      .then((all) => setTecnicos(all.filter((u) => ROLES_TECNICO.includes(u.rol) && u.activo)))
       .catch(() => {});
   }, [showGlobal, areaSoporteId]);
 
@@ -206,9 +206,7 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
   const tecnicosFiltrados = useMemo(() => {
     if (!searchTecnico.trim()) return tecnicos;
     const q = searchTecnico.toLowerCase();
-    return tecnicos.filter((t) =>
-      `${t.nombre} ${t.apellidos}`.toLowerCase().includes(q),
-    );
+    return tecnicos.filter((t) => `${t.nombre} ${t.apellidos}`.toLowerCase().includes(q));
   }, [tecnicos, searchTecnico]);
 
   return (
@@ -239,14 +237,10 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
         </Box>
       </Box>
 
-      <Box sx={{ height: 2, mb: 1 }}>
-        {loading && <LinearProgress sx={{ height: 2 }} />}
-      </Box>
+      <Box sx={{ height: 2, mb: 1 }}>{loading && <LinearProgress sx={{ height: 2 }} />}</Box>
 
       {/* Tabs principales */}
-      <Box
-        sx={{ borderBottom: 1, borderColor: "divider", "@media print": { display: "none" } }}
-      >
+      <Box sx={{ borderBottom: 1, borderColor: "divider", "@media print": { display: "none" } }}>
         <Tabs
           value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
@@ -281,133 +275,131 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
 
       {/* Tab panels */}
       <Box sx={{ mt: 3 }}>
-          {/* ── Tab 0: Global ─────────────────────────────────────────────── */}
-          {showGlobal && (
-            <Box
-              sx={{
-                display: activeTab === 0 ? "block" : "none",
-                "@media print": { display: "block" },
-              }}
-            >
-              <MetricasTabGlobal
-                data={data?.tipo === "area" ? data : null}
-                loading={loading && activeTab === 0}
-                onResponsableClick={handleResponsableClick}
-              />
-            </Box>
-          )}
+        {/* ── Tab 0: Global ─────────────────────────────────────────────── */}
+        {showGlobal && (
+          <Box
+            sx={{
+              display: activeTab === 0 ? "block" : "none",
+              "@media print": { display: "block" },
+            }}
+          >
+            <MetricasTabGlobal
+              data={data?.tipo === "area" ? data : null}
+              loading={loading && activeTab === 0}
+              onResponsableClick={handleResponsableClick}
+            />
+          </Box>
+        )}
 
-          {/* ── Tab 1: Por Área ─────────────────── */}
-          {showResponsable && (
-            <Box
-              sx={{
-                display: activeTab === 1 ? "block" : "none",
-                "@media print": { display: "block", mt: 4 },
-              }}
-            >
-              {/* Sub-tabs de área (solo ADMIN/MESA_AYUDA ven selector) */}
-              {showGlobal && sortedAreas.length > 0 && (
-                <Box
-                  sx={{
-                    borderBottom: 1,
-                    borderColor: "divider",
-                    mb: 3,
-                    "@media print": { display: "none" },
-                  }}
+        {/* ── Tab 1: Por Área ─────────────────── */}
+        {showResponsable && (
+          <Box
+            sx={{
+              display: activeTab === 1 ? "block" : "none",
+              "@media print": { display: "block", mt: 4 },
+            }}
+          >
+            {/* Sub-tabs de área (solo ADMIN/MESA_AYUDA ven selector) */}
+            {showGlobal && sortedAreas.length > 0 && (
+              <Box
+                sx={{
+                  borderBottom: 1,
+                  borderColor: "divider",
+                  mb: 3,
+                  "@media print": { display: "none" },
+                }}
+              >
+                <Tabs
+                  value={selectedAreaId ?? false}
+                  onChange={(_, v) => setSelectedAreaId(v)}
+                  variant="scrollable"
+                  scrollButtons="auto"
+                  indicatorColor="secondary"
+                  textColor="secondary"
+                  sx={{ minHeight: 40 }}
                 >
-                  <Tabs
-                    value={selectedAreaId ?? false}
-                    onChange={(_, v) => setSelectedAreaId(v)}
-                    variant="scrollable"
-                    scrollButtons="auto"
-                    indicatorColor="secondary"
-                    textColor="secondary"
-                    sx={{ minHeight: 40 }}
-                  >
-                    {sortedAreas.map((a) => (
-                      <Tab
-                        key={a.id}
-                        label={formatLabel(a.nombre)}
-                        value={a.id}
-                        sx={{ fontSize: 12, minHeight: 40, py: 0.5 }}
+                  {sortedAreas.map((a) => (
+                    <Tab
+                      key={a.id}
+                      label={formatLabel(a.nombre)}
+                      value={a.id}
+                      sx={{ fontSize: 12, minHeight: 40, py: 0.5 }}
+                    />
+                  ))}
+                </Tabs>
+              </Box>
+            )}
+
+            <MetricasTabResponsable
+              data={data?.tipo === "tecnico" ? data : null}
+              loading={loading && activeTab === 1}
+              onTecnicoClick={handleTecnicoClick}
+            />
+          </Box>
+        )}
+
+        {/* ── Tab 2: Por Técnico ─────────────────────────────────────────── */}
+        {showTecnico && (
+          <Box
+            sx={{
+              display: activeTab === 2 ? "block" : "none",
+              "@media print": { display: "block", mt: 4 },
+            }}
+          >
+            {/* Selector de técnico — solo ADMIN/MESA_AYUDA */}
+            {showGlobal && (
+              <Box sx={{ mb: 3 }}>
+                <TextField
+                  size="small"
+                  placeholder="Buscar técnico por nombre…"
+                  value={searchTecnico}
+                  onChange={(e) => setSearchTecnico(e.target.value)}
+                  sx={{ mb: 1.5, maxWidth: 360 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  {tecnicosFiltrados.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Sin técnicos encontrados
+                    </Typography>
+                  ) : (
+                    tecnicosFiltrados.map((t) => (
+                      <Chip
+                        key={t.id}
+                        label={`${t.nombre} ${t.apellidos}`}
+                        onClick={() => setSelectedTecnicoId(t.id)}
+                        color={selectedTecnicoId === t.id ? "primary" : "default"}
+                        variant={selectedTecnicoId === t.id ? "filled" : "outlined"}
+                        size="small"
+                        sx={{ cursor: "pointer" }}
                       />
-                    ))}
-                  </Tabs>
-                </Box>
-              )}
-
-              <MetricasTabResponsable
-                data={data?.tipo === "tecnico" ? data : null}
-                loading={loading && activeTab === 1}
-                onTecnicoClick={handleTecnicoClick}
-              />
-            </Box>
-          )}
-
-          {/* ── Tab 2: Por Técnico ─────────────────────────────────────────── */}
-          {showTecnico && (
-            <Box
-              sx={{
-                display: activeTab === 2 ? "block" : "none",
-                "@media print": { display: "block", mt: 4 },
-              }}
-            >
-              {/* Selector de técnico — solo ADMIN/MESA_AYUDA */}
-              {showGlobal && (
-                <Box sx={{ mb: 3 }}>
-                  <TextField
-                    size="small"
-                    placeholder="Buscar técnico por nombre…"
-                    value={searchTecnico}
-                    onChange={(e) => setSearchTecnico(e.target.value)}
-                    sx={{ mb: 1.5, maxWidth: 360 }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon fontSize="small" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                    {tecnicosFiltrados.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        Sin técnicos encontrados
-                      </Typography>
-                    ) : (
-                      tecnicosFiltrados.map((t) => (
-                        <Chip
-                          key={t.id}
-                          label={`${t.nombre} ${t.apellidos}`}
-                          onClick={() => setSelectedTecnicoId(t.id)}
-                          color={selectedTecnicoId === t.id ? "primary" : "default"}
-                          variant={selectedTecnicoId === t.id ? "filled" : "outlined"}
-                          size="small"
-                          sx={{ cursor: "pointer" }}
-                        />
-                      ))
-                    )}
-                  </Box>
-                  {selectedTecnicoId && (
-                    <Divider sx={{ mt: 2, mb: 0 }} />
+                    ))
                   )}
                 </Box>
-              )}
+                {selectedTecnicoId && <Divider sx={{ mt: 2, mb: 0 }} />}
+              </Box>
+            )}
 
-              {/* Métricas del técnico seleccionado */}
-              {(esTecnicoRol || selectedTecnicoId) ? (
-                <MetricasTabTecnico
-                  data={data?.tipo === "proceso" ? data : null}
-                  loading={loading && activeTab === 2}
-                />
-              ) : (
-                <Typography color="text.secondary" sx={{ mt: 1 }}>
-                  Selecciona un técnico para ver sus métricas.
-                </Typography>
-              )}
-            </Box>
-          )}
-        </Box>
+            {/* Métricas del técnico seleccionado */}
+            {esTecnicoRol || selectedTecnicoId ? (
+              <MetricasTabTecnico
+                data={data?.tipo === "proceso" ? data : null}
+                loading={loading && activeTab === 2}
+              />
+            ) : (
+              <Typography color="text.secondary" sx={{ mt: 1 }}>
+                Selecciona un técnico para ver sus métricas.
+              </Typography>
+            )}
+          </Box>
+        )}
+      </Box>
 
       {/* Print: rango de fechas */}
       <Box sx={{ display: "none", "@media print": { display: "block", mt: 2 } }}>

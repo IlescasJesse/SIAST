@@ -56,13 +56,13 @@ async function main() {
   const areasSoporteData = [
     {
       nombre: "TI",
-      subcategorias: [
-        "SISTEMAS_INSTITUCIONALES",
-        "EQUIPOS_DISPOSITIVOS",
-        "CUENTAS_DOMINIO",
-        "CORREO_OUTLOOK",
-      ],
+      subcategorias: ["EQUIPOS_DISPOSITIVOS", "CUENTAS_DOMINIO", "CORREO_OUTLOOK"],
       rolesIncluidos: ["RESPONSABLE_TI", "TECNICO_TI"],
+    },
+    {
+      nombre: "SISTEMAS",
+      subcategorias: ["SISTEMAS_INSTITUCIONALES"],
+      rolesIncluidos: ["RESPONSABLE_SISTEMAS", "TECNICO_SISTEMAS"],
     },
     {
       nombre: "REDES",

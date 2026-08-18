@@ -39,7 +39,7 @@ async function pedirPermisoNotificaciones() {
 export const useNotifStore = create((set, get) => ({
   notificaciones: [],
   noLeidas: 0,
-  ticketsVersion: 0,   // se incrementa con cada evento de ticket para forzar refetch
+  ticketsVersion: 0, // se incrementa con cada evento de ticket para forzar refetch
   socket: null,
   permisoNotif: typeof window !== "undefined" ? Notification.permission : "default",
 
@@ -52,9 +52,7 @@ export const useNotifStore = create((set, get) => ({
     if (socket) return;
 
     // Solicitar permiso de notificaciones al conectar
-    pedirPermisoNotificaciones().then(() =>
-      set({ permisoNotif: Notification.permission }),
-    );
+    pedirPermisoNotificaciones().then(() => set({ permisoNotif: Notification.permission }));
 
     socket = io(API_BASE, { transports: ["websocket"] });
 
@@ -63,10 +61,12 @@ export const useNotifStore = create((set, get) => ({
         user.rol === "ADMIN" ||
         user.rol === "MESA_AYUDA" ||
         user.rol === "RESPONSABLE_TI" ||
+        user.rol === "RESPONSABLE_SISTEMAS" ||
         user.rol === "RESPONSABLE_REDES" ||
         user.rol === "RESPONSABLE_MANTENIMIENTO" ||
         user.rol === "RESPONSABLE_RECURSOS_MATERIALES"
-      ) socket.emit("join:admin");
+      )
+        socket.emit("join:admin");
       if (user.rol !== "EMPLEADO") socket.emit("join:user", String(user.id));
       if (user.rfc) socket.emit("join:empleado", user.rfc);
     });

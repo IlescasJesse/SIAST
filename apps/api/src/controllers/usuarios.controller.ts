@@ -5,6 +5,8 @@ import { prisma } from "../config/database.js";
 const ROL_AREA_MAP: Record<string, string> = {
   RESPONSABLE_TI: "TI",
   TECNICO_TI: "TI",
+  RESPONSABLE_SISTEMAS: "SISTEMAS",
+  TECNICO_SISTEMAS: "SISTEMAS",
   RESPONSABLE_REDES: "REDES",
   TECNICO_REDES: "REDES",
   RESPONSABLE_MANTENIMIENTO: "MANTENIMIENTO",
@@ -48,7 +50,10 @@ const userSelect = {
 
 export const listar = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const usuarios = await prisma.usuario.findMany({ select: userSelect, orderBy: { nombre: "asc" } });
+    const usuarios = await prisma.usuario.findMany({
+      select: userSelect,
+      orderBy: { nombre: "asc" },
+    });
     res.json({ data: usuarios, total: usuarios.length });
   } catch (err) {
     next(err);
@@ -57,12 +62,20 @@ export const listar = async (_req: Request, res: Response, next: NextFunction) =
 
 export const crear = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, usuario, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body as {
-      nombre: string; apellidos: string; usuario: string;
-      password: string; rol: string; email?: string; telefono?: string;
-      esEmpleadoEstructura?: boolean; empleadoId?: string; rfc?: string;
-      permisos?: string[];
-    };
+    const { password, usuario, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } =
+      req.body as {
+        nombre: string;
+        apellidos: string;
+        usuario: string;
+        password: string;
+        rol: string;
+        email?: string;
+        telefono?: string;
+        esEmpleadoEstructura?: boolean;
+        empleadoId?: string;
+        rfc?: string;
+        permisos?: string[];
+      };
 
     // Validar campos requeridos antes de cualquier operación async
     const camposFaltantes: string[] = [];
@@ -105,7 +118,10 @@ export const obtener = async (req: Request, res: Response, next: NextFunction) =
       where: { id: parseId(req.params.id) },
       select: userSelect,
     });
-    if (!usuario) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+    if (!usuario) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
     res.json(usuario);
   } catch (err) {
     next(err);
@@ -114,7 +130,8 @@ export const obtener = async (req: Request, res: Response, next: NextFunction) =
 
 export const actualizar = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { password, usuario, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } = req.body;
+    const { password, usuario, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } =
+      req.body;
 
     // Validar campos que no pueden estar vacíos si vienen en el body
     if (usuario !== undefined && !usuario?.trim()) {
@@ -126,7 +143,9 @@ export const actualizar = async (req: Request, res: Response, next: NextFunction
       return;
     }
     if (rest.apellidos !== undefined && !rest.apellidos?.trim()) {
-      res.status(400).json({ error: "El campo apellidos no puede estar vacío", campos: ["apellidos"] });
+      res
+        .status(400)
+        .json({ error: "El campo apellidos no puede estar vacío", campos: ["apellidos"] });
       return;
     }
 

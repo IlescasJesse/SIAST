@@ -20,7 +20,18 @@ class PageErrorBoundary extends Component {
           <Typography variant="h6" color="error" gutterBottom>
             Error al cargar la página
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontFamily: "monospace", whiteSpace: "pre-wrap", textAlign: "left", maxWidth: 600, mx: "auto" }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              mb: 2,
+              fontFamily: "monospace",
+              whiteSpace: "pre-wrap",
+              textAlign: "left",
+              maxWidth: 600,
+              mx: "auto",
+            }}
+          >
             {this.state.error?.message}
           </Typography>
           <Button variant="outlined" onClick={() => this.setState({ error: null })}>
@@ -51,7 +62,8 @@ const ProtectedRoute = ({ roles }) => {
   const { user, token } = useAuthStore();
   const location = useLocation();
   if (!token || !user) {
-    const redirectParam = location.pathname !== "/" ? `?redirect=${encodeURIComponent(location.pathname)}` : "";
+    const redirectParam =
+      location.pathname !== "/" ? `?redirect=${encodeURIComponent(location.pathname)}` : "";
     return <Navigate to={`/login${redirectParam}`} replace />;
   }
   if (roles && !roles.includes(user.rol)) return <Navigate to="/" replace />;
@@ -73,36 +85,133 @@ export const App = () => {
           {/* Protegidas — con layout */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
-
               {/* Redirect raíz según rol */}
               <Route path="/" element={<RootRedirect />} />
 
               {/* Recursos Materiales — Admin, Gestor y Responsable */}
-              <Route element={<ProtectedRoute roles={["ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"]} />}>
-                <Route path="/recursos" element={<PageErrorBoundary><RecursosPage /></PageErrorBoundary>} />
+              <Route
+                element={
+                  <ProtectedRoute
+                    roles={[
+                      "ADMIN",
+                      "GESTOR_RECURSOS_MATERIALES",
+                      "RESPONSABLE_RECURSOS_MATERIALES",
+                    ]}
+                  />
+                }
+              >
+                <Route
+                  path="/recursos"
+                  element={
+                    <PageErrorBoundary>
+                      <RecursosPage />
+                    </PageErrorBoundary>
+                  }
+                />
               </Route>
 
               {/* Dashboard — admin, técnicos, gestores y responsables */}
-              <Route element={<ProtectedRoute roles={["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"]} />}>
+              <Route
+                element={
+                  <ProtectedRoute
+                    roles={[
+                      "ADMIN",
+                      "TECNICO_TI",
+                      "TECNICO_SISTEMAS",
+                      "TECNICO_REDES",
+                      "TECNICO_SERVICIOS",
+                      "MESA_AYUDA",
+                      "GESTOR_RECURSOS_MATERIALES",
+                      "RESPONSABLE_RECURSOS_MATERIALES",
+                      "RESPONSABLE_TI",
+                      "RESPONSABLE_SISTEMAS",
+                      "RESPONSABLE_REDES",
+                      "RESPONSABLE_MANTENIMIENTO",
+                      "TECNICO_ELECTRICISTA",
+                      "TECNICO_PLOMERO",
+                      "TECNICO_MOVILIDAD",
+                    ]}
+                  />
+                }
+              >
                 <Route path="/dashboard" element={<DashboardPage />} />
               </Route>
 
               {/* Métricas Operacionales */}
-              <Route element={<ProtectedRoute roles={["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_TI", "TECNICO_REDES", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"]} />}>
-                <Route path="/metricas" element={<PageErrorBoundary><MetricasPage /></PageErrorBoundary>} />
+              <Route
+                element={
+                  <ProtectedRoute
+                    roles={[
+                      "ADMIN",
+                      "MESA_AYUDA",
+                      "RESPONSABLE_TI",
+                      "RESPONSABLE_REDES",
+                      "RESPONSABLE_MANTENIMIENTO",
+                      "TECNICO_TI",
+                      "TECNICO_REDES",
+                      "TECNICO_ELECTRICISTA",
+                      "TECNICO_PLOMERO",
+                      "TECNICO_MOVILIDAD",
+                    ]}
+                  />
+                }
+              >
+                <Route
+                  path="/metricas"
+                  element={
+                    <PageErrorBoundary>
+                      <MetricasPage />
+                    </PageErrorBoundary>
+                  }
+                />
               </Route>
 
               {/* Solicitudes — cualquier usuario autenticado; backend filtra por rol */}
-              <Route path="/solicitudes" element={<PageErrorBoundary><SolicitudListPage /></PageErrorBoundary>} />
-              <Route path="/solicitudes/nueva" element={<PageErrorBoundary><SolicitudNewPage /></PageErrorBoundary>} />
-              <Route path="/solicitudes/:id" element={<PageErrorBoundary><SolicitudDetailPage /></PageErrorBoundary>} />
+              <Route
+                path="/solicitudes"
+                element={
+                  <PageErrorBoundary>
+                    <SolicitudListPage />
+                  </PageErrorBoundary>
+                }
+              />
+              <Route
+                path="/solicitudes/nueva"
+                element={
+                  <PageErrorBoundary>
+                    <SolicitudNewPage />
+                  </PageErrorBoundary>
+                }
+              />
+              <Route
+                path="/solicitudes/:id"
+                element={
+                  <PageErrorBoundary>
+                    <SolicitudDetailPage />
+                  </PageErrorBoundary>
+                }
+              />
 
               {/* Usuarios — mantener ruta legacy para compatibilidad */}
               <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
                 <Route path="/usuarios" element={<UsuariosPage />} />
-                <Route path="/admin/areas" element={<PageErrorBoundary><AreasPage /></PageErrorBoundary>} />
+                <Route
+                  path="/admin/areas"
+                  element={
+                    <PageErrorBoundary>
+                      <AreasPage />
+                    </PageErrorBoundary>
+                  }
+                />
                 {/* Módulo de Administración */}
-                <Route path="/admin" element={<PageErrorBoundary><AdminPage /></PageErrorBoundary>} />
+                <Route
+                  path="/admin"
+                  element={
+                    <PageErrorBoundary>
+                      <AdminPage />
+                    </PageErrorBoundary>
+                  }
+                />
               </Route>
 
               {/* Perfil */}
@@ -123,6 +232,7 @@ const RootRedirect = () => {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
   if (user.rol === "EMPLEADO") return <Navigate to="/solicitudes/nueva" replace />;
-  if (user.rol === "GESTOR_RECURSOS_MATERIALES" || user.rol === "RESPONSABLE_RECURSOS_MATERIALES") return <Navigate to="/recursos" replace />;
+  if (user.rol === "GESTOR_RECURSOS_MATERIALES" || user.rol === "RESPONSABLE_RECURSOS_MATERIALES")
+    return <Navigate to="/recursos" replace />;
   return <Navigate to="/dashboard" replace />;
 };

@@ -11,6 +11,9 @@ export const RolSchema = z.enum([
   // Área TI
   "RESPONSABLE_TI",
   "TECNICO_TI",
+  // Área Sistemas
+  "RESPONSABLE_SISTEMAS",
+  "TECNICO_SISTEMAS",
   // Área Redes
   "RESPONSABLE_REDES",
   "TECNICO_REDES",
@@ -387,6 +390,8 @@ export const LABEL_ROL: Record<string, string> = {
   EMPLEADO: "Empleado",
   RESPONSABLE_TI: "Responsable de TI",
   TECNICO_TI: "Técnico TI",
+  RESPONSABLE_SISTEMAS: "Responsable de Sistemas",
+  TECNICO_SISTEMAS: "Técnico de Sistemas",
   RESPONSABLE_REDES: "Responsable de Redes",
   TECNICO_REDES: "Técnico de Redes",
   RESPONSABLE_MANTENIMIENTO: "Responsable de Mantenimiento",
@@ -630,6 +635,13 @@ export const PERMISOS_DEFAULT: Record<Rol, Permiso[]> = {
   EMPLEADO: [],
   RESPONSABLE_TI: ["solicitudes.ver_todas", "solicitudes.asignar", "pasos.asignar", "metricas.ver"],
   TECNICO_TI: ["solicitudes.ver_todas", "metricas.ver"],
+  RESPONSABLE_SISTEMAS: [
+    "solicitudes.ver_todas",
+    "solicitudes.asignar",
+    "pasos.asignar",
+    "metricas.ver",
+  ],
+  TECNICO_SISTEMAS: ["solicitudes.ver_todas", "metricas.ver"],
   RESPONSABLE_REDES: [
     "solicitudes.ver_todas",
     "solicitudes.asignar",

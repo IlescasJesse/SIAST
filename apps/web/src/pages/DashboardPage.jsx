@@ -1,9 +1,25 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Grid, Card, CardContent, Typography, Box, Chip, CircularProgress,
-  LinearProgress, Divider, Avatar, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Paper, IconButton, Tooltip,
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  Box,
+  Chip,
+  CircularProgress,
+  LinearProgress,
+  Divider,
+  Avatar,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
@@ -28,16 +44,17 @@ import { es } from "date-fns/locale";
 // ── Constantes visuales ───────────────────────────────────────────────────────
 const ESTADO_COLOR = TICKET_ESTADO_COLOR;
 const ESTADO_LABEL = {
-  ABIERTO:     "Abierto",
-  ASIGNADO:    "Asignado",
+  ABIERTO: "Abierto",
+  ASIGNADO: "Asignado",
   EN_PROGRESO: "En Progreso",
-  RESUELTO:    "Resuelto",
-  CANCELADO:   "Cancelado",
+  RESUELTO: "Resuelto",
+  CANCELADO: "Cancelado",
 };
 const PRIORIDAD_COLOR = TICKET_PRIORIDAD_COLOR;
 const ROL_LABEL = {
   ADMIN: "Administrador",
   TECNICO_TI: "Técnico TI",
+  TECNICO_SISTEMAS: "Técnico de Sistemas",
   TECNICO_REDES: "Técnico de Redes",
   TECNICO_SERVICIOS: "Técnico en Servicios Generales",
   MESA_AYUDA: "Mesa de Ayuda",
@@ -46,6 +63,7 @@ const ROL_LABEL = {
   GESTOR_RECURSOS: "Gestor de Recursos",
   GESTOR_INVENTARIO: "Gestor de Inventario",
   RESPONSABLE_TI: "Responsable TI",
+  RESPONSABLE_SISTEMAS: "Responsable de Sistemas",
   RESPONSABLE_REDES: "Responsable de Redes",
   RESPONSABLE_MANTENIMIENTO: "Responsable de Mantenimiento",
   RESPONSABLE_RECURSOS_MATERIALES: "Responsable de Recursos Materiales",
@@ -61,10 +79,16 @@ const StatCard = ({ icon, label, value, color, subtitle }) => (
         {icon}
       </Box>
       <Box>
-        <Typography variant="h4" fontWeight={700} lineHeight={1}>{value}</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>{label}</Typography>
+        <Typography variant="h4" fontWeight={700} lineHeight={1}>
+          {value}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+          {label}
+        </Typography>
         {subtitle && (
-          <Typography variant="caption" color="text.disabled">{subtitle}</Typography>
+          <Typography variant="caption" color="text.disabled">
+            {subtitle}
+          </Typography>
         )}
       </Box>
     </CardContent>
@@ -76,10 +100,16 @@ const MetricBar = ({ label, value, total, color }) => {
   return (
     <Box sx={{ mb: 1.5 }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.4 }}>
-        <Typography variant="body2" color="text.secondary">{label}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {label}
+        </Typography>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-          <Typography variant="body2" fontWeight={700}>{value}</Typography>
-          <Typography variant="caption" color="text.disabled">{pct}%</Typography>
+          <Typography variant="body2" fontWeight={700}>
+            {value}
+          </Typography>
+          <Typography variant="caption" color="text.disabled">
+            {pct}%
+          </Typography>
         </Box>
       </Box>
       <LinearProgress
@@ -165,11 +195,32 @@ function MetricasAdmin({ tickets }) {
       {/* Tarjetas principales */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { icon: <ConfirmationNumberIcon />, label: "Total solicitudes", value: total, color: "#5c6bc0" },
-          { icon: <HourglassEmptyIcon />, label: "Sin asignar", value: sinAsignar, color: "#e65100", subtitle: "requieren atención" },
-          { icon: <PendingActionsIcon />, label: "En atención", value: enAtencion, color: "#6a1b9a" },
+          {
+            icon: <ConfirmationNumberIcon />,
+            label: "Total solicitudes",
+            value: total,
+            color: "#5c6bc0",
+          },
+          {
+            icon: <HourglassEmptyIcon />,
+            label: "Sin asignar",
+            value: sinAsignar,
+            color: "#e65100",
+            subtitle: "requieren atención",
+          },
+          {
+            icon: <PendingActionsIcon />,
+            label: "En atención",
+            value: enAtencion,
+            color: "#6a1b9a",
+          },
           { icon: <CheckCircleIcon />, label: "Resueltos", value: resueltos, color: "#2e7d32" },
-          { icon: <ReportProblemIcon />, label: "Urgentes activos", value: urgentes, color: "#c62828" },
+          {
+            icon: <ReportProblemIcon />,
+            label: "Urgentes activos",
+            value: urgentes,
+            color: "#c62828",
+          },
         ].map((s) => (
           <Grid item xs={6} sm={4} md key={s.label}>
             <StatCard {...s} />
@@ -183,7 +234,13 @@ function MetricasAdmin({ tickets }) {
         <Grid item xs={12} md={4}>
           <SectionCard title="Por estado" icon={<BarChartIcon />}>
             {Object.entries(ESTADO_LABEL).map(([key, lbl]) => (
-              <MetricBar key={key} label={lbl} value={porEstado[key] ?? 0} total={total} color={ESTADO_COLOR[key]} />
+              <MetricBar
+                key={key}
+                label={lbl}
+                value={porEstado[key] ?? 0}
+                total={total}
+                color={ESTADO_COLOR[key]}
+              />
             ))}
           </SectionCard>
         </Grid>
@@ -192,11 +249,23 @@ function MetricasAdmin({ tickets }) {
         <Grid item xs={12} md={4}>
           <SectionCard title="Por prioridad" icon={<ReportProblemIcon />}>
             {["URGENTE", "ALTA", "MEDIA", "BAJA"].map((p) => (
-              <MetricBar key={p} label={p.charAt(0) + p.slice(1).toLowerCase()} value={porPrioridad[p] ?? 0} total={total} color={PRIORIDAD_COLOR[p]} />
+              <MetricBar
+                key={p}
+                label={p.charAt(0) + p.slice(1).toLowerCase()}
+                value={porPrioridad[p] ?? 0}
+                total={total}
+                color={PRIORIDAD_COLOR[p]}
+              />
             ))}
             <Divider sx={{ my: 1.5 }} />
             {topN(porCategoria).map(([cat, cnt]) => (
-              <MetricBar key={cat} label={cat.replace(/_/g, " ")} value={cnt} total={total} color="#9D2449" />
+              <MetricBar
+                key={cat}
+                label={cat.replace(/_/g, " ")}
+                value={cnt}
+                total={total}
+                color="#9D2449"
+              />
             ))}
           </SectionCard>
         </Grid>
@@ -205,26 +274,43 @@ function MetricasAdmin({ tickets }) {
         <Grid item xs={12} md={4}>
           <SectionCard title="Técnicos con más solicitudes" icon={<AssignmentIndIcon />}>
             {topTecnicos.length === 0 ? (
-              <Typography variant="body2" color="text.disabled">Sin asignaciones</Typography>
-            ) : topTecnicos.map(([nombre, cnt]) => (
-              <Box key={nombre} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-                <Avatar sx={{ width: 28, height: 28, fontSize: 12, bgcolor: "#9D2449" }}>
-                  {nombre.charAt(0)}
-                </Avatar>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" noWrap>{nombre}</Typography>
-                  <LinearProgress variant="determinate"
-                    value={total > 0 ? (cnt / total) * 100 : 0}
-                    sx={{ height: 4, borderRadius: 2, bgcolor: "grey.100", "& .MuiLinearProgress-bar": { bgcolor: "#9D2449" } }}
-                  />
+              <Typography variant="body2" color="text.disabled">
+                Sin asignaciones
+              </Typography>
+            ) : (
+              topTecnicos.map(([nombre, cnt]) => (
+                <Box key={nombre} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                  <Avatar sx={{ width: 28, height: 28, fontSize: 12, bgcolor: "#9D2449" }}>
+                    {nombre.charAt(0)}
+                  </Avatar>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" noWrap>
+                      {nombre}
+                    </Typography>
+                    <LinearProgress
+                      variant="determinate"
+                      value={total > 0 ? (cnt / total) * 100 : 0}
+                      sx={{
+                        height: 4,
+                        borderRadius: 2,
+                        bgcolor: "grey.100",
+                        "& .MuiLinearProgress-bar": { bgcolor: "#9D2449" },
+                      }}
+                    />
+                  </Box>
+                  <Chip label={cnt} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
                 </Box>
-                <Chip label={cnt} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
-              </Box>
-            ))}
+              ))
+            )}
             {topAreas.length > 0 && (
               <>
                 <Divider sx={{ my: 1.5 }} />
-                <Typography variant="caption" fontWeight={700} color="text.secondary" letterSpacing={0.5}>
+                <Typography
+                  variant="caption"
+                  fontWeight={700}
+                  color="text.secondary"
+                  letterSpacing={0.5}
+                >
                   ÁREAS CON MÁS INCIDENCIAS
                 </Typography>
                 {topAreas.map(([area, cnt]) => (
@@ -244,22 +330,44 @@ function MetricasTecnico({ tickets, user, misPasos = [], navigate }) {
   const asignados = misTickets.filter((t) => t.estado === "ASIGNADO").length;
   const enProgreso = misTickets.filter((t) => t.estado === "EN_PROGRESO").length;
   const resueltos = misTickets.filter((t) => t.estado === "RESUELTO").length;
-  const urgentes = misTickets.filter((t) => t.prioridad === "URGENTE" && !["RESUELTO", "CANCELADO"].includes(t.estado));
+  const urgentes = misTickets.filter(
+    (t) => t.prioridad === "URGENTE" && !["RESUELTO", "CANCELADO"].includes(t.estado),
+  );
   const total = misTickets.length;
 
-  const porPrioridad = countBy(misTickets.filter((t) => !["RESUELTO", "CANCELADO"].includes(t.estado)), "prioridad");
+  const porPrioridad = countBy(
+    misTickets.filter((t) => !["RESUELTO", "CANCELADO"].includes(t.estado)),
+    "prioridad",
+  );
   const porCategoria = countBy(misTickets, "categoria");
 
   return (
     <>
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { icon: <ConfirmationNumberIcon />, label: "Solicitudes asignadas a mí", value: asignados, color: "#e65100" },
-          { icon: <PendingActionsIcon />, label: "En progreso", value: enProgreso, color: "#6a1b9a" },
+          {
+            icon: <ConfirmationNumberIcon />,
+            label: "Solicitudes asignadas a mí",
+            value: asignados,
+            color: "#e65100",
+          },
+          {
+            icon: <PendingActionsIcon />,
+            label: "En progreso",
+            value: enProgreso,
+            color: "#6a1b9a",
+          },
           { icon: <CheckCircleIcon />, label: "Resueltos", value: resueltos, color: "#2e7d32" },
-          { icon: <ReportProblemIcon />, label: "Urgentes activos", value: urgentes.length, color: "#c62828" },
+          {
+            icon: <ReportProblemIcon />,
+            label: "Urgentes activos",
+            value: urgentes.length,
+            color: "#c62828",
+          },
         ].map((s) => (
-          <Grid item xs={6} sm={3} key={s.label}><StatCard {...s} /></Grid>
+          <Grid item xs={6} sm={3} key={s.label}>
+            <StatCard {...s} />
+          </Grid>
         ))}
       </Grid>
 
@@ -267,20 +375,31 @@ function MetricasTecnico({ tickets, user, misPasos = [], navigate }) {
         <Grid item xs={12} md={6}>
           <SectionCard title="Mis solicitudes por prioridad" icon={<ReportProblemIcon />}>
             {["URGENTE", "ALTA", "MEDIA", "BAJA"].map((p) => (
-              <MetricBar key={p} label={p.charAt(0) + p.slice(1).toLowerCase()}
+              <MetricBar
+                key={p}
+                label={p.charAt(0) + p.slice(1).toLowerCase()}
                 value={porPrioridad[p] ?? 0}
                 total={Object.values(porPrioridad).reduce((a, b) => a + b, 0) || 1}
-                color={PRIORIDAD_COLOR[p]} />
+                color={PRIORIDAD_COLOR[p]}
+              />
             ))}
           </SectionCard>
         </Grid>
         <Grid item xs={12} md={6}>
           <SectionCard title="Mis solicitudes por categoría" icon={<BarChartIcon />}>
             {topN(porCategoria).map(([cat, cnt]) => (
-              <MetricBar key={cat} label={cat.replace(/_/g, " ")} value={cnt} total={total || 1} color="#9D2449" />
+              <MetricBar
+                key={cat}
+                label={cat.replace(/_/g, " ")}
+                value={cnt}
+                total={total || 1}
+                color="#9D2449"
+              />
             ))}
             {Object.keys(porCategoria).length === 0 && (
-              <Typography variant="body2" color="text.disabled">Sin solicitudes registradas</Typography>
+              <Typography variant="body2" color="text.disabled">
+                Sin solicitudes registradas
+              </Typography>
             )}
           </SectionCard>
         </Grid>
@@ -290,11 +409,31 @@ function MetricasTecnico({ tickets, user, misPasos = [], navigate }) {
               <Grid container spacing={1}>
                 {urgentes.map((t) => (
                   <Grid item xs={12} sm={6} md={4} key={t.id}>
-                    <Box sx={{ border: "1px solid #ffd0d0", borderRadius: 1, p: 1, bgcolor: "#fff5f5" }}>
-                      <Typography variant="body2" fontWeight={700} noWrap>{t.folio ?? `#${t.id}`} — {t.asunto}</Typography>
-                      <Typography variant="caption" color="text.secondary">{t.area?.label}</Typography>
+                    <Box
+                      sx={{
+                        border: "1px solid #ffd0d0",
+                        borderRadius: 1,
+                        p: 1,
+                        bgcolor: "#fff5f5",
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight={700} noWrap>
+                        {t.folio ?? `#${t.id}`} — {t.asunto}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {t.area?.label}
+                      </Typography>
                       <Box sx={{ mt: 0.5 }}>
-                        <Chip label={ESTADO_LABEL[t.estado] ?? t.estado} size="small" sx={{ bgcolor: ESTADO_COLOR[t.estado], color: "#fff", fontSize: 10, height: 18 }} />
+                        <Chip
+                          label={ESTADO_LABEL[t.estado] ?? t.estado}
+                          size="small"
+                          sx={{
+                            bgcolor: ESTADO_COLOR[t.estado],
+                            color: "#fff",
+                            fontSize: 10,
+                            height: 18,
+                          }}
+                        />
                       </Box>
                     </Box>
                   </Grid>
@@ -316,22 +455,50 @@ function MetricasTecnico({ tickets, user, misPasos = [], navigate }) {
                 )}
               </Box>
               {misPasos.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">Sin pasos activos asignados</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Sin pasos activos asignados
+                </Typography>
               ) : (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                   {misPasos.map((p) => (
                     <Box
                       key={p.id}
                       onClick={() => navigate(`/solicitudes/${p.ticketId}`)}
-                      sx={{ p: 1.5, borderRadius: 1, border: "1px solid", borderColor: "divider", cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 1,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        cursor: "pointer",
+                        "&:hover": { bgcolor: "action.hover" },
+                      }}
                     >
-                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <Typography variant="caption" color="primary" fontWeight={700} sx={{ fontFamily: "monospace" }}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          color="primary"
+                          fontWeight={700}
+                          sx={{ fontFamily: "monospace" }}
+                        >
                           {p.ticket?.folio ?? `#${p.ticketId}`}
                         </Typography>
-                        <Chip label={`Paso ${p.orden}`} size="small" color="info" variant="outlined" sx={{ height: 18, fontSize: 10 }} />
+                        <Chip
+                          label={`Paso ${p.orden}`}
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: 10 }}
+                        />
                       </Box>
-                      <Typography variant="body2" fontWeight={500} noWrap>{p.nombre ?? p.ticket?.asunto}</Typography>
+                      <Typography variant="body2" fontWeight={500} noWrap>
+                        {p.nombre ?? p.ticket?.asunto}
+                      </Typography>
                       <Typography variant="caption" color="text.secondary" noWrap>
                         {p.ticket?.empleado?.nombreCompleto} · {p.ticket?.area?.label}
                       </Typography>
@@ -350,7 +517,13 @@ function MetricasTecnico({ tickets, user, misPasos = [], navigate }) {
 function MetricasMesaAyuda({ tickets }) {
   const total = tickets.length;
   const sinAsignar = tickets.filter((t) => t.estado === "ABIERTO" && !t.tecnicoId).length;
-  const hoy = tickets.filter((t) => { try { return isToday(new Date(t.createdAt)); } catch { return false; } }).length;
+  const hoy = tickets.filter((t) => {
+    try {
+      return isToday(new Date(t.createdAt));
+    } catch {
+      return false;
+    }
+  }).length;
   const activos = tickets.filter((t) => !["RESUELTO", "CANCELADO"].includes(t.estado)).length;
   const resueltos = tickets.filter((t) => t.estado === "RESUELTO").length;
   const porEstado = countBy(tickets, "estado");
@@ -361,25 +534,50 @@ function MetricasMesaAyuda({ tickets }) {
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
           { icon: <TodayIcon />, label: "Registrados hoy", value: hoy, color: "#0288d1" },
-          { icon: <HourglassEmptyIcon />, label: "Sin asignar", value: sinAsignar, color: "#e65100", subtitle: "requieren técnico" },
-          { icon: <PendingActionsIcon />, label: "Solicitudes activas", value: activos, color: "#6a1b9a" },
+          {
+            icon: <HourglassEmptyIcon />,
+            label: "Sin asignar",
+            value: sinAsignar,
+            color: "#e65100",
+            subtitle: "requieren técnico",
+          },
+          {
+            icon: <PendingActionsIcon />,
+            label: "Solicitudes activas",
+            value: activos,
+            color: "#6a1b9a",
+          },
           { icon: <CheckCircleIcon />, label: "Resueltos", value: resueltos, color: "#2e7d32" },
         ].map((s) => (
-          <Grid item xs={6} sm={3} key={s.label}><StatCard {...s} /></Grid>
+          <Grid item xs={6} sm={3} key={s.label}>
+            <StatCard {...s} />
+          </Grid>
         ))}
       </Grid>
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
           <SectionCard title="Por estado" icon={<BarChartIcon />}>
             {Object.entries(ESTADO_LABEL).map(([key, lbl]) => (
-              <MetricBar key={key} label={lbl} value={porEstado[key] ?? 0} total={total} color={ESTADO_COLOR[key]} />
+              <MetricBar
+                key={key}
+                label={lbl}
+                value={porEstado[key] ?? 0}
+                total={total}
+                color={ESTADO_COLOR[key]}
+              />
             ))}
           </SectionCard>
         </Grid>
         <Grid item xs={12} md={6}>
           <SectionCard title="Por categoría" icon={<BarChartIcon />}>
             {topN(porCategoria).map(([cat, cnt]) => (
-              <MetricBar key={cat} label={cat.replace(/_/g, " ")} value={cnt} total={total || 1} color="#9D2449" />
+              <MetricBar
+                key={cat}
+                label={cat.replace(/_/g, " ")}
+                value={cnt}
+                total={total || 1}
+                color="#9D2449"
+              />
             ))}
           </SectionCard>
         </Grid>
@@ -390,8 +588,13 @@ function MetricasMesaAyuda({ tickets }) {
 
 function MetricasGestor({ recursos, asignaciones }) {
   const totalCatalogos = recursos.length;
-  const totalUnidades = recursos.reduce((s, r) => s + (r._count?.unidades ?? r.unidades?.length ?? 0), 0);
-  const asignacionesActivas = asignaciones.filter((a) => a.estado === "APROBADA" || a.estado === "PENDIENTE").length;
+  const totalUnidades = recursos.reduce(
+    (s, r) => s + (r._count?.unidades ?? r.unidades?.length ?? 0),
+    0,
+  );
+  const asignacionesActivas = asignaciones.filter(
+    (a) => a.estado === "APROBADA" || a.estado === "PENDIENTE",
+  ).length;
 
   const porTipo = {};
   recursos.forEach((r) => {
@@ -403,21 +606,46 @@ function MetricasGestor({ recursos, asignaciones }) {
     <>
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { icon: <Inventory2Icon />, label: "Catálogos de recursos", value: totalCatalogos, color: "#5c6bc0" },
-          { icon: <ConfirmationNumberIcon />, label: "Unidades en inventario", value: totalUnidades, color: "#0277bd" },
-          { icon: <LinkIcon />, label: "Asignaciones activas", value: asignacionesActivas, color: "#e65100" },
+          {
+            icon: <Inventory2Icon />,
+            label: "Catálogos de recursos",
+            value: totalCatalogos,
+            color: "#5c6bc0",
+          },
+          {
+            icon: <ConfirmationNumberIcon />,
+            label: "Unidades en inventario",
+            value: totalUnidades,
+            color: "#0277bd",
+          },
+          {
+            icon: <LinkIcon />,
+            label: "Asignaciones activas",
+            value: asignacionesActivas,
+            color: "#e65100",
+          },
         ].map((s) => (
-          <Grid item xs={12} sm={4} key={s.label}><StatCard {...s} /></Grid>
+          <Grid item xs={12} sm={4} key={s.label}>
+            <StatCard {...s} />
+          </Grid>
         ))}
       </Grid>
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
           <SectionCard title="Recursos por tipo" icon={<Inventory2Icon />}>
             {topN(porTipo).map(([tipo, cnt]) => (
-              <MetricBar key={tipo} label={tipo} value={cnt} total={totalCatalogos || 1} color="#9D2449" />
+              <MetricBar
+                key={tipo}
+                label={tipo}
+                value={cnt}
+                total={totalCatalogos || 1}
+                color="#9D2449"
+              />
             ))}
             {Object.keys(porTipo).length === 0 && (
-              <Typography variant="body2" color="text.disabled">Sin catálogos registrados</Typography>
+              <Typography variant="body2" color="text.disabled">
+                Sin catálogos registrados
+              </Typography>
             )}
           </SectionCard>
         </Grid>
@@ -434,11 +662,28 @@ function MetricasEmpleado({ tickets, navigate }) {
     <>
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { icon: <PendingActionsIcon />, label: "Solicitudes activas", value: activos.length, color: TICKET_ESTADO_COLOR.ASIGNADO },
-          { icon: <CheckCircleIcon />,    label: "Solicitudes resueltas", value: resueltos,        color: TICKET_ESTADO_COLOR.RESUELTO },
-          { icon: <ConfirmationNumberIcon />, label: "Total registradas", value: tickets.length,  color: "#5c6bc0" },
+          {
+            icon: <PendingActionsIcon />,
+            label: "Solicitudes activas",
+            value: activos.length,
+            color: TICKET_ESTADO_COLOR.ASIGNADO,
+          },
+          {
+            icon: <CheckCircleIcon />,
+            label: "Solicitudes resueltas",
+            value: resueltos,
+            color: TICKET_ESTADO_COLOR.RESUELTO,
+          },
+          {
+            icon: <ConfirmationNumberIcon />,
+            label: "Total registradas",
+            value: tickets.length,
+            color: "#5c6bc0",
+          },
         ].map((s) => (
-          <Grid item xs={12} sm={4} key={s.label}><StatCard {...s} /></Grid>
+          <Grid item xs={12} sm={4} key={s.label}>
+            <StatCard {...s} />
+          </Grid>
         ))}
       </Grid>
 
@@ -472,17 +717,29 @@ function MetricasEmpleado({ tickets, navigate }) {
                       {t.folio ?? "—"}
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 220 }}>{t.asunto}</Typography>
-                      <Typography variant="caption" color="text.secondary">{t.area?.label}</Typography>
+                      <Typography variant="body2" noWrap sx={{ maxWidth: 220 }}>
+                        {t.asunto}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {t.area?.label}
+                      </Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="caption">{LABEL_SUBCATEGORIA[t.subcategoria] ?? t.subcategoria}</Typography>
+                      <Typography variant="caption">
+                        {LABEL_SUBCATEGORIA[t.subcategoria] ?? t.subcategoria}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       <Chip
                         label={ESTADO_LABEL[t.estado] ?? t.estado}
                         size="small"
-                        sx={{ bgcolor: `${ESTADO_COLOR[t.estado]}22`, color: ESTADO_COLOR[t.estado], border: `1px solid ${ESTADO_COLOR[t.estado]}55`, fontWeight: 600, fontSize: 11 }}
+                        sx={{
+                          bgcolor: `${ESTADO_COLOR[t.estado]}22`,
+                          color: ESTADO_COLOR[t.estado],
+                          border: `1px solid ${ESTADO_COLOR[t.estado]}55`,
+                          fontWeight: 600,
+                          fontSize: 11,
+                        }}
                       />
                     </TableCell>
                     <TableCell sx={{ color: "text.secondary", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -520,13 +777,20 @@ export const DashboardPage = () => {
   const [misPasos, setMisPasos] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const isGestor = rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES";
+  const isGestor =
+    rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES";
   const esSupervisor = [
-    "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO",
-    "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO",
+    "RESPONSABLE_TI",
+    "RESPONSABLE_SISTEMAS",
+    "RESPONSABLE_REDES",
+    "RESPONSABLE_MANTENIMIENTO",
+    "GESTOR_SALAS_JUNTA",
+    "GESTOR_RECURSOS",
+    "GESTOR_INVENTARIO",
   ].includes(rol);
   const esTecnico = [
     "TECNICO_TI",
+    "TECNICO_SISTEMAS",
     "TECNICO_REDES",
     "TECNICO_ELECTRICISTA",
     "TECNICO_PLOMERO",
@@ -537,9 +801,7 @@ export const DashboardPage = () => {
     (async () => {
       setLoading(true);
       try {
-        const [ticketsRes] = await Promise.all([
-          getSolicitudes({ limit: 200 }),
-        ]);
+        const [ticketsRes] = await Promise.all([getSolicitudes({ limit: 200 })]);
         setTickets(ticketsRes?.tickets ?? []);
 
         if (isGestor) {
@@ -552,7 +814,9 @@ export const DashboardPage = () => {
         }
 
         if (esTecnico) {
-          getMisPasos().then(setMisPasos).catch(() => {});
+          getMisPasos()
+            .then(setMisPasos)
+            .catch(() => {});
         }
       } catch {
         // silent
@@ -585,7 +849,12 @@ export const DashboardPage = () => {
         <>
           {rol === "ADMIN" && <MetricasAdmin tickets={tickets} />}
           {esTecnico && (
-            <MetricasTecnico tickets={tickets} user={user} misPasos={misPasos} navigate={navigate} />
+            <MetricasTecnico
+              tickets={tickets}
+              user={user}
+              misPasos={misPasos}
+              navigate={navigate}
+            />
           )}
           {rol === "MESA_AYUDA" && <MetricasMesaAyuda tickets={tickets} />}
           {(rol === "GESTOR_RECURSOS_MATERIALES" || rol === "RESPONSABLE_RECURSOS_MATERIALES") && (

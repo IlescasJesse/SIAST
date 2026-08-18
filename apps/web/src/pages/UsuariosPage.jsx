@@ -1,12 +1,38 @@
 import { useEffect, useState, useCallback } from "react";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
-  Box, Typography, Button, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, IconButton, Tooltip, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  FormControl, InputLabel, Select, MenuItem, ListSubheader, Alert, Chip,
-  FormControlLabel, Switch, InputAdornment, Card, CardContent,
-  Divider, LinearProgress,
+  Box,
+  Typography,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  IconButton,
+  Tooltip,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  ListSubheader,
+  Alert,
+  Chip,
+  FormControlLabel,
+  Switch,
+  InputAdornment,
+  Card,
+  CardContent,
+  Divider,
+  LinearProgress,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -27,9 +53,27 @@ import { LABEL_ROL } from "@stf/shared";
 const ROL_GRUPOS = [
   { grupo: "General", roles: ["ADMIN", "MESA_AYUDA"] },
   { grupo: "Área TI", roles: ["RESPONSABLE_TI", "TECNICO_TI"] },
+  { grupo: "Área Sistemas", roles: ["RESPONSABLE_SISTEMAS", "TECNICO_SISTEMAS"] },
   { grupo: "Área Redes", roles: ["RESPONSABLE_REDES", "TECNICO_REDES"] },
-  { grupo: "Área Mantenimiento", roles: ["RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
-  { grupo: "Área Recursos Materiales", roles: ["RESPONSABLE_RECURSOS_MATERIALES", "GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO"] },
+  {
+    grupo: "Área Mantenimiento",
+    roles: [
+      "RESPONSABLE_MANTENIMIENTO",
+      "TECNICO_ELECTRICISTA",
+      "TECNICO_PLOMERO",
+      "TECNICO_MOVILIDAD",
+    ],
+  },
+  {
+    grupo: "Área Recursos Materiales",
+    roles: [
+      "RESPONSABLE_RECURSOS_MATERIALES",
+      "GESTOR_RECURSOS_MATERIALES",
+      "GESTOR_SALAS_JUNTA",
+      "GESTOR_RECURSOS",
+      "GESTOR_INVENTARIO",
+    ],
+  },
 ];
 
 const ROL_COLOR = {
@@ -40,9 +84,16 @@ const ROL_COLOR = {
 };
 
 const emptyForm = {
-  nombre: "", apellidos: "", usuario: "", password: "", rol: "MESA_AYUDA",
-  telefono: "", email: "",
-  esEmpleadoEstructura: false, empleadoId: "", rfc: "",
+  nombre: "",
+  apellidos: "",
+  usuario: "",
+  password: "",
+  rol: "MESA_AYUDA",
+  telefono: "",
+  email: "",
+  esEmpleadoEstructura: false,
+  empleadoId: "",
+  rfc: "",
 };
 
 export const UsuariosPage = () => {
@@ -66,7 +117,9 @@ export const UsuariosPage = () => {
     try {
       const res = await getSirhSyncStatus();
       setSyncData(res.data);
-    } catch { /* SIRH no disponible */ }
+    } catch {
+      /* SIRH no disponible */
+    }
   }, []);
 
   const handleSyncNow = async () => {
@@ -111,7 +164,12 @@ export const UsuariosPage = () => {
   /** Genera sugerencia de usuario: primera letra del primer nombre + primer apellido, sin espacios, en minúsculas */
   const sugerirUsuario = (nombre, apellidos) => {
     const inicial = nombre.trim().split(/\s+/)[0]?.[0]?.toLowerCase() ?? "";
-    const apellido = apellidos.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    const apellido =
+      apellidos
+        .trim()
+        .split(/\s+/)[0]
+        ?.toLowerCase()
+        .replace(/[^a-z0-9]/g, "") ?? "";
     return `${inicial}${apellido}`;
   };
 
@@ -126,8 +184,13 @@ export const UsuariosPage = () => {
 
   const openEditar = (u) => {
     setForm({
-      nombre: u.nombre, apellidos: u.apellidos, usuario: u.usuario, password: "",
-      rol: u.rol, telefono: u.telefono ?? "", email: u.email ?? "",
+      nombre: u.nombre,
+      apellidos: u.apellidos,
+      usuario: u.usuario,
+      password: "",
+      rol: u.rol,
+      telefono: u.telefono ?? "",
+      email: u.email ?? "",
       esEmpleadoEstructura: u.esEmpleadoEstructura ?? false,
       empleadoId: u.empleadoId ?? "",
       rfc: u.rfc ?? "",
@@ -136,9 +199,7 @@ export const UsuariosPage = () => {
     setFieldErrors({});
     setRfcManual(false);
     setRfcBuscado(
-      u.esEmpleadoEstructura && u.rfc
-        ? { nombre: u.nombre, apellidos: u.apellidos }
-        : null,
+      u.esEmpleadoEstructura && u.rfc ? { nombre: u.nombre, apellidos: u.apellidos } : null,
     );
     setDialog(u);
   };
@@ -179,7 +240,8 @@ export const UsuariosPage = () => {
     if (!form.apellidos.trim()) errors.apellidos = "Los apellidos son obligatorios";
     if (!form.usuario.trim()) errors.usuario = "El usuario de login es obligatorio";
     if (!form.rol) errors.rol = "El rol es obligatorio";
-    if (dialog === "crear" && !form.password.trim()) errors.password = "La contraseña es obligatoria";
+    if (dialog === "crear" && !form.password.trim())
+      errors.password = "La contraseña es obligatoria";
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -204,7 +266,7 @@ export const UsuariosPage = () => {
         await updateUsuario(dialog.id, payload);
       }
       setDialog(null);
-      setForm(emptyForm);      // limpiar form tras éxito
+      setForm(emptyForm); // limpiar form tras éxito
       setFieldErrors({});
       load();
     } catch (err) {
@@ -212,7 +274,9 @@ export const UsuariosPage = () => {
       const campos = err.response?.data?.campos ?? [];
       if (campos.length > 0) {
         const backendErrors = {};
-        campos.forEach((c) => { backendErrors[c] = errMsg; });
+        campos.forEach((c) => {
+          backendErrors[c] = errMsg;
+        });
         setFieldErrors(backendErrors);
       } else {
         setError(errMsg);
@@ -243,14 +307,15 @@ export const UsuariosPage = () => {
       form.password.trim().length > 0);
   const { ConfirmDialog } = useUnsavedChanges(isDirty);
 
-  const fmt = (iso) => iso
-    ? new Date(iso).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })
-    : "—";
+  const fmt = (iso) =>
+    iso ? new Date(iso).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" }) : "—";
 
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>Usuarios del Sistema</Typography>
+        <Typography variant="h5" fontWeight={700}>
+          Usuarios del Sistema
+        </Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCrear} size="small">
           Nuevo usuario
         </Button>
@@ -262,12 +327,18 @@ export const UsuariosPage = () => {
           <CardContent sx={{ pb: "12px !important" }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
               <SyncIcon color="primary" />
-              <Typography variant="subtitle1" fontWeight={700}>Sincronización con SIRH</Typography>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Sincronización con SIRH
+              </Typography>
               {syncData.enProgreso && (
                 <Chip label="En progreso..." size="small" color="warning" icon={<SyncIcon />} />
               )}
               {!syncData.habilitado && (
-                <Chip label="SIRH deshabilitado (SIRH_ENABLED=false)" size="small" color="default" />
+                <Chip
+                  label="SIRH deshabilitado (SIRH_ENABLED=false)"
+                  size="small"
+                  color="default"
+                />
               )}
             </Box>
 
@@ -314,11 +385,25 @@ export const UsuariosPage = () => {
             {/* Estado WhatsApp */}
             {syncData.whatsapp && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-                <WhatsAppIcon2 sx={{ fontSize: 18, color: syncData.whatsapp.state === "ready" ? "#25D366" : syncData.whatsapp.state === "initializing" ? "warning.main" : "error.main" }} />
+                <WhatsAppIcon2
+                  sx={{
+                    fontSize: 18,
+                    color:
+                      syncData.whatsapp.state === "ready"
+                        ? "#25D366"
+                        : syncData.whatsapp.state === "initializing"
+                          ? "warning.main"
+                          : "error.main",
+                  }}
+                />
                 <Typography variant="body2" color="text.secondary">
                   WhatsApp OTP:{" "}
-                  {syncData.whatsapp.state === "ready" && <strong style={{ color: "#25D366" }}>Conectado ✓</strong>}
-                  {syncData.whatsapp.state === "initializing" && <strong style={{ color: "orange" }}>Iniciando… (escanear QR en consola)</strong>}
+                  {syncData.whatsapp.state === "ready" && (
+                    <strong style={{ color: "#25D366" }}>Conectado ✓</strong>
+                  )}
+                  {syncData.whatsapp.state === "initializing" && (
+                    <strong style={{ color: "orange" }}>Iniciando… (escanear QR en consola)</strong>
+                  )}
                   {syncData.whatsapp.state === "failed" && (
                     <>
                       <strong style={{ color: "red" }}>Desconectado — modo consola activo</strong>
@@ -344,7 +429,13 @@ export const UsuariosPage = () => {
 
             {syncMsg && (
               <Alert
-                severity={syncMsg.includes("completada") ? "success" : syncMsg.includes("Error") ? "error" : "info"}
+                severity={
+                  syncMsg.includes("completada")
+                    ? "success"
+                    : syncMsg.includes("Error")
+                      ? "error"
+                      : "info"
+                }
                 sx={{ mb: 1.5 }}
                 onClose={() => setSyncMsg("")}
               >
@@ -358,18 +449,15 @@ export const UsuariosPage = () => {
               <Button
                 variant="outlined"
                 size="small"
-                startIcon={syncLoading || syncData.enProgreso ? <CircularProgress size={14} /> : <SyncIcon />}
+                startIcon={
+                  syncLoading || syncData.enProgreso ? <CircularProgress size={14} /> : <SyncIcon />
+                }
                 onClick={handleSyncNow}
                 disabled={syncLoading || syncData.enProgreso || !syncData.habilitado}
               >
                 Sincronizar ahora
               </Button>
-              <Button
-                variant="text"
-                size="small"
-                onClick={loadSyncStatus}
-                disabled={syncLoading}
-              >
+              <Button variant="text" size="small" onClick={loadSyncStatus} disabled={syncLoading}>
                 Actualizar estado
               </Button>
               <Typography variant="caption" color="text.secondary" sx={{ ml: "auto" }}>
@@ -381,7 +469,9 @@ export const UsuariosPage = () => {
       )}
 
       {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>
+        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+          <CircularProgress />
+        </Box>
       ) : (
         <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
           <Table size="small">
@@ -399,35 +489,58 @@ export const UsuariosPage = () => {
             <TableBody>
               {usuarios.map((u) => (
                 <TableRow key={u.id} hover>
-                  <TableCell sx={{ color: "text.secondary", fontFamily: "monospace" }}>{u.id}</TableCell>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight={500}>{u.nombre} {u.apellidos}</Typography>
+                  <TableCell sx={{ color: "text.secondary", fontFamily: "monospace" }}>
+                    {u.id}
                   </TableCell>
                   <TableCell>
-                    <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{u.usuario}</Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {u.nombre} {u.apellidos}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                      {u.usuario}
+                    </Typography>
                   </TableCell>
                   <TableCell>
                     {u.telefono ? (
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                         <WhatsAppIcon sx={{ fontSize: 14, color: "#25D366" }} />
-                        <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{u.telefono}</Typography>
+                        <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                          {u.telefono}
+                        </Typography>
                       </Box>
                     ) : (
-                      <Typography variant="caption" color="text.disabled">—</Typography>
+                      <Typography variant="caption" color="text.disabled">
+                        —
+                      </Typography>
                     )}
                   </TableCell>
                   <TableCell>
-                    <Chip label={u.rol.replace("_", " ")} size="small" color={ROL_COLOR[u.rol] ?? "default"} />
+                    <Chip
+                      label={u.rol.replace("_", " ")}
+                      size="small"
+                      color={ROL_COLOR[u.rol] ?? "default"}
+                    />
                   </TableCell>
                   <TableCell>
-                    <Chip label={u.activo ? "Activo" : "Inactivo"} size="small" color={u.activo ? "success" : "default"} variant="outlined" />
+                    <Chip
+                      label={u.activo ? "Activo" : "Inactivo"}
+                      size="small"
+                      color={u.activo ? "success" : "default"}
+                      variant="outlined"
+                    />
                   </TableCell>
                   <TableCell align="right">
                     <Tooltip title="Editar">
-                      <IconButton size="small" onClick={() => openEditar(u)}><EditIcon fontSize="small" /></IconButton>
+                      <IconButton size="small" onClick={() => openEditar(u)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                     </Tooltip>
                     <Tooltip title="Eliminar">
-                      <IconButton size="small" color="error" onClick={() => handleEliminar(u.id)}><DeleteIcon fontSize="small" /></IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleEliminar(u.id)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
                     </Tooltip>
                   </TableCell>
                 </TableRow>
@@ -440,7 +553,9 @@ export const UsuariosPage = () => {
       {/* Dialog crear/editar */}
       <Dialog open={Boolean(dialog)} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
         <DialogTitle>{dialog === "crear" ? "Nuevo usuario" : "Editar usuario"}</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
+        <DialogContent
+          sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}
+        >
           {error && <Alert severity="error">{error}</Alert>}
 
           {/* Switch empleado de estructura */}
@@ -482,7 +597,10 @@ export const UsuariosPage = () => {
                   }}
                   onKeyDown={(e) => e.key === "Enter" && handleBuscarRfc()}
                   fullWidth
-                  inputProps={{ maxLength: 13, style: { textTransform: "uppercase", fontFamily: "monospace" } }}
+                  inputProps={{
+                    maxLength: 13,
+                    style: { textTransform: "uppercase", fontFamily: "monospace" },
+                  }}
                   helperText="13 caracteres — presiona Enter o Buscar"
                 />
                 <Button
@@ -502,7 +620,10 @@ export const UsuariosPage = () => {
               )}
               {rfcBuscado && rfcBuscado !== "error" && (
                 <Alert severity="success" sx={{ mt: 1 }}>
-                  Empleado encontrado: <strong>{rfcBuscado.nombre} {rfcBuscado.apellidos}</strong>
+                  Empleado encontrado:{" "}
+                  <strong>
+                    {rfcBuscado.nombre} {rfcBuscado.apellidos}
+                  </strong>
                 </Alert>
               )}
             </Box>
@@ -512,50 +633,76 @@ export const UsuariosPage = () => {
             <TextField
               label="Nombre(s)"
               value={form.nombre}
-              onChange={(e) => { set("nombre", e.target.value); setFieldErrors((fe) => ({ ...fe, nombre: undefined })); }}
+              onChange={(e) => {
+                set("nombre", e.target.value);
+                setFieldErrors((fe) => ({ ...fe, nombre: undefined }));
+              }}
               onBlur={() => {
                 if (!form.usuario.trim() && form.nombre && form.apellidos) {
                   set("usuario", sugerirUsuario(form.nombre, form.apellidos));
                 }
               }}
-              fullWidth required
+              fullWidth
+              required
               error={Boolean(fieldErrors.nombre)}
               helperText={fieldErrors.nombre}
               InputProps={{
-                readOnly: form.esEmpleadoEstructura && Boolean(rfcBuscado && rfcBuscado !== "error") && !rfcManual,
+                readOnly:
+                  form.esEmpleadoEstructura &&
+                  Boolean(rfcBuscado && rfcBuscado !== "error") &&
+                  !rfcManual,
               }}
             />
             <TextField
               label="Apellidos"
               value={form.apellidos}
-              onChange={(e) => { set("apellidos", e.target.value); setFieldErrors((fe) => ({ ...fe, apellidos: undefined })); }}
+              onChange={(e) => {
+                set("apellidos", e.target.value);
+                setFieldErrors((fe) => ({ ...fe, apellidos: undefined }));
+              }}
               onBlur={() => {
                 if (!form.usuario.trim() && form.nombre && form.apellidos) {
                   set("usuario", sugerirUsuario(form.nombre, form.apellidos));
                 }
               }}
-              fullWidth required
+              fullWidth
+              required
               error={Boolean(fieldErrors.apellidos)}
               helperText={fieldErrors.apellidos}
               InputProps={{
-                readOnly: form.esEmpleadoEstructura && Boolean(rfcBuscado && rfcBuscado !== "error") && !rfcManual,
+                readOnly:
+                  form.esEmpleadoEstructura &&
+                  Boolean(rfcBuscado && rfcBuscado !== "error") &&
+                  !rfcManual,
               }}
             />
           </Box>
           <TextField
             label="Usuario (login)"
             value={form.usuario}
-            onChange={(e) => { set("usuario", e.target.value); setFieldErrors((fe) => ({ ...fe, usuario: undefined })); }}
-            fullWidth required
+            onChange={(e) => {
+              set("usuario", e.target.value);
+              setFieldErrors((fe) => ({ ...fe, usuario: undefined }));
+            }}
+            fullWidth
+            required
             error={Boolean(fieldErrors.usuario)}
-            helperText={fieldErrors.usuario ?? "Sugerencia: inicial del nombre + apellido paterno (ej: jilescas)"}
+            helperText={
+              fieldErrors.usuario ??
+              "Sugerencia: inicial del nombre + apellido paterno (ej: jilescas)"
+            }
             inputProps={{ style: { fontFamily: "monospace" } }}
           />
           <TextField
-            label={dialog === "crear" ? "Contraseña" : "Nueva contraseña (dejar vacío para no cambiar)"}
+            label={
+              dialog === "crear" ? "Contraseña" : "Nueva contraseña (dejar vacío para no cambiar)"
+            }
             type="password"
             value={form.password}
-            onChange={(e) => { set("password", e.target.value); setFieldErrors((fe) => ({ ...fe, password: undefined })); }}
+            onChange={(e) => {
+              set("password", e.target.value);
+              setFieldErrors((fe) => ({ ...fe, password: undefined }));
+            }}
             fullWidth
             required={dialog === "crear"}
             error={Boolean(fieldErrors.password)}
@@ -569,7 +716,9 @@ export const UsuariosPage = () => {
               fullWidth
               inputProps={{ maxLength: 10, inputMode: "numeric" }}
               helperText="10 dígitos — para recibir notificaciones de tickets asignados"
-              InputProps={{ startAdornment: <WhatsAppIcon sx={{ mr: 1, fontSize: 18, color: "#25D366" }} /> }}
+              InputProps={{
+                startAdornment: <WhatsAppIcon sx={{ mr: 1, fontSize: 18, color: "#25D366" }} />,
+              }}
             />
             <TextField
               label="Email"
@@ -585,7 +734,9 @@ export const UsuariosPage = () => {
               {ROL_GRUPOS.flatMap(({ grupo, roles }) => [
                 <ListSubheader key={`h-${grupo}`}>{grupo}</ListSubheader>,
                 ...roles.map((r) => (
-                  <MenuItem key={r} value={r}>{LABEL_ROL[r] ?? r}</MenuItem>
+                  <MenuItem key={r} value={r}>
+                    {LABEL_ROL[r] ?? r}
+                  </MenuItem>
                 )),
               ])}
             </Select>

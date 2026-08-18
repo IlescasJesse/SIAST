@@ -104,13 +104,19 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
     nombre: "Sin acceso a internet",
     tipoFlujo: "DIRECTO",
     pasos: [
-      { orden: 1, rolRequerido: "TECNICO_REDES", nombre: "Diagnóstico y restauración de acceso por Redes" },
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_REDES",
+        nombre: "Diagnóstico y restauración de acceso por Redes",
+      },
     ],
   },
   "RED_INTERNET:SOLICITUD_ACCESO_INTERNET": {
     nombre: "Solicitud de acceso a internet",
     tipoFlujo: "DIRECTO",
-    pasos: [{ orden: 1, rolRequerido: "TECNICO_REDES", nombre: "Alta de acceso a internet por Redes" }],
+    pasos: [
+      { orden: 1, rolRequerido: "TECNICO_REDES", nombre: "Alta de acceso a internet por Redes" },
+    ],
   },
   "RED_INTERNET:SOPORTE_DOMINIO": {
     nombre: "Soporte sobre dominio",
@@ -121,7 +127,13 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
   "CUENTAS_DOMINIO:CREACION_USUARIO": {
     nombre: "Creación de usuario de dominio",
     tipoFlujo: "DIRECTO",
-    pasos: [{ orden: 1, rolRequerido: "TECNICO_REDES", nombre: "Creación de usuario de dominio por Redes" }],
+    pasos: [
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_REDES",
+        nombre: "Creación de usuario de dominio por Redes",
+      },
+    ],
   },
   // RED_INTERNET — fallback subcategoría completa (sin subTipo)
   RED_INTERNET: {
@@ -133,7 +145,9 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
   CUENTAS_DOMINIO: {
     nombre: "Cuentas y dominio",
     tipoFlujo: "DIRECTO",
-    pasos: [{ orden: 1, rolRequerido: "TECNICO_REDES", nombre: "Gestión de cuenta/dominio por Redes" }],
+    pasos: [
+      { orden: 1, rolRequerido: "TECNICO_REDES", nombre: "Gestión de cuenta/dominio por Redes" },
+    ],
   },
   // CORREO_OUTLOOK (toda la subcategoría, nivel cliente)
   CORREO_OUTLOOK: {
@@ -149,7 +163,7 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
       },
     ],
   },
-  // SISTEMAS_INSTITUCIONALES — flujo DIRECTO con 1 paso TECNICO_TI
+  // SISTEMAS_INSTITUCIONALES — flujo DIRECTO con 1 paso TECNICO_SISTEMAS
   "SISTEMAS_INSTITUCIONALES:SIRH": {
     nombre: "Soporte SIRH",
     tipoFlujo: "DIRECTO",
@@ -157,9 +171,9 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
     pasos: [
       {
         orden: 1,
-        rolRequerido: "TECNICO_TI",
-        nombre: "Atención por Soporte TI",
-        descripcion: "Atención directa por técnico TI al usuario del SIRH.",
+        rolRequerido: "TECNICO_SISTEMAS",
+        nombre: "Atención por Soporte de Sistemas",
+        descripcion: "Atención directa por técnico de Sistemas al usuario del SIRH.",
         registraUnidades: false,
       },
     ],
@@ -171,9 +185,9 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
     pasos: [
       {
         orden: 1,
-        rolRequerido: "TECNICO_TI",
-        nombre: "Atención por Soporte TI",
-        descripcion: "Atención directa por técnico TI al usuario del SIAST.",
+        rolRequerido: "TECNICO_SISTEMAS",
+        nombre: "Atención por Soporte de Sistemas",
+        descripcion: "Atención directa por técnico de Sistemas al usuario del SIAST.",
         registraUnidades: false,
       },
     ],
@@ -182,15 +196,17 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
   SANITARIOS: {
     nombre: "Sanitarios y plomería",
     tipoFlujo: "DIRECTO",
-    pasos: [
-      { orden: 1, rolRequerido: "TECNICO_PLOMERO", nombre: "Atención por Técnico Plomero" },
-    ],
+    pasos: [{ orden: 1, rolRequerido: "TECNICO_PLOMERO", nombre: "Atención por Técnico Plomero" }],
   },
   ILUMINACION: {
     nombre: "Iluminación y electricidad",
     tipoFlujo: "DIRECTO",
     pasos: [
-      { orden: 1, rolRequerido: "TECNICO_ELECTRICISTA", nombre: "Atención por Técnico Electricista" },
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_ELECTRICISTA",
+        nombre: "Atención por Técnico Electricista",
+      },
     ],
   },
   MOVILIDAD: {

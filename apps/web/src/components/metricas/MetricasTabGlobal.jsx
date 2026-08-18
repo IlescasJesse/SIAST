@@ -1,6 +1,17 @@
 import {
-  Grid, Card, CardContent, Typography, Box, Skeleton,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  Box,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from "@mui/material";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
@@ -163,7 +174,10 @@ export function MetricasTabGlobal({ data, loading, onResponsableClick }) {
               <TableHead>
                 <TableRow sx={{ bgcolor: "primary.main" }}>
                   {["Área", "Total", "Resueltos", "Sin asignar", "Pendientes"].map((h) => (
-                    <TableCell key={h} sx={{ color: "common.white", fontWeight: 700, fontSize: 12 }}>
+                    <TableCell
+                      key={h}
+                      sx={{ color: "common.white", fontWeight: 700, fontSize: 12 }}
+                    >
                       {h}
                     </TableCell>
                   ))}
@@ -183,7 +197,7 @@ export function MetricasTabGlobal({ data, loading, onResponsableClick }) {
                     {barDataArea.map((row) => (
                       <TableRow
                         key={row.area}
-                        sx={{ "&:hover": { bgcolor: "primary.main", opacity: 0.04 }, "& td": { fontSize: 13 } }}
+                        sx={{ "&:hover": { bgcolor: "action.hover" }, "& td": { fontSize: 13 } }}
                       >
                         <TableCell>
                           <Typography variant="body2" fontWeight={600}>
@@ -191,14 +205,20 @@ export function MetricasTabGlobal({ data, loading, onResponsableClick }) {
                           </Typography>
                         </TableCell>
                         <TableCell>{row.Total}</TableCell>
-                        <TableCell sx={{ color: "#2e7d32", fontWeight: 600 }}>{row.Resueltos}</TableCell>
-                        <TableCell sx={{ color: "#1565c0", fontWeight: 600 }}>{row.SinAsignar}</TableCell>
+                        <TableCell sx={{ color: "#2e7d32", fontWeight: 600 }}>
+                          {row.Resueltos}
+                        </TableCell>
+                        <TableCell sx={{ color: "#1565c0", fontWeight: 600 }}>
+                          {row.SinAsignar}
+                        </TableCell>
                         <TableCell>{row.Total - row.Resueltos}</TableCell>
                       </TableRow>
                     ))}
                     {/* Fila: TOTAL */}
-                    <TableRow sx={{ bgcolor: "grey.100", "& td": { fontSize: 13, fontWeight: 700 } }}>
-                      <TableCell>TOTAL</TableCell>
+                    <TableRow
+                      sx={{ bgcolor: "grey.100", "& td": { fontSize: 13, fontWeight: 700 } }}
+                    >
+                      <TableCell />
                       <TableCell>{totalAreaSum}</TableCell>
                       <TableCell sx={{ color: "#2e7d32" }}>{totalResueltosSum}</TableCell>
                       <TableCell sx={{ color: "#1565c0" }}>{totalSinAsignarSum}</TableCell>

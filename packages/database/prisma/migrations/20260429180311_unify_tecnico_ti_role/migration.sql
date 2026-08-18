@@ -37,9 +37,11 @@ ALTER TABLE `logs_acceso` ADD CONSTRAINT `logs_acceso_empleado_rfc_fkey` FOREIGN
 ALTER TABLE `pasos_definicion` ADD CONSTRAINT `pasos_definicion_proceso_id_fkey` FOREIGN KEY (`proceso_id`) REFERENCES `procesos_definicion`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- RedefineIndex
-CREATE INDEX IF NOT EXISTS `asignaciones_recursos_unidadId_idx` ON `asignaciones_recursos`(`unidadId`);
-DROP INDEX IF EXISTS `asignaciones_recursos_unidadId_fkey` ON `asignaciones_recursos`;
+-- MySQL/InnoDB elimina automáticamente el índice auto-generado de la FK
+-- (`asignaciones_recursos_unidadId_fkey`) al crear un índice explícito que
+-- cubre la misma columna — el DROP INDEX explícito fallaría con error 1091.
+CREATE INDEX `asignaciones_recursos_unidadId_idx` ON `asignaciones_recursos`(`unidadId`);
 
 -- RedefineIndex
-CREATE UNIQUE INDEX IF NOT EXISTS `empleados_sirhId_key` ON `empleados`(`sirhId`);
-DROP INDEX IF EXISTS `sirhId` ON `empleados`;
+CREATE UNIQUE INDEX `empleados_sirhId_key` ON `empleados`(`sirhId`);
+DROP INDEX `sirhId` ON `empleados`;

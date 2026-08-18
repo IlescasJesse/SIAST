@@ -188,6 +188,66 @@ export const emitirPasoListo = async (params: {
   });
 };
 
+export const emitirTicketReasignado = async (params: {
+  ticketId: number;
+  asunto: string;
+  empleadoRfc: string;
+  areaAnteriorNombre: string;
+  areaNuevaNombre: string;
+  reasignadoPorNombre: string;
+}) => {
+  // In-app únicamente (sin WhatsApp — pendiente de que OTP migre a correo institucional)
+  const responsablesNuevaArea = await prisma.usuario.findMany({
+    where: {
+      activo: true,
+      areaSoporte: { nombre: params.areaNuevaNombre },
+      rol: {
+        in: [
+          "RESPONSABLE_TI",
+          "RESPONSABLE_SISTEMAS",
+          "RESPONSABLE_REDES",
+          "RESPONSABLE_MANTENIMIENTO",
+          "RESPONSABLE_RECURSOS_MATERIALES",
+        ],
+      },
+    },
+    select: { id: true },
+  });
+
+  await Promise.all([
+    ...responsablesNuevaArea.map((r) =>
+      crearNotificacion({
+        tipo: "TICKET_ACTUALIZADO",
+        titulo: `Solicitud #${params.ticketId} reasignada a tu área`,
+        mensaje: `"${params.asunto}" fue reasignada de ${params.areaAnteriorNombre} a ${params.areaNuevaNombre} por ${params.reasignadoPorNombre}`,
+        usuarioId: r.id,
+        ticketId: params.ticketId,
+      }),
+    ),
+    crearNotificacion({
+      tipo: "TICKET_ACTUALIZADO",
+      titulo: `Tu solicitud #${params.ticketId} fue reasignada`,
+      mensaje: `Tu solicitud pasó de ${params.areaAnteriorNombre} a ${params.areaNuevaNombre}`,
+      empleadoRfc: params.empleadoRfc,
+      ticketId: params.ticketId,
+    }),
+  ]);
+
+  const payload = {
+    ticketId: params.ticketId,
+    asunto: params.asunto,
+    areaAnterior: params.areaAnteriorNombre,
+    areaNueva: params.areaNuevaNombre,
+    mensaje: `Solicitud #${params.ticketId} reasignada a ${params.areaNuevaNombre}`,
+    timestamp: new Date(),
+  };
+  responsablesNuevaArea.forEach((r) => {
+    io?.to(`user:${r.id}`).emit("ticket:reasignado", payload);
+  });
+  io?.to(`emp:${params.empleadoRfc}`).emit("ticket:reasignado", payload);
+  io?.to("admins").emit("ticket:reasignado", payload);
+};
+
 export const emitirCambioEstado = async (params: {
   ticketId: number;
   estadoAnterior: string;

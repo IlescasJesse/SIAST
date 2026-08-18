@@ -1,7 +1,14 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Drawer, List, ListItemButton, ListItemIcon, ListItemText,
-  Box, Typography, Divider, Tooltip,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Box,
+  Typography,
+  Divider,
+  Tooltip,
 } from "@mui/material";
 import siastLogo from "../../img/siast-logo.png";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -18,15 +25,112 @@ const DRAWER_W = 220;
 
 const menuItems = (rol) => {
   const items = [
-    { label: "Estadísticas", icon: <DashboardIcon />, to: "/dashboard", roles: ["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
-    { label: "Métricas", icon: <BarChartIcon />, to: "/metricas", roles: ["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_TI", "TECNICO_REDES", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
-    { label: "Solicitudes", icon: <ConfirmationNumberIcon />, to: "/solicitudes", roles: ["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
-    { label: "Mis Solicitudes", icon: <ConfirmationNumberIcon />, to: "/solicitudes", roles: ["EMPLEADO"] },
-    { label: "Nueva Solicitud", icon: <AddCircleOutlineIcon />, to: "/solicitudes/nueva", roles: ["ADMIN", "MESA_AYUDA", "EMPLEADO"] },
+    {
+      label: "Estadísticas",
+      icon: <DashboardIcon />,
+      to: "/dashboard",
+      roles: [
+        "ADMIN",
+        "TECNICO_TI",
+        "TECNICO_SISTEMAS",
+        "TECNICO_REDES",
+        "TECNICO_SERVICIOS",
+        "MESA_AYUDA",
+        "GESTOR_RECURSOS_MATERIALES",
+        "RESPONSABLE_RECURSOS_MATERIALES",
+        "RESPONSABLE_TI",
+        "RESPONSABLE_SISTEMAS",
+        "RESPONSABLE_REDES",
+        "RESPONSABLE_MANTENIMIENTO",
+        "TECNICO_ELECTRICISTA",
+        "TECNICO_PLOMERO",
+        "TECNICO_MOVILIDAD",
+      ],
+    },
+    {
+      label: "Métricas",
+      icon: <BarChartIcon />,
+      to: "/metricas",
+      roles: [
+        "ADMIN",
+        "MESA_AYUDA",
+        "RESPONSABLE_TI",
+        "RESPONSABLE_SISTEMAS",
+        "RESPONSABLE_REDES",
+        "RESPONSABLE_MANTENIMIENTO",
+        "TECNICO_TI",
+        "TECNICO_SISTEMAS",
+        "TECNICO_REDES",
+        "TECNICO_ELECTRICISTA",
+        "TECNICO_PLOMERO",
+        "TECNICO_MOVILIDAD",
+      ],
+    },
+    {
+      label: "Solicitudes",
+      icon: <ConfirmationNumberIcon />,
+      to: "/solicitudes",
+      roles: [
+        "ADMIN",
+        "TECNICO_TI",
+        "TECNICO_SISTEMAS",
+        "TECNICO_REDES",
+        "TECNICO_SERVICIOS",
+        "MESA_AYUDA",
+        "GESTOR_RECURSOS_MATERIALES",
+        "RESPONSABLE_RECURSOS_MATERIALES",
+        "RESPONSABLE_TI",
+        "RESPONSABLE_SISTEMAS",
+        "RESPONSABLE_REDES",
+        "RESPONSABLE_MANTENIMIENTO",
+        "TECNICO_ELECTRICISTA",
+        "TECNICO_PLOMERO",
+        "TECNICO_MOVILIDAD",
+      ],
+    },
+    {
+      label: "Mis Solicitudes",
+      icon: <ConfirmationNumberIcon />,
+      to: "/solicitudes",
+      roles: ["EMPLEADO"],
+    },
+    {
+      label: "Nueva Solicitud",
+      icon: <AddCircleOutlineIcon />,
+      to: "/solicitudes/nueva",
+      roles: ["ADMIN", "MESA_AYUDA", "EMPLEADO"],
+    },
     { label: "Mapa de Áreas", icon: <EditLocationAltIcon />, to: "/admin/areas", roles: ["ADMIN"] },
-    { label: "Recursos", icon: <Inventory2Icon />, to: "/recursos", roles: ["ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"] },
+    {
+      label: "Recursos",
+      icon: <Inventory2Icon />,
+      to: "/recursos",
+      roles: ["ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"],
+    },
     { label: "Administración", icon: <AdminPanelSettingsIcon />, to: "/admin", roles: ["ADMIN"] },
-    { label: "Perfil", icon: <PersonIcon />, to: "/perfil", roles: ["ADMIN", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "MESA_AYUDA", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD", "EMPLEADO"] },
+    {
+      label: "Perfil",
+      icon: <PersonIcon />,
+      to: "/perfil",
+      roles: [
+        "ADMIN",
+        "TECNICO_TI",
+        "TECNICO_SISTEMAS",
+        "TECNICO_REDES",
+        "TECNICO_SERVICIOS",
+        "MESA_AYUDA",
+        "GESTOR_RECURSOS_MATERIALES",
+        "RESPONSABLE_RECURSOS_MATERIALES",
+        "RESPONSABLE_TI",
+        "RESPONSABLE_SISTEMAS",
+        "RESPONSABLE_REDES",
+        "RESPONSABLE_MANTENIMIENTO",
+        "TECNICO_ELECTRICISTA",
+        "TECNICO_PLOMERO",
+        "TECNICO_MOVILIDAD",
+        "EMPLEADO",
+      ],
+    },
   ];
   return items.filter((i) => i.roles.includes(rol));
 };
@@ -38,10 +142,12 @@ export const Sidebar = ({ open, onClose, variant = "permanent", desktopOpen = tr
 
   const content = (
     <Box sx={{ width: DRAWER_W, height: "100%", display: "flex", flexDirection: "column" }}>
-
       {/* Cabecera — fondo guinda, clickeable al home */}
       <Box
-        onClick={() => { navigate("/"); onClose?.(); }}
+        onClick={() => {
+          navigate("/");
+          onClose?.();
+        }}
         sx={{
           bgcolor: "#9D2449",
           px: 2.5,
@@ -58,13 +164,30 @@ export const Sidebar = ({ open, onClose, variant = "permanent", desktopOpen = tr
           component="img"
           src={siastLogo}
           alt="SIAST"
-          sx={{ height: 30, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)", flexShrink: 0 }}
+          sx={{
+            height: 30,
+            width: "auto",
+            objectFit: "contain",
+            filter: "brightness(0) invert(1)",
+            flexShrink: 0,
+          }}
         />
         <Box>
-          <Typography sx={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: "1rem", color: "#fff", letterSpacing: 2, lineHeight: 1 }}>
+          <Typography
+            sx={{
+              fontFamily: "'Oswald', sans-serif",
+              fontWeight: 700,
+              fontSize: "1rem",
+              color: "#fff",
+              letterSpacing: 2,
+              lineHeight: 1,
+            }}
+          >
             SIAST
           </Typography>
-          <Typography sx={{ fontSize: 8.5, color: "rgba(255,255,255,0.7)", letterSpacing: 0.4, mt: 0.2 }}>
+          <Typography
+            sx={{ fontSize: 8.5, color: "rgba(255,255,255,0.7)", letterSpacing: 0.4, mt: 0.2 }}
+          >
             Secretaría de Finanzas
           </Typography>
         </Box>
@@ -76,11 +199,17 @@ export const Sidebar = ({ open, onClose, variant = "permanent", desktopOpen = tr
           <ListItemButton
             key={item.to}
             selected={pathname.startsWith(item.to) && item.to !== "/"}
-            onClick={() => { navigate(item.to); onClose?.(); }}
+            onClick={() => {
+              navigate(item.to);
+              onClose?.();
+            }}
             sx={{ borderRadius: "4px", mx: 1, mb: 0.5 }}
           >
             <ListItemIcon sx={{ minWidth: 36, color: "text.secondary" }}>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }} />
+            <ListItemText
+              primary={item.label}
+              primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+            />
           </ListItemButton>
         ))}
       </List>
@@ -89,7 +218,12 @@ export const Sidebar = ({ open, onClose, variant = "permanent", desktopOpen = tr
 
   if (variant === "temporary") {
     return (
-      <Drawer open={open} onClose={onClose} variant="temporary" sx={{ "& .MuiDrawer-paper": { width: DRAWER_W } }}>
+      <Drawer
+        open={open}
+        onClose={onClose}
+        variant="temporary"
+        sx={{ "& .MuiDrawer-paper": { width: DRAWER_W } }}
+      >
         {content}
       </Drawer>
     );

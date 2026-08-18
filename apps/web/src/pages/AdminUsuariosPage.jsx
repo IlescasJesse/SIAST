@@ -1,9 +1,34 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  Box, Typography, Button, TextField, Dialog, DialogTitle, DialogContent,
-  DialogActions, Table, TableBody, TableCell, TableHead, TableRow, Paper,
-  Select, MenuItem, ListSubheader, FormControl, InputLabel, Chip, Switch, FormControlLabel,
-  IconButton, Tooltip, Alert, CircularProgress, Divider, FormGroup, Checkbox,
+  Box,
+  Typography,
+  Button,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Paper,
+  Select,
+  MenuItem,
+  ListSubheader,
+  FormControl,
+  InputLabel,
+  Chip,
+  Switch,
+  FormControlLabel,
+  IconButton,
+  Tooltip,
+  Alert,
+  CircularProgress,
+  Divider,
+  FormGroup,
+  Checkbox,
   FormLabel,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -16,14 +41,39 @@ import { LABEL_ROL, LABEL_PERMISO, PERMISOS_LIST, PERMISOS_DEFAULT } from "@stf/
 const ROL_GRUPOS = [
   { grupo: "General", roles: ["ADMIN", "MESA_AYUDA"] },
   { grupo: "Área TI", roles: ["RESPONSABLE_TI", "TECNICO_TI"] },
+  { grupo: "Área Sistemas", roles: ["RESPONSABLE_SISTEMAS", "TECNICO_SISTEMAS"] },
   { grupo: "Área Redes", roles: ["RESPONSABLE_REDES", "TECNICO_REDES"] },
-  { grupo: "Área Mantenimiento", roles: ["RESPONSABLE_MANTENIMIENTO", "TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"] },
-  { grupo: "Área Recursos Materiales", roles: ["RESPONSABLE_RECURSOS_MATERIALES", "GESTOR_RECURSOS_MATERIALES", "GESTOR_SALAS_JUNTA", "GESTOR_RECURSOS", "GESTOR_INVENTARIO"] },
+  {
+    grupo: "Área Mantenimiento",
+    roles: [
+      "RESPONSABLE_MANTENIMIENTO",
+      "TECNICO_ELECTRICISTA",
+      "TECNICO_PLOMERO",
+      "TECNICO_MOVILIDAD",
+    ],
+  },
+  {
+    grupo: "Área Recursos Materiales",
+    roles: [
+      "RESPONSABLE_RECURSOS_MATERIALES",
+      "GESTOR_RECURSOS_MATERIALES",
+      "GESTOR_SALAS_JUNTA",
+      "GESTOR_RECURSOS",
+      "GESTOR_INVENTARIO",
+    ],
+  },
 ];
 
 const EMPTY_FORM = {
-  nombre: "", apellidos: "", usuario: "", password: "", email: "",
-  telefono: "", rol: "MESA_AYUDA", activo: true, permisos: [],
+  nombre: "",
+  apellidos: "",
+  usuario: "",
+  password: "",
+  email: "",
+  telefono: "",
+  rol: "MESA_AYUDA",
+  activo: true,
+  permisos: [],
 };
 
 export const AdminUsuariosPage = () => {
@@ -50,7 +100,9 @@ export const AdminUsuariosPage = () => {
     }
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
   const abrirCrear = () => {
     setEditId(null);
@@ -64,9 +116,15 @@ export const AdminUsuariosPage = () => {
   const abrirEditar = (u) => {
     setEditId(u.id);
     setForm({
-      nombre: u.nombre, apellidos: u.apellidos, usuario: u.usuario,
-      password: "", email: u.email ?? "", telefono: u.telefono ?? "",
-      rol: u.rol, activo: u.activo, permisos: u.permisos ?? [],
+      nombre: u.nombre,
+      apellidos: u.apellidos,
+      usuario: u.usuario,
+      password: "",
+      email: u.email ?? "",
+      telefono: u.telefono ?? "",
+      rol: u.rol,
+      activo: u.activo,
+      permisos: u.permisos ?? [],
     });
     setPermisosExpanded(false);
     setFieldErrors({});
@@ -131,7 +189,9 @@ export const AdminUsuariosPage = () => {
       const campos = e?.response?.data?.campos ?? [];
       if (campos.length > 0) {
         const backendErrors = {};
-        campos.forEach((c) => { backendErrors[c] = errMsg; });
+        campos.forEach((c) => {
+          backendErrors[c] = errMsg;
+        });
         setFieldErrors(backendErrors);
       } else {
         setError(errMsg);
@@ -166,13 +226,19 @@ export const AdminUsuariosPage = () => {
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography variant="h6" fontWeight={600}>Usuarios del Sistema</Typography>
+        <Typography variant="h6" fontWeight={600}>
+          Usuarios del Sistema
+        </Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={abrirCrear}>
           Nuevo Usuario
         </Button>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -183,22 +249,42 @@ export const AdminUsuariosPage = () => {
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: "grey.50" }}>
-                <TableCell><b>Nombre</b></TableCell>
-                <TableCell><b>Usuario</b></TableCell>
-                <TableCell><b>Rol</b></TableCell>
-                <TableCell><b>Estado</b></TableCell>
-                <TableCell><b>Permisos extra</b></TableCell>
-                <TableCell align="right"><b>Acciones</b></TableCell>
+                <TableCell>
+                  <b>Nombre</b>
+                </TableCell>
+                <TableCell>
+                  <b>Usuario</b>
+                </TableCell>
+                <TableCell>
+                  <b>Rol</b>
+                </TableCell>
+                <TableCell>
+                  <b>Estado</b>
+                </TableCell>
+                <TableCell>
+                  <b>Permisos extra</b>
+                </TableCell>
+                <TableCell align="right">
+                  <b>Acciones</b>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {usuarios.map((u) => (
                 <TableRow key={u.id} sx={{ opacity: u.activo ? 1 : 0.5 }}>
                   <TableCell>
-                    <Typography variant="body2" fontWeight={500}>{u.nombre} {u.apellidos}</Typography>
-                    <Typography variant="caption" color="text.secondary">{u.email}</Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {u.nombre} {u.apellidos}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {u.email}
+                    </Typography>
                   </TableCell>
-                  <TableCell><Typography variant="body2" fontFamily="monospace">{u.usuario}</Typography></TableCell>
+                  <TableCell>
+                    <Typography variant="body2" fontFamily="monospace">
+                      {u.usuario}
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     <Chip label={LABEL_ROL[u.rol] ?? u.rol} size="small" variant="outlined" />
                   </TableCell>
@@ -252,16 +338,26 @@ export const AdminUsuariosPage = () => {
               <TextField
                 label="Nombre"
                 value={form.nombre}
-                onChange={(e) => { setForm((f) => ({ ...f, nombre: e.target.value })); setFieldErrors((fe) => ({ ...fe, nombre: undefined })); }}
-                size="small" fullWidth required
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, nombre: e.target.value }));
+                  setFieldErrors((fe) => ({ ...fe, nombre: undefined }));
+                }}
+                size="small"
+                fullWidth
+                required
                 error={Boolean(fieldErrors.nombre)}
                 helperText={fieldErrors.nombre}
               />
               <TextField
                 label="Apellidos"
                 value={form.apellidos}
-                onChange={(e) => { setForm((f) => ({ ...f, apellidos: e.target.value })); setFieldErrors((fe) => ({ ...fe, apellidos: undefined })); }}
-                size="small" fullWidth required
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, apellidos: e.target.value }));
+                  setFieldErrors((fe) => ({ ...fe, apellidos: undefined }));
+                }}
+                size="small"
+                fullWidth
+                required
                 error={Boolean(fieldErrors.apellidos)}
                 helperText={fieldErrors.apellidos}
               />
@@ -270,8 +366,13 @@ export const AdminUsuariosPage = () => {
               <TextField
                 label="Usuario"
                 value={form.usuario}
-                onChange={(e) => { setForm((f) => ({ ...f, usuario: e.target.value })); setFieldErrors((fe) => ({ ...fe, usuario: undefined })); }}
-                size="small" fullWidth required
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, usuario: e.target.value }));
+                  setFieldErrors((fe) => ({ ...fe, usuario: undefined }));
+                }}
+                size="small"
+                fullWidth
+                required
                 error={Boolean(fieldErrors.usuario)}
                 helperText={fieldErrors.usuario ?? "Ej: jilescas"}
               />
@@ -279,8 +380,12 @@ export const AdminUsuariosPage = () => {
                 label="Contraseña"
                 type="password"
                 value={form.password}
-                onChange={(e) => { setForm((f) => ({ ...f, password: e.target.value })); setFieldErrors((fe) => ({ ...fe, password: undefined })); }}
-                size="small" fullWidth
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, password: e.target.value }));
+                  setFieldErrors((fe) => ({ ...fe, password: undefined }));
+                }}
+                size="small"
+                fullWidth
                 placeholder={editId ? "Dejar vacío para no cambiar" : ""}
                 required={!editId}
                 error={Boolean(fieldErrors.password)}
@@ -288,23 +393,46 @@ export const AdminUsuariosPage = () => {
               />
             </Box>
             <Box sx={{ display: "flex", gap: 2 }}>
-              <TextField label="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} size="small" fullWidth />
-              <TextField label="Teléfono" value={form.telefono} onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))} size="small" fullWidth />
+              <TextField
+                label="Email"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                size="small"
+                fullWidth
+              />
+              <TextField
+                label="Teléfono"
+                value={form.telefono}
+                onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+                size="small"
+                fullWidth
+              />
             </Box>
             <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
               <FormControl size="small" fullWidth>
                 <InputLabel>Rol</InputLabel>
-                <Select value={form.rol} label="Rol" onChange={(e) => handleRolChange(e.target.value)}>
+                <Select
+                  value={form.rol}
+                  label="Rol"
+                  onChange={(e) => handleRolChange(e.target.value)}
+                >
                   {ROL_GRUPOS.flatMap(({ grupo, roles }) => [
                     <ListSubheader key={`h-${grupo}`}>{grupo}</ListSubheader>,
                     ...roles.map((r) => (
-                      <MenuItem key={r} value={r}>{LABEL_ROL[r] ?? r}</MenuItem>
+                      <MenuItem key={r} value={r}>
+                        {LABEL_ROL[r] ?? r}
+                      </MenuItem>
                     )),
                   ])}
                 </Select>
               </FormControl>
               <FormControlLabel
-                control={<Switch checked={form.activo} onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))} />}
+                control={
+                  <Switch
+                    checked={form.activo}
+                    onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))}
+                  />
+                }
                 label="Activo"
               />
             </Box>
@@ -319,8 +447,9 @@ export const AdminUsuariosPage = () => {
               {permisosExpanded && (
                 <Box sx={{ mt: 1, p: 1.5, bgcolor: "grey.50", borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                    Los permisos marcados en gris son los defaults del rol seleccionado (no se pueden quitar aquí).
-                    Puedes agregar permisos adicionales marcando los desmarcados.
+                    Los permisos marcados en gris son los defaults del rol seleccionado (no se
+                    pueden quitar aquí). Puedes agregar permisos adicionales marcando los
+                    desmarcados.
                   </Typography>
                   <FormGroup>
                     {PERMISOS_LIST.map((perm) => {
@@ -338,9 +467,14 @@ export const AdminUsuariosPage = () => {
                             />
                           }
                           label={
-                            <Typography variant="body2" color={isDefault ? "text.secondary" : "text.primary"}>
+                            <Typography
+                              variant="body2"
+                              color={isDefault ? "text.secondary" : "text.primary"}
+                            >
                               {LABEL_PERMISO[perm]}
-                              {isDefault && <Chip label="del rol" size="small" sx={{ ml: 1, fontSize: 10 }} />}
+                              {isDefault && (
+                                <Chip label="del rol" size="small" sx={{ ml: 1, fontSize: 10 }} />
+                              )}
                             </Typography>
                           }
                         />
@@ -355,7 +489,7 @@ export const AdminUsuariosPage = () => {
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={guardar} disabled={saving}>
-            {saving ? <CircularProgress size={18} /> : (editId ? "Guardar cambios" : "Crear usuario")}
+            {saving ? <CircularProgress size={18} /> : editId ? "Guardar cambios" : "Crear usuario"}
           </Button>
         </DialogActions>
       </Dialog>

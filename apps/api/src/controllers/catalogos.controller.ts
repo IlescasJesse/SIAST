@@ -15,7 +15,7 @@ export const categorias = (_req: Request, res: Response) => {
 
 // Mapeo categoría → roles habilitados para esa categoría
 const CATEGORIA_ROLES: Record<string, string[]> = {
-  TECNOLOGIAS: ["TECNICO_TI", "TECNICO_REDES"],
+  TECNOLOGIAS: ["TECNICO_TI", "TECNICO_SISTEMAS", "TECNICO_REDES"],
   SERVICIOS: ["TECNICO_SERVICIOS"],
   RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES"],
 };
@@ -31,6 +31,7 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
         ? (CATEGORIA_ROLES[categoria] as import("@prisma/client").Rol[])
         : ([
             "TECNICO_TI",
+            "TECNICO_SISTEMAS",
             "TECNICO_REDES",
             "TECNICO_SERVICIOS",
             "GESTOR_RECURSOS_MATERIALES",
