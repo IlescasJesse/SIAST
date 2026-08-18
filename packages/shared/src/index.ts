@@ -726,6 +726,11 @@ export interface RendimientoTecnico {
   ticketsCompletados: number;
   tiempoPromedioHoras: number | null;
   tiemprimeraRespuestaHoras: number | null;
+  // Promedio de (duración real / meta SLA de esa subcategoría) por ticket resuelto.
+  // 1.0 = a tiempo en promedio, <1.0 = por debajo de la meta, >1.0 = por encima.
+  // A diferencia de tiempoPromedioHoras, es comparable entre técnicos con mezclas
+  // de subcategoría distintas (ej. redes vs TI) — ver SLA_HORAS_SUBCATEGORIA en metricas.service.ts.
+  indiceEficiencia: number | null;
   ratioResueltosCancelados: number | null; // resueltos / (resueltos + cancelados)
 }
 

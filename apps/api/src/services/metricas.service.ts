@@ -17,6 +17,21 @@ const SLA_HORAS: Record<string, number> = {
   RECURSOS_MATERIALES: 72,
 };
 
+// Override por subcategoría cuando el trabajo real excede el SLA plano de su
+// categoría (feedback staff 2026-08-12: instalaciones/incidencias de red toman
+// 4-5 días por naturaleza — medirlas contra el SLA de 24h de TI de escritorio
+// las marca como "incumplidas" injustamente).
+const SLA_HORAS_SUBCATEGORIA: Partial<Record<string, number>> = {
+  RED_INTERNET: 96, // 4 días
+};
+
+function slaHorasPara(categoria: string, subcategoria?: string | null): number {
+  if (subcategoria && SLA_HORAS_SUBCATEGORIA[subcategoria] != null) {
+    return SLA_HORAS_SUBCATEGORIA[subcategoria] as number;
+  }
+  return SLA_HORAS[categoria] ?? 24;
+}
+
 // ── Helper: construir where con rango de fechas ───────────────────────────────
 type DateField = "createdAt" | "fechaResolucion";
 function buildDateWhere(
@@ -39,12 +54,12 @@ function buildDateWhere(
 async function calcularSLA(where: Record<string, unknown>): Promise<number | null> {
   const resueltos = await prisma.ticket.findMany({
     where: { ...where, estado: "RESUELTO", fechaResolucion: { not: null }, activo: true },
-    select: { categoria: true, createdAt: true, fechaResolucion: true },
+    select: { categoria: true, subcategoria: true, createdAt: true, fechaResolucion: true },
   });
   if (resueltos.length === 0) return null; // null = sin datos, 0 = todos incumplidos
   let cumplieron = 0;
   for (const t of resueltos) {
-    const metaMs = (SLA_HORAS[t.categoria as string] ?? 24) * 3_600_000;
+    const metaMs = slaHorasPara(t.categoria as string, t.subcategoria as string) * 3_600_000;
     const diff = t.fechaResolucion!.getTime() - t.createdAt.getTime();
     if (diff <= metaMs) cumplieron++;
   }
@@ -124,6 +139,27 @@ async function calcularTiempoPromedio(where: Record<string, unknown>): Promise<n
     0,
   );
   return Math.round((totalMs / tickets.length / 3_600_000) * 100) / 100;
+}
+
+// ── Helper: índice de eficiencia normalizado por proceso ──────────────────────
+// tiempoPromedioHoras compara horas crudas — injusto entre técnicos con mezclas
+// distintas de subcategoría (ej. redes vs TI, ver SLA_HORAS_SUBCATEGORIA arriba).
+// Este índice promedia (duración real / meta SLA de esa subcategoría) por ticket:
+// 1.0 = a tiempo en promedio, <1.0 = por debajo de la meta, >1.0 = por encima —
+// comparable entre técnicos de cualquier área/proceso.
+async function calcularIndiceEficiencia(where: Record<string, unknown>): Promise<number | null> {
+  const tickets = await prisma.ticket.findMany({
+    where: { ...where, estado: "RESUELTO", fechaResolucion: { not: null }, activo: true },
+    select: { categoria: true, subcategoria: true, createdAt: true, fechaResolucion: true },
+  });
+  if (tickets.length === 0) return null;
+  const ratios = tickets.map((t) => {
+    const metaMs = slaHorasPara(t.categoria as string, t.subcategoria as string) * 3_600_000;
+    const realMs = t.fechaResolucion!.getTime() - t.createdAt.getTime();
+    return realMs / metaMs;
+  });
+  const promedio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  return Math.round(promedio * 100) / 100;
 }
 
 // ── Helper: tiempo primera respuesta del técnico (D-04) ───────────────────────
@@ -460,15 +496,21 @@ export async function obtenerMetricasPorArea(
       tecnicos.map(async (t): Promise<RendimientoTecnico> => {
         const tecWhereCreated = { tecnicoId: t.id, activo: true, ...dateWhere };
         const tecWhereResuelto = { tecnicoId: t.id, activo: true, ...resolucionWhere };
-        const [activos, completados, cancelados, tiempo, primeraResp] = await Promise.all([
-          prisma.ticket.count({
-            where: { tecnicoId: t.id, activo: true, estado: { notIn: ["RESUELTO", "CANCELADO"] } },
-          }),
-          prisma.ticket.count({ where: { ...tecWhereResuelto, estado: "RESUELTO" } }),
-          prisma.ticket.count({ where: { ...tecWhereCreated, estado: "CANCELADO" } }),
-          calcularTiempoPromedio(tecWhereResuelto),
-          calcularTiemprimeraRespuesta(t.id, tecWhereCreated),
-        ]);
+        const [activos, completados, cancelados, tiempo, primeraResp, indiceEficiencia] =
+          await Promise.all([
+            prisma.ticket.count({
+              where: {
+                tecnicoId: t.id,
+                activo: true,
+                estado: { notIn: ["RESUELTO", "CANCELADO"] },
+              },
+            }),
+            prisma.ticket.count({ where: { ...tecWhereResuelto, estado: "RESUELTO" } }),
+            prisma.ticket.count({ where: { ...tecWhereCreated, estado: "CANCELADO" } }),
+            calcularTiempoPromedio(tecWhereResuelto),
+            calcularTiemprimeraRespuesta(t.id, tecWhereCreated),
+            calcularIndiceEficiencia(tecWhereResuelto),
+          ]);
         return {
           id: t.id,
           nombre: t.nombre,
@@ -478,6 +520,7 @@ export async function obtenerMetricasPorArea(
           ticketsCompletados: completados,
           tiempoPromedioHoras: tiempo,
           tiemprimeraRespuestaHoras: primeraResp,
+          indiceEficiencia,
           ratioResueltosCancelados:
             completados + cancelados > 0
               ? Math.round((completados / (completados + cancelados)) * 100) / 100

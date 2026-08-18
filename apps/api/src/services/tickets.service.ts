@@ -73,9 +73,12 @@ async function generarPasosParaTicket(
   }
 }
 
+// ABIERTO/ASIGNADO → RESUELTO directo: permite a Mesa de Ayuda/Responsables resolver
+// sin pasar por técnico (feedback staff 2026-08-12). Restringido por rol en cambiarEstado —
+// los técnicos siguen el flujo normal vía EN_PROGRESO.
 const TRANSICIONES: Record<string, string[]> = {
-  ABIERTO: ["ASIGNADO", "CANCELADO"],
-  ASIGNADO: ["EN_PROGRESO", "CANCELADO"],
+  ABIERTO: ["ASIGNADO", "CANCELADO", "RESUELTO"],
+  ASIGNADO: ["EN_PROGRESO", "CANCELADO", "RESUELTO"],
   EN_PROGRESO: ["RESUELTO", "CANCELADO"],
   RESUELTO: [],
   CANCELADO: [],
@@ -704,6 +707,23 @@ export const cambiarEstado = async (
       throw Object.assign(new Error("Solicitud fuera del área de soporte asignada"), {
         status: 403,
       });
+    }
+  }
+
+  // Guard: resolver saltando EN_PROGRESO (sin pasar por técnico) es solo para
+  // Mesa de Ayuda / Responsables — los técnicos siguen el flujo normal.
+  if (body.estado === "RESUELTO" && ticket.estado !== "EN_PROGRESO") {
+    const puedeResolverDirecto =
+      user.rol === "ADMIN" ||
+      user.rol === "MESA_AYUDA" ||
+      ROLES_RESPONSABLE.includes(user.rol as any);
+    if (!puedeResolverDirecto) {
+      throw Object.assign(
+        new Error(
+          "Solo Mesa de Ayuda o el Responsable del área pueden resolver sin pasar por técnico",
+        ),
+        { status: 403 },
+      );
     }
   }
 

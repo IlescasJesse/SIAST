@@ -57,9 +57,12 @@ const ROLES_RESPONSABLE_O_STAFF = [
   "RESPONSABLE_RECURSOS_MATERIALES",
 ];
 
+// ABIERTO/ASIGNADO → RESUELTO directo: Mesa de Ayuda/Responsables resuelven sin
+// pasar por técnico (feedback staff 2026-08-12). El backend re-valida por rol
+// (tickets.service.ts) — esto solo controla qué botones se muestran.
 const TRANSICIONES = {
-  ABIERTO: ["ASIGNADO", "CANCELADO"],
-  ASIGNADO: ["EN_PROGRESO", "CANCELADO"],
+  ABIERTO: ["ASIGNADO", "CANCELADO", "RESUELTO"],
+  ASIGNADO: ["EN_PROGRESO", "CANCELADO", "RESUELTO"],
   EN_PROGRESO: ["RESUELTO", "CANCELADO"],
   RESUELTO: [],
   CANCELADO: [],
@@ -123,11 +126,14 @@ function getTransicionLabel(estadoActual, estadoSiguiente, categoria) {
     return "Iniciar atención";
   }
 
-  if (estadoActual === "EN_PROGRESO" && estadoSiguiente === "RESUELTO") {
-    if (categoria_.includes("TECNOLOGIAS")) return "Marcar como resuelta";
-    if (categoria_.includes("SERVICIOS")) return "Servicio completado";
-    if (categoria_.includes("RECURSOS")) return "Recursos entregados";
-    return "Resolver solicitud";
+  if (estadoSiguiente === "RESUELTO") {
+    if (estadoActual === "EN_PROGRESO") {
+      if (categoria_.includes("TECNOLOGIAS")) return "Marcar como resuelta";
+      if (categoria_.includes("SERVICIOS")) return "Servicio completado";
+      if (categoria_.includes("RECURSOS")) return "Recursos entregados";
+      return "Resolver solicitud";
+    }
+    return "Resolver directamente";
   }
 
   return estadoSiguiente;
@@ -310,15 +316,23 @@ export const SolicitudDetailPage = () => {
     "TECNICO_TI",
     "TECNICO_SISTEMAS",
     "TECNICO_REDES",
-    "TECNICO_SERVICIOS",
+    "TECNICO_ELECTRICISTA",
+    "TECNICO_PLOMERO",
+    "TECNICO_MOVILIDAD",
     "GESTOR_RECURSOS_MATERIALES",
+    ...ROLES_RESPONSABLE_O_STAFF,
   ].includes(user?.rol);
   const canComentar = canActuar || user?.rol === "MESA_AYUDA";
   const puedeAsignarPaso = ROLES_RESPONSABLE_O_STAFF.includes(user?.rol);
   const puedeTriage = ROLES_RESPONSABLE_O_STAFF.includes(user?.rol);
   const pendienteAceptacion =
     puedeTriage && !solicitud.aceptadoEn && solicitud.estado !== "CANCELADO";
-  const transiciones = TRANSICIONES[solicitud.estado] ?? [];
+  // El atajo directo a RESUELTO (saltando EN_PROGRESO) es solo para Mesa de Ayuda/
+  // Responsables — coincide con el guard de tickets.service.ts. Los técnicos solo
+  // ven RESUELTO cuando el ticket ya está EN_PROGRESO (flujo normal).
+  const transiciones = (TRANSICIONES[solicitud.estado] ?? []).filter(
+    (estado) => estado !== "RESUELTO" || solicitud.estado === "EN_PROGRESO" || puedeTriage,
+  );
   const { pasos, labels } = getPasosYLabels(solicitud.categoria);
   const activeStep = getActiveStep(solicitud.estado, pasos);
   const tecnicosFiltradosPaso = dialogAsignarPaso
