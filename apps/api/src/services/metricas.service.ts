@@ -420,6 +420,7 @@ export async function obtenerMetricasPorArea(
   // Técnicos del área (excluir roles no técnicos)
   const rolesNoTecnico: Rol[] = [
     Rol.RESPONSABLE_TI,
+    Rol.RESPONSABLE_SISTEMAS,
     Rol.RESPONSABLE_REDES,
     Rol.RESPONSABLE_MANTENIMIENTO,
     Rol.RESPONSABLE_RECURSOS_MATERIALES,

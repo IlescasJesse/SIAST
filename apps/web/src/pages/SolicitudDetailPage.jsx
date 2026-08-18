@@ -1,14 +1,42 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Grid, Box, Card, CardContent, Typography, Chip, Divider,
-  Button, TextField, CircularProgress, Alert, Avatar,
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  Select, MenuItem, FormControl, InputLabel,
-  Stepper, Step, StepLabel,
+  Grid,
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Chip,
+  Divider,
+  Button,
+  TextField,
+  CircularProgress,
+  Alert,
+  Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Stepper,
+  Step,
+  StepLabel,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { getSolicitud, cambiarEstado, asignarSolicitud, agregarComentario, completarPaso, asignarPaso } from "../api/solicitudes.js";
+import {
+  getSolicitud,
+  cambiarEstado,
+  asignarSolicitud,
+  aceptarSolicitud,
+  reasignarAreaSolicitud,
+  actualizarPrioridadSolicitud,
+  agregarComentario,
+  completarPaso,
+  asignarPaso,
+} from "../api/solicitudes.js";
 import { getTecnicos, getDisponibilidadTecnico } from "../api/catalogos.js";
 import { StatusChip } from "../components/common/StatusChip.jsx";
 import { PriorityChip } from "../components/common/PriorityChip.jsx";
@@ -17,7 +45,17 @@ import { useAuthStore } from "../store/auth.js";
 import { useNotifStore } from "../store/notificaciones.js";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { LABEL_PISO } from "@stf/shared";
+import { LABEL_PISO, LABEL_SUBCATEGORIA, SUBCATEGORIAS_POR_CATEGORIA } from "@stf/shared";
+
+const ROLES_RESPONSABLE_O_STAFF = [
+  "ADMIN",
+  "MESA_AYUDA",
+  "RESPONSABLE_TI",
+  "RESPONSABLE_SISTEMAS",
+  "RESPONSABLE_REDES",
+  "RESPONSABLE_MANTENIMIENTO",
+  "RESPONSABLE_RECURSOS_MATERIALES",
+];
 
 const TRANSICIONES = {
   ABIERTO: ["ASIGNADO", "CANCELADO"],
@@ -27,19 +65,42 @@ const TRANSICIONES = {
   CANCELADO: [],
 };
 
-const ESTADO_LABEL = { ABIERTO: "Abierto", ASIGNADO: "Asignado", EN_PROGRESO: "En Progreso", RESUELTO: "Resuelto", CANCELADO: "Cancelado" };
+const ESTADO_LABEL = {
+  ABIERTO: "Abierto",
+  ASIGNADO: "Asignado",
+  EN_PROGRESO: "En Progreso",
+  RESUELTO: "Resuelto",
+  CANCELADO: "Cancelado",
+};
 
 // Pasos del stepper según categoría
 const PASOS_TECNOLOGIAS_SERVICIOS = ["ABIERTO", "ASIGNADO", "EN_PROGRESO", "RESUELTO"];
 const PASOS_RECURSOS = ["ABIERTO", "ASIGNADO", "EN_PROGRESO", "RESUELTO"];
 
-const PASO_LABEL_TECNOLOGIAS = { ABIERTO: "Abierto", ASIGNADO: "Asignado", EN_PROGRESO: "En progreso", RESUELTO: "Resuelto" };
-const PASO_LABEL_SERVICIOS   = { ABIERTO: "Abierto", ASIGNADO: "Asignado", EN_PROGRESO: "En progreso", RESUELTO: "Resuelto" };
-const PASO_LABEL_RECURSOS    = { ABIERTO: "Abierto", ASIGNADO: "En gestión", EN_PROGRESO: "Procesando", RESUELTO: "Entregado" };
+const PASO_LABEL_TECNOLOGIAS = {
+  ABIERTO: "Abierto",
+  ASIGNADO: "Asignado",
+  EN_PROGRESO: "En progreso",
+  RESUELTO: "Resuelto",
+};
+const PASO_LABEL_SERVICIOS = {
+  ABIERTO: "Abierto",
+  ASIGNADO: "Asignado",
+  EN_PROGRESO: "En progreso",
+  RESUELTO: "Resuelto",
+};
+const PASO_LABEL_RECURSOS = {
+  ABIERTO: "Abierto",
+  ASIGNADO: "En gestión",
+  EN_PROGRESO: "Procesando",
+  RESUELTO: "Entregado",
+};
 
 function getPasosYLabels(categoria) {
-  if (categoria?.includes("RECURSOS")) return { pasos: PASOS_RECURSOS, labels: PASO_LABEL_RECURSOS };
-  if (categoria?.includes("SERVICIOS")) return { pasos: PASOS_TECNOLOGIAS_SERVICIOS, labels: PASO_LABEL_SERVICIOS };
+  if (categoria?.includes("RECURSOS"))
+    return { pasos: PASOS_RECURSOS, labels: PASO_LABEL_RECURSOS };
+  if (categoria?.includes("SERVICIOS"))
+    return { pasos: PASOS_TECNOLOGIAS_SERVICIOS, labels: PASO_LABEL_SERVICIOS };
   return { pasos: PASOS_TECNOLOGIAS_SERVICIOS, labels: PASO_LABEL_TECNOLOGIAS };
 }
 
@@ -93,6 +154,8 @@ export const SolicitudDetailPage = () => {
   const [cantidadPaso, setCantidadPaso] = useState("");
   const [dialogAsignarPaso, setDialogAsignarPaso] = useState(null);
   const [tecnicoSelPaso, setTecnicoSelPaso] = useState("");
+  const [dialogReasignar, setDialogReasignar] = useState(false);
+  const [subcategoriaSel, setSubcategoriaSel] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -102,11 +165,16 @@ export const SolicitudDetailPage = () => {
       // Cargar técnicos filtrados por la categoría de la solicitud
       const tec = await getTecnicos(s.categoria);
       setTecnicos(tec.data ?? []);
-    } catch { setError("Error al cargar la solicitud"); }
-    finally { setLoading(false); }
+    } catch {
+      setError("Error al cargar la solicitud");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, [id, ticketsVersion]);
+  useEffect(() => {
+    load();
+  }, [id, ticketsVersion]);
 
   const handleEstado = async () => {
     setSaving(true);
@@ -115,7 +183,9 @@ export const SolicitudDetailPage = () => {
       setDialogEstado(null);
       setComentario("");
       load();
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAsignar = async () => {
@@ -126,7 +196,9 @@ export const SolicitudDetailPage = () => {
       setDialogTecnico(false);
       setDisponibilidad(null);
       load();
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSeleccionarTecnico = async (tecnicoId) => {
@@ -145,6 +217,40 @@ export const SolicitudDetailPage = () => {
     }
   };
 
+  const handleAceptar = async () => {
+    setSaving(true);
+    try {
+      await aceptarSolicitud(id);
+      load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReasignar = async () => {
+    if (!subcategoriaSel) return;
+    setSaving(true);
+    try {
+      await reasignarAreaSolicitud(id, subcategoriaSel);
+      setDialogReasignar(false);
+      setSubcategoriaSel("");
+      load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePrioridad = async (nuevaPrioridad) => {
+    if (!nuevaPrioridad || nuevaPrioridad === solicitud.prioridad) return;
+    setSaving(true);
+    try {
+      await actualizarPrioridadSolicitud(id, nuevaPrioridad);
+      load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleComentario = async (e) => {
     e.preventDefault();
     if (!comentario.trim()) return;
@@ -153,7 +259,9 @@ export const SolicitudDetailPage = () => {
       await agregarComentario(id, comentario);
       setComentario("");
       load();
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAsignarPaso = async () => {
@@ -164,7 +272,9 @@ export const SolicitudDetailPage = () => {
       setDialogAsignarPaso(null);
       setTecnicoSelPaso("");
       load();
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCompletarPaso = async () => {
@@ -180,22 +290,43 @@ export const SolicitudDetailPage = () => {
       setNotasPaso("");
       setCantidadPaso("");
       load();
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (loading) return <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>;
+  if (loading)
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
   if (error) return <Alert severity="error">{error}</Alert>;
   if (!solicitud) return null;
 
-  const canActuar = ["ADMIN", "MESA_AYUDA", "TECNICO_TI", "TECNICO_REDES", "TECNICO_SERVICIOS", "GESTOR_RECURSOS_MATERIALES"].includes(user?.rol);
+  const canActuar = [
+    "ADMIN",
+    "MESA_AYUDA",
+    "TECNICO_TI",
+    "TECNICO_SISTEMAS",
+    "TECNICO_REDES",
+    "TECNICO_SERVICIOS",
+    "GESTOR_RECURSOS_MATERIALES",
+  ].includes(user?.rol);
   const canComentar = canActuar || user?.rol === "MESA_AYUDA";
-  const puedeAsignarPaso = ["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES"].includes(user?.rol);
+  const puedeAsignarPaso = ROLES_RESPONSABLE_O_STAFF.includes(user?.rol);
+  const puedeTriage = ROLES_RESPONSABLE_O_STAFF.includes(user?.rol);
+  const pendienteAceptacion =
+    puedeTriage && !solicitud.aceptadoEn && solicitud.estado !== "CANCELADO";
   const transiciones = TRANSICIONES[solicitud.estado] ?? [];
   const { pasos, labels } = getPasosYLabels(solicitud.categoria);
   const activeStep = getActiveStep(solicitud.estado, pasos);
   const tecnicosFiltradosPaso = dialogAsignarPaso
     ? tecnicos.filter((t) => t.rol === dialogAsignarPaso.rolRequerido)
     : [];
+  const subcategoriasDisponibles = Object.values(SUBCATEGORIAS_POR_CATEGORIA)
+    .flat()
+    .filter((s) => s !== solicitud.subcategoria);
 
   return (
     <Box>
@@ -209,23 +340,66 @@ export const SolicitudDetailPage = () => {
           <Card>
             <CardContent>
               {/* Header */}
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  mb: 2,
+                }}
+              >
                 <Box>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-                    <Typography variant="h6" color="primary" fontWeight={700} sx={{ fontFamily: "monospace" }}>
+                    <Typography
+                      variant="h6"
+                      color="primary"
+                      fontWeight={700}
+                      sx={{ fontFamily: "monospace" }}
+                    >
                       {solicitud.folio ?? `#${solicitud.id}`}
                     </Typography>
-                    <Typography variant="caption" color="text.disabled">/ #{solicitud.id}</Typography>
+                    <Typography variant="caption" color="text.disabled">
+                      / #{solicitud.id}
+                    </Typography>
                   </Box>
-                  <Typography variant="h6" fontWeight={700}>{solicitud.asunto}</Typography>
+                  <Typography variant="h6" fontWeight={700}>
+                    {solicitud.asunto}
+                  </Typography>
                 </Box>
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <StatusChip estado={solicitud.estado} />
-                  <PriorityChip prioridad={solicitud.prioridad} />
+                  {puedeTriage ? (
+                    <FormControl size="small" variant="standard" sx={{ minWidth: 0 }}>
+                      <Select
+                        value={solicitud.prioridad}
+                        onChange={(e) => handlePrioridad(e.target.value)}
+                        disabled={saving}
+                        disableUnderline
+                        renderValue={(v) => <PriorityChip prioridad={v} />}
+                        sx={{
+                          "&:before, &:after": { display: "none" },
+                          "& .MuiSelect-select": { py: 0, pr: "20px !important", display: "flex" },
+                          "& .MuiSelect-icon": { fontSize: 18, color: "text.secondary" },
+                        }}
+                      >
+                        {["BAJA", "MEDIA", "ALTA", "URGENTE"].map((p) => (
+                          <MenuItem key={p} value={p}>
+                            <PriorityChip prioridad={p} />
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  ) : (
+                    <PriorityChip prioridad={solicitud.prioridad} />
+                  )}
                 </Box>
               </Box>
 
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, p: 1.5, bgcolor: "rgba(0,0,0,0.03)", borderRadius: 1 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 2, p: 1.5, bgcolor: "rgba(0,0,0,0.03)", borderRadius: 1 }}
+              >
                 {solicitud.descripcion}
               </Typography>
 
@@ -236,21 +410,42 @@ export const SolicitudDetailPage = () => {
                   ["Área", solicitud.area?.label],
                   ["Piso", LABEL_PISO[solicitud.piso] ?? solicitud.piso],
                   ["Categoría", solicitud.subcategoria?.replace("_", " ")],
-                  ["Técnico", solicitud.tecnico ? `${solicitud.tecnico.nombre} ${solicitud.tecnico.apellidos}` : "Sin asignar"],
-                  ["Creado", format(new Date(solicitud.createdAt), "dd/MM/yyyy HH:mm", { locale: es })],
-                  solicitud.fechaResolucion && ["Resuelto", format(new Date(solicitud.fechaResolucion), "dd/MM/yyyy HH:mm", { locale: es })],
-                ].filter(Boolean).map(([k, v]) => (
-                  <Grid item xs={6} key={k}>
-                    <Typography variant="caption" color="text.secondary">{k}</Typography>
-                    <Typography variant="body2">{v}</Typography>
-                  </Grid>
-                ))}
+                  [
+                    "Técnico",
+                    solicitud.tecnico
+                      ? `${solicitud.tecnico.nombre} ${solicitud.tecnico.apellidos}`
+                      : "Sin asignar",
+                  ],
+                  [
+                    "Creado",
+                    format(new Date(solicitud.createdAt), "dd/MM/yyyy HH:mm", { locale: es }),
+                  ],
+                  solicitud.fechaResolucion && [
+                    "Resuelto",
+                    format(new Date(solicitud.fechaResolucion), "dd/MM/yyyy HH:mm", { locale: es }),
+                  ],
+                ]
+                  .filter(Boolean)
+                  .map(([k, v]) => (
+                    <Grid item xs={6} key={k}>
+                      <Typography variant="caption" color="text.secondary">
+                        {k}
+                      </Typography>
+                      <Typography variant="body2">{v}</Typography>
+                    </Grid>
+                  ))}
               </Grid>
 
               {/* Flujo de la solicitud */}
               {!["CANCELADO"].includes(solicitud.estado) && (
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={700} display="block" sx={{ mb: 1, letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    fontWeight={700}
+                    display="block"
+                    sx={{ mb: 1, letterSpacing: 0.5 }}
+                  >
                     FLUJO DE LA SOLICITUD
                   </Typography>
                   <Stepper activeStep={activeStep} alternativeLabel>
@@ -267,8 +462,13 @@ export const SolicitudDetailPage = () => {
               {solicitud.pasos?.length > 0 && (
                 <Box sx={{ mb: 2 }}>
                   <Divider sx={{ my: 2 }} />
-                  <Typography variant="caption" color="text.secondary" fontWeight={700}
-                    display="block" sx={{ mb: 1.5, letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    fontWeight={700}
+                    display="block"
+                    sx={{ mb: 1.5, letterSpacing: 0.5 }}
+                  >
                     FLUJO DE ATENCIÓN
                   </Typography>
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -285,25 +485,40 @@ export const SolicitudDetailPage = () => {
                             p: 1.5,
                             borderRadius: 1,
                             border: "1px solid",
-                            borderColor: esActivo ? "primary.main"
-                              : esCompletado ? "success.main"
-                              : "divider",
-                            bgcolor: esActivo ? "primary.50"
-                              : esCompletado ? "success.50"
-                              : "background.paper",
+                            borderColor: esActivo
+                              ? "primary.main"
+                              : esCompletado
+                                ? "success.main"
+                                : "divider",
+                            bgcolor: esActivo
+                              ? "primary.50"
+                              : esCompletado
+                                ? "success.50"
+                                : "background.paper",
                             opacity: esPendiente ? 0.7 : 1,
                           }}
                         >
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
                             {/* Número de paso */}
-                            <Box sx={{
-                              width: 22, height: 22, borderRadius: "50%",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: 11, fontWeight: 700,
-                              bgcolor: esCompletado ? "success.main" : esActivo ? "primary.main" : "grey.300",
-                              color: esCompletado || esActivo ? "white" : "text.secondary",
-                              flexShrink: 0,
-                            }}>
+                            <Box
+                              sx={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: "50%",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 11,
+                                fontWeight: 700,
+                                bgcolor: esCompletado
+                                  ? "success.main"
+                                  : esActivo
+                                    ? "primary.main"
+                                    : "grey.300",
+                                color: esCompletado || esActivo ? "white" : "text.secondary",
+                                flexShrink: 0,
+                              }}
+                            >
                               {esCompletado ? "✓" : paso.orden}
                             </Box>
 
@@ -313,13 +528,21 @@ export const SolicitudDetailPage = () => {
 
                             {/* Chip de estado */}
                             <Chip
-                              label={paso.estado === "EN_PROGRESO" ? "En progreso"
-                                : paso.estado === "COMPLETADO" ? "Completado"
-                                : "Pendiente"}
+                              label={
+                                paso.estado === "EN_PROGRESO"
+                                  ? "En progreso"
+                                  : paso.estado === "COMPLETADO"
+                                    ? "Completado"
+                                    : "Pendiente"
+                              }
                               size="small"
-                              color={paso.estado === "EN_PROGRESO" ? "primary"
-                                : paso.estado === "COMPLETADO" ? "success"
-                                : "default"}
+                              color={
+                                paso.estado === "EN_PROGRESO"
+                                  ? "primary"
+                                  : paso.estado === "COMPLETADO"
+                                    ? "success"
+                                    : "default"
+                              }
                               sx={{ height: 20, fontSize: 10 }}
                             />
                           </Box>
@@ -334,7 +557,10 @@ export const SolicitudDetailPage = () => {
                           {/* Fecha completado */}
                           {paso.completadoAt && (
                             <Typography variant="caption" color="text.disabled" display="block">
-                              Completado: {format(new Date(paso.completadoAt), "dd/MM/yyyy HH:mm", { locale: es })}
+                              Completado:{" "}
+                              {format(new Date(paso.completadoAt), "dd/MM/yyyy HH:mm", {
+                                locale: es,
+                              })}
                             </Typography>
                           )}
 
@@ -363,17 +589,23 @@ export const SolicitudDetailPage = () => {
                           )}
 
                           {/* Botón asignar técnico — Admin/Mesa para pasos PENDIENTE */}
-                          {puedeAsignarPaso && paso.estado === "PENDIENTE" && !paso.tecnicoId && (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              color="primary"
-                              sx={{ mt: 1 }}
-                              onClick={() => { setDialogAsignarPaso(paso); setTecnicoSelPaso(""); }}
-                            >
-                              Asignar técnico
-                            </Button>
-                          )}
+                          {puedeAsignarPaso &&
+                            !pendienteAceptacion &&
+                            paso.estado === "PENDIENTE" &&
+                            !paso.tecnicoId && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                                sx={{ mt: 1 }}
+                                onClick={() => {
+                                  setDialogAsignarPaso(paso);
+                                  setTecnicoSelPaso("");
+                                }}
+                              >
+                                Asignar técnico
+                              </Button>
+                            )}
                         </Box>
                       );
                     })}
@@ -381,10 +613,46 @@ export const SolicitudDetailPage = () => {
                 </Box>
               )}
 
+              {/* Triage: aceptar o reasignar antes de poder asignar técnico */}
+              {pendienteAceptacion && (
+                <Box sx={{ mb: 2 }}>
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    Esta solicitud aún no ha sido aceptada por el área. Acéptala si corresponde a tu
+                    área, o reasígnala al área correcta.
+                  </Alert>
+                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="success"
+                      onClick={handleAceptar}
+                      disabled={saving}
+                    >
+                      {saving ? <CircularProgress size={18} /> : "Aceptar"}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => setDialogReasignar(true)}
+                      disabled={saving}
+                    >
+                      Reasignar a otra área
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+              {solicitud.aceptadoPor && (
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                  Aceptada por {solicitud.aceptadoPor.nombre} {solicitud.aceptadoPor.apellidos}
+                  {solicitud.aceptadoEn &&
+                    ` — ${format(new Date(solicitud.aceptadoEn), "dd/MM/yyyy HH:mm", { locale: es })}`}
+                </Typography>
+              )}
+
               {/* Acciones */}
-              {canActuar && (
+              {canActuar && !pendienteAceptacion && (
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
-                  {["ADMIN", "MESA_AYUDA", "RESPONSABLE_TI", "RESPONSABLE_REDES", "RESPONSABLE_MANTENIMIENTO", "RESPONSABLE_RECURSOS_MATERIALES"].includes(user?.rol) && (
+                  {ROLES_RESPONSABLE_O_STAFF.includes(user?.rol) && (
                     <Button size="small" variant="outlined" onClick={() => setDialogTecnico(true)}>
                       Asignar técnico
                     </Button>
@@ -403,7 +671,13 @@ export const SolicitudDetailPage = () => {
                 </Box>
               )}
               {user?.rol === "EMPLEADO" && solicitud.estado === "ABIERTO" && (
-                <Button size="small" variant="outlined" color="error" onClick={() => setDialogEstado("CANCELADO")} sx={{ mb: 2 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  onClick={() => setDialogEstado("CANCELADO")}
+                  sx={{ mb: 2 }}
+                >
                   Cancelar solicitud
                 </Button>
               )}
@@ -411,17 +685,32 @@ export const SolicitudDetailPage = () => {
               <Divider sx={{ my: 2 }} />
 
               {/* Historial */}
-              <Typography variant="subtitle2" fontWeight={700} gutterBottom>Historial</Typography>
+              <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                Historial
+              </Typography>
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mb: 2 }}>
                 {(solicitud.historial ?? []).map((h) => (
                   <Box key={h.id} sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "primary.main", mt: 0.7, flexShrink: 0 }} />
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "primary.main",
+                        mt: 0.7,
+                        flexShrink: 0,
+                      }}
+                    />
                     <Box>
                       <Typography variant="body2">
                         <strong>{ESTADO_LABEL[h.estadoNuevo]}</strong>
                         {h.estadoAnterior && ` (antes: ${ESTADO_LABEL[h.estadoAnterior]})`}
                       </Typography>
-                      {h.comentario && <Typography variant="caption" color="text.secondary">{h.comentario}</Typography>}
+                      {h.comentario && (
+                        <Typography variant="caption" color="text.secondary">
+                          {h.comentario}
+                        </Typography>
+                      )}
                       <Typography variant="caption" color="text.disabled" display="block">
                         {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: es })}
                       </Typography>
@@ -433,7 +722,9 @@ export const SolicitudDetailPage = () => {
               <Divider sx={{ my: 2 }} />
 
               {/* Comentarios */}
-              <Typography variant="subtitle2" fontWeight={700} gutterBottom>Comentarios</Typography>
+              <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                Comentarios
+              </Typography>
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 2 }}>
                 {(solicitud.comentarios ?? []).map((c) => (
                   <Box key={c.id} sx={{ display: "flex", gap: 1.5 }}>
@@ -442,8 +733,12 @@ export const SolicitudDetailPage = () => {
                     </Avatar>
                     <Box sx={{ flex: 1 }}>
                       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                        <Typography variant="caption" fontWeight={600}>{c.usuario?.nombre}</Typography>
-                        {c.esInterno && <Chip label="Interno" size="small" sx={{ height: 14, fontSize: 10 }} />}
+                        <Typography variant="caption" fontWeight={600}>
+                          {c.usuario?.nombre}
+                        </Typography>
+                        {c.esInterno && (
+                          <Chip label="Interno" size="small" sx={{ height: 14, fontSize: 10 }} />
+                        )}
                         <Typography variant="caption" color="text.disabled">
                           {format(new Date(c.createdAt), "dd/MM HH:mm", { locale: es })}
                         </Typography>
@@ -460,9 +755,17 @@ export const SolicitudDetailPage = () => {
                     value={comentario}
                     onChange={(e) => setComentario(e.target.value)}
                     placeholder="Agregar comentario..."
-                    size="small" fullWidth multiline maxRows={3}
+                    size="small"
+                    fullWidth
+                    multiline
+                    maxRows={3}
                   />
-                  <Button type="submit" variant="contained" disabled={!comentario.trim() || saving} sx={{ alignSelf: "flex-end" }}>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={!comentario.trim() || saving}
+                    sx={{ alignSelf: "flex-end" }}
+                  >
                     Enviar
                   </Button>
                 </Box>
@@ -474,7 +777,11 @@ export const SolicitudDetailPage = () => {
         {/* Panel 3D */}
         <Grid item xs={12} md={6} sx={{ height: "100%" }}>
           <BuildingViewer
-            autoHighlight={solicitud.areaId ? { floor: solicitud.area?.floor ?? 0, roomId: solicitud.areaId } : undefined}
+            autoHighlight={
+              solicitud.areaId
+                ? { floor: solicitud.area?.floor ?? 0, roomId: solicitud.areaId }
+                : undefined
+            }
             sx={{ height: "100%" }}
           />
         </Grid>
@@ -488,7 +795,10 @@ export const SolicitudDetailPage = () => {
             label="Comentario (opcional)"
             value={comentario}
             onChange={(e) => setComentario(e.target.value)}
-            fullWidth multiline rows={3} sx={{ mt: 1 }}
+            fullWidth
+            multiline
+            rows={3}
+            sx={{ mt: 1 }}
           />
         </DialogContent>
         <DialogActions>
@@ -502,7 +812,11 @@ export const SolicitudDetailPage = () => {
       {/* Dialog asignar técnico */}
       <Dialog
         open={dialogTecnico}
-        onClose={() => { setDialogTecnico(false); setDisponibilidad(null); setTecnicoSel(""); }}
+        onClose={() => {
+          setDialogTecnico(false);
+          setDisponibilidad(null);
+          setTecnicoSel("");
+        }}
       >
         <DialogTitle>Asignar técnico</DialogTitle>
         <DialogContent sx={{ minWidth: 360 }}>
@@ -519,7 +833,8 @@ export const SolicitudDetailPage = () => {
                 ? "Tecnologías"
                 : solicitud.categoria === "SERVICIOS"
                   ? "Servicios"
-                  : "Recursos Materiales"}.
+                  : "Recursos Materiales"}
+              .
             </Typography>
           )}
           <FormControl fullWidth sx={{ mt: 1 }}>
@@ -530,14 +845,18 @@ export const SolicitudDetailPage = () => {
               onChange={(e) => handleSeleccionarTecnico(e.target.value)}
             >
               {tecnicos.map((t) => (
-                <MenuItem key={t.id} value={t.id}>{t.nombre} {t.apellidos} ({t.rol})</MenuItem>
+                <MenuItem key={t.id} value={t.id}>
+                  {t.nombre} {t.apellidos} ({t.rol})
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
           {disponibilidadLoading && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
               <CircularProgress size={16} />
-              <Typography variant="caption" color="text.secondary">Verificando disponibilidad...</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Verificando disponibilidad...
+              </Typography>
             </Box>
           )}
           {!disponibilidadLoading && disponibilidad && !disponibilidad.disponible && (
@@ -547,7 +866,13 @@ export const SolicitudDetailPage = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDialogTecnico(false); setDisponibilidad(null); setTecnicoSel(""); }}>
+          <Button
+            onClick={() => {
+              setDialogTecnico(false);
+              setDisponibilidad(null);
+              setTecnicoSel("");
+            }}
+          >
             Cancelar
           </Button>
           <Button variant="contained" onClick={handleAsignar} disabled={!tecnicoSel || saving}>
@@ -556,8 +881,58 @@ export const SolicitudDetailPage = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Dialog reasignar área */}
+      <Dialog
+        open={dialogReasignar}
+        onClose={() => {
+          setDialogReasignar(false);
+          setSubcategoriaSel("");
+        }}
+      >
+        <DialogTitle>Reasignar a otra área</DialogTitle>
+        <DialogContent sx={{ minWidth: 360 }}>
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel>Nueva subcategoría</InputLabel>
+            <Select
+              value={subcategoriaSel}
+              label="Nueva subcategoría"
+              onChange={(e) => setSubcategoriaSel(e.target.value)}
+            >
+              {subcategoriasDisponibles.map((s) => (
+                <MenuItem key={s} value={s}>
+                  {LABEL_SUBCATEGORIA[s] ?? s}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setDialogReasignar(false);
+              setSubcategoriaSel("");
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleReasignar}
+            disabled={!subcategoriaSel || saving}
+          >
+            {saving ? <CircularProgress size={18} /> : "Reasignar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog asignar técnico al paso */}
-      <Dialog open={Boolean(dialogAsignarPaso)} onClose={() => { setDialogAsignarPaso(null); setTecnicoSelPaso(""); }}>
+      <Dialog
+        open={Boolean(dialogAsignarPaso)}
+        onClose={() => {
+          setDialogAsignarPaso(null);
+          setTecnicoSelPaso("");
+        }}
+      >
         <DialogTitle>
           Asignar técnico — {dialogAsignarPaso?.nombre ?? `Paso ${dialogAsignarPaso?.orden}`}
         </DialogTitle>
@@ -575,14 +950,23 @@ export const SolicitudDetailPage = () => {
                 onChange={(e) => setTecnicoSelPaso(e.target.value)}
               >
                 {tecnicosFiltradosPaso.map((t) => (
-                  <MenuItem key={t.id} value={t.id}>{t.nombre} {t.apellidos}</MenuItem>
+                  <MenuItem key={t.id} value={t.id}>
+                    {t.nombre} {t.apellidos}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDialogAsignarPaso(null); setTecnicoSelPaso(""); }}>Cancelar</Button>
+          <Button
+            onClick={() => {
+              setDialogAsignarPaso(null);
+              setTecnicoSelPaso("");
+            }}
+          >
+            Cancelar
+          </Button>
           <Button
             variant="contained"
             onClick={handleAsignarPaso}
@@ -596,7 +980,11 @@ export const SolicitudDetailPage = () => {
       {/* Dialog completar paso */}
       <Dialog
         open={Boolean(dialogCompletarPaso)}
-        onClose={() => { setDialogCompletarPaso(null); setNotasPaso(""); setCantidadPaso(""); }}
+        onClose={() => {
+          setDialogCompletarPaso(null);
+          setNotasPaso("");
+          setCantidadPaso("");
+        }}
       >
         <DialogTitle>
           Completar: {dialogCompletarPaso?.nombre ?? `Paso ${dialogCompletarPaso?.orden}`}
@@ -608,7 +996,8 @@ export const SolicitudDetailPage = () => {
               type="number"
               value={cantidadPaso}
               onChange={(e) => setCantidadPaso(e.target.value)}
-              fullWidth required
+              fullWidth
+              required
               inputProps={{ min: 1 }}
               sx={{ mt: 1, mb: 2 }}
               helperText="Campo obligatorio para este tipo de paso"
@@ -618,12 +1007,20 @@ export const SolicitudDetailPage = () => {
             label="Notas (opcional)"
             value={notasPaso}
             onChange={(e) => setNotasPaso(e.target.value)}
-            fullWidth multiline rows={3}
+            fullWidth
+            multiline
+            rows={3}
             sx={{ mt: dialogCompletarPaso?.labelUnidades ? 0 : 1 }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDialogCompletarPaso(null); setNotasPaso(""); setCantidadPaso(""); }}>
+          <Button
+            onClick={() => {
+              setDialogCompletarPaso(null);
+              setNotasPaso("");
+              setCantidadPaso("");
+            }}
+          >
             Cancelar
           </Button>
           <Button

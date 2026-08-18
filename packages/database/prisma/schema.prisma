@@ -33,6 +33,9 @@ enum Rol {
   GESTOR_SALAS_JUNTA
   GESTOR_RECURSOS
   GESTOR_INVENTARIO
+  // ── Phase 5: área SISTEMAS separada de TI ──
+  RESPONSABLE_SISTEMAS
+  TECNICO_SISTEMAS
 }
 
 enum CategoriaTicket {
@@ -145,6 +148,7 @@ model Usuario {
   // Relaciones
   ticketsAsignados   Ticket[]            @relation("TecnicoAsignado")
   ticketsCreados     Ticket[]            @relation("UsuarioCreador")
+  ticketsAceptados   Ticket[]            @relation("TicketAceptadoPor")
   comentarios        Comentario[]
   historialAcciones  HistorialTicket[]
   notificaciones     Notificacion[]
@@ -325,6 +329,19 @@ model Ticket {
   subcategoria SubcategoriaTicket
   estado       EstadoTicket       @default(ABIERTO)
   prioridad    PrioridadTicket    @default(MEDIA)
+
+  // Override manual de prioridad por Mesa de Ayuda / Responsable de área.
+  // Si está definido, gana sobre el cálculo automático por antigüedad (computeAutoPriority).
+  prioridadManual PrioridadTicket? @map("prioridad_manual")
+
+  // Snapshot de lo que solicitó el empleado originalmente (auditoría) — no se toca tras crear
+  categoriaOriginal    CategoriaTicket?    @map("categoria_original")
+  subcategoriaOriginal SubcategoriaTicket? @map("subcategoria_original")
+
+  // Acuse de triage: el área receptora acepta el ticket (o lo reasigna) antes de poder asignar técnico
+  aceptadoPorId Int?      @map("aceptado_por_id")
+  aceptadoPor   Usuario?  @relation("TicketAceptadoPor", fields: [aceptadoPorId], references: [id])
+  aceptadoEn    DateTime? @map("aceptado_en")
 
   // Empleado que reporta
   empleadoRfc String   @db.VarChar(13)

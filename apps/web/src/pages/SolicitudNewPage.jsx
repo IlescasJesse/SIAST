@@ -1,11 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
-  Box, Grid, Card, CardContent, Typography, TextField,
-  Select, MenuItem, FormControl, InputLabel, Button,
-  Alert, CircularProgress, Chip, Skeleton, Autocomplete,
-  FormGroup, FormControlLabel, Checkbox, Divider, Paper,
+  Box,
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Button,
+  Alert,
+  CircularProgress,
+  Chip,
+  Skeleton,
+  Autocomplete,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Divider,
+  Paper,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -36,39 +53,49 @@ import { createSolicitud } from "../api/solicitudes.js";
 import { getAreas } from "../api/catalogos.js";
 import { useAuthStore } from "../store/auth.js";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
-import { SUBCATEGORIAS_POR_CATEGORIA, LABEL_SUBCATEGORIA, LABEL_CATEGORIA, DESCRIPCION_SUBCATEGORIA, LABEL_PISO, SUB_TIPO_EQUIPOS, SUB_TIPO_SISTEMAS, SUB_TIPO_RED, SUB_TIPO_CUENTAS } from "@stf/shared";
+import {
+  SUBCATEGORIAS_POR_CATEGORIA,
+  LABEL_SUBCATEGORIA,
+  LABEL_CATEGORIA,
+  DESCRIPCION_SUBCATEGORIA,
+  LABEL_PISO,
+  SUB_TIPO_EQUIPOS,
+  SUB_TIPO_SISTEMAS,
+  SUB_TIPO_RED,
+  SUB_TIPO_CUENTAS,
+} from "@stf/shared";
 
 const CATEGORIA_STYLE = {
   "Tecnologías de la Información": { border: "#1565c0", bg: "#e3f0fd" },
-  "Servicios Generales":           { border: "#2e7d32", bg: "#e6f4ea" },
-  "Recursos Materiales":           { border: "#e65100", bg: "#fef3e2" },
+  "Servicios Generales": { border: "#2e7d32", bg: "#e6f4ea" },
+  "Recursos Materiales": { border: "#e65100", bg: "#fef3e2" },
 };
 
 const SUBCATEGORIA_ICON = {
   SISTEMAS_INSTITUCIONALES: <StorageIcon fontSize="small" />,
-  EQUIPOS_DISPOSITIVOS:     <LaptopIcon fontSize="small" />,
-  RED_INTERNET:             <WifiIcon fontSize="small" />,
-  CUENTAS_DOMINIO:          <ManageAccountsIcon fontSize="small" />,
-  CORREO_OUTLOOK:           <EmailIcon fontSize="small" />,
-  SANITARIOS:               <PlumbingIcon fontSize="small" />,
-  ILUMINACION:              <LightbulbIcon fontSize="small" />,
-  MOVILIDAD:                <ElevatorIcon fontSize="small" />,
-  SALA_JUNTAS:              <MeetingRoomIcon fontSize="small" />,
-  EQUIPO_AUDIOVISUAL:       <VideocamIcon fontSize="small" />,
-  PRESTAMO_EQUIPO:          <DevicesIcon fontSize="small" />,
-  MOBILIARIO:               <ChairIcon fontSize="small" />,
-  PAPELERIA:                <DescriptionIcon fontSize="small" />,
+  EQUIPOS_DISPOSITIVOS: <LaptopIcon fontSize="small" />,
+  RED_INTERNET: <WifiIcon fontSize="small" />,
+  CUENTAS_DOMINIO: <ManageAccountsIcon fontSize="small" />,
+  CORREO_OUTLOOK: <EmailIcon fontSize="small" />,
+  SANITARIOS: <PlumbingIcon fontSize="small" />,
+  ILUMINACION: <LightbulbIcon fontSize="small" />,
+  MOVILIDAD: <ElevatorIcon fontSize="small" />,
+  SALA_JUNTAS: <MeetingRoomIcon fontSize="small" />,
+  EQUIPO_AUDIOVISUAL: <VideocamIcon fontSize="small" />,
+  PRESTAMO_EQUIPO: <DevicesIcon fontSize="small" />,
+  MOBILIARIO: <ChairIcon fontSize="small" />,
+  PAPELERIA: <DescriptionIcon fontSize="small" />,
 };
 
 // Lista plana de todas las opciones para el Autocomplete
-const OPCIONES_SUBCATEGORIA = Object.entries(SUBCATEGORIAS_POR_CATEGORIA).flatMap(
-  ([cat, subs]) => subs.map((sub) => ({
+const OPCIONES_SUBCATEGORIA = Object.entries(SUBCATEGORIAS_POR_CATEGORIA).flatMap(([cat, subs]) =>
+  subs.map((sub) => ({
     categoria: cat,
     subcategoria: sub,
     labelCategoria: LABEL_CATEGORIA[cat] ?? cat,
     label: LABEL_SUBCATEGORIA[sub] ?? sub,
     descripcion: DESCRIPCION_SUBCATEGORIA[sub] ?? "",
-  }))
+  })),
 );
 
 // Normaliza texto para comparación (quita acentos, minúsculas)
@@ -120,6 +147,10 @@ export const SolicitudNewPage = () => {
   const [loadingAreas, setLoadingAreas] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Guardia síncrona contra doble clic/submit: el state `loading` tarda un
+  // ciclo de render en deshabilitar el botón, tiempo suficiente para que un
+  // doble clic rápido dispare handleSubmit dos veces y cree la solicitud duplicada.
+  const submittingRef = useRef(false);
   const [highlight, setHighlight] = useState(null);
 
   // Estado para campos adicionales por subcategoría
@@ -226,8 +257,15 @@ export const SolicitudNewPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError("");
-    if (!form.asunto.trim() || !form.descripcion.trim() || !form.categoria || !form.subcategoria || !form.ubicacionAreaId) {
+    if (
+      !form.asunto.trim() ||
+      !form.descripcion.trim() ||
+      !form.categoria ||
+      !form.subcategoria ||
+      !form.ubicacionAreaId
+    ) {
       setError("Completa todos los campos obligatorios, incluyendo la ubicación");
       return;
     }
@@ -239,7 +277,10 @@ export const SolicitudNewPage = () => {
       setError("Selecciona el sistema institucional (SIRH o SIAST)");
       return;
     }
-    if ((form.subcategoria === "SALA_JUNTAS" || form.subcategoria === "MOBILIARIO") && (!fechaUso || !horaInicio || !horaFin)) {
+    if (
+      (form.subcategoria === "SALA_JUNTAS" || form.subcategoria === "MOBILIARIO") &&
+      (!fechaUso || !horaInicio || !horaFin)
+    ) {
       setError("Indica la fecha y hora de uso para esta solicitud");
       return;
     }
@@ -247,6 +288,7 @@ export const SolicitudNewPage = () => {
       setError("Ingresa el RFC del empleado solicitante");
       return;
     }
+    submittingRef.current = true;
     setLoading(true);
     try {
       const recursosAdicionales = buildRecursosAdicionales();
@@ -259,6 +301,7 @@ export const SolicitudNewPage = () => {
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al crear la solicitud");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -273,7 +316,9 @@ export const SolicitudNewPage = () => {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} gutterBottom>Nueva Solicitud</Typography>
+      <Typography variant="h5" fontWeight={700} gutterBottom>
+        Nueva Solicitud
+      </Typography>
 
       <Grid container spacing={2} sx={{ height: "calc(100vh - 140px)" }}>
         {/* Formulario */}
@@ -304,7 +349,8 @@ export const SolicitudNewPage = () => {
                 </Typography>
                 {user.ticketsActivos >= 2 && (
                   <Alert severity="warning" sx={{ mt: 1 }}>
-                    Tienes 2 solicitudes activas. Solo puedes crear una nueva cuando alguna sea resuelta.
+                    Tienes 2 solicitudes activas. Solo puedes crear una nueva cuando alguna sea
+                    resuelta.
                   </Alert>
                 )}
               </CardContent>
@@ -320,7 +366,8 @@ export const SolicitudNewPage = () => {
                   label="RFC del solicitante"
                   value={form.rfcSolicitante}
                   onChange={(e) => set("rfcSolicitante", e.target.value.toUpperCase())}
-                  fullWidth required
+                  fullWidth
+                  required
                   inputProps={{ maxLength: 13 }}
                   helperText="RFC del empleado para quien se crea la solicitud"
                 />
@@ -332,7 +379,12 @@ export const SolicitudNewPage = () => {
                 getOptionLabel={(o) => o.label}
                 filterOptions={filtrarOpciones}
                 isOptionEqualToValue={(a, b) => a.subcategoria === b.subcategoria}
-                value={form.subcategoria ? OPCIONES_SUBCATEGORIA.find((o) => o.subcategoria === form.subcategoria) ?? null : null}
+                value={
+                  form.subcategoria
+                    ? (OPCIONES_SUBCATEGORIA.find((o) => o.subcategoria === form.subcategoria) ??
+                      null)
+                    : null
+                }
                 onChange={(_, val) => {
                   if (val) {
                     set("categoria", val.categoria);
@@ -348,14 +400,27 @@ export const SolicitudNewPage = () => {
                     required
                     label="¿Qué necesitas?"
                     placeholder='Escribe una palabra clave, ej: "correo", "impresora", "sala"'
-                    InputProps={{ ...params.InputProps, startAdornment: <SearchIcon sx={{ color: "text.disabled", mr: 1, fontSize: 20 }} /> }}
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <SearchIcon sx={{ color: "text.disabled", mr: 1, fontSize: 20 }} />
+                      ),
+                    }}
                   />
                 )}
                 renderOption={(props, o) => (
-                  <Box component="li" {...props} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1 }}>
-                    <Box sx={{ color: "primary.main", mt: 0.3 }}>{SUBCATEGORIA_ICON[o.subcategoria]}</Box>
+                  <Box
+                    component="li"
+                    {...props}
+                    sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1 }}
+                  >
+                    <Box sx={{ color: "primary.main", mt: 0.3 }}>
+                      {SUBCATEGORIA_ICON[o.subcategoria]}
+                    </Box>
                     <Box>
-                      <Typography variant="body2" fontWeight={600}>{o.label}</Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {o.label}
+                      </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.3 }}>
                         {o.descripcion}
                       </Typography>
@@ -363,16 +428,30 @@ export const SolicitudNewPage = () => {
                   </Box>
                 )}
                 renderGroup={(params) => {
-                  const style = CATEGORIA_STYLE[params.group] ?? { border: "#9e9e9e", bg: "#f5f5f5" };
+                  const style = CATEGORIA_STYLE[params.group] ?? {
+                    border: "#9e9e9e",
+                    bg: "#f5f5f5",
+                  };
                   return (
                     <Box key={params.key}>
-                      <Box sx={{
-                        px: 2, py: 0.75,
-                        bgcolor: style.bg,
-                        borderLeft: `4px solid ${style.border}`,
-                        borderBottom: "1px solid rgba(0,0,0,0.06)",
-                      }}>
-                        <Typography variant="caption" fontWeight={700} sx={{ color: style.border, textTransform: "uppercase", letterSpacing: 0.9 }}>
+                      <Box
+                        sx={{
+                          px: 2,
+                          py: 0.75,
+                          bgcolor: style.bg,
+                          borderLeft: `4px solid ${style.border}`,
+                          borderBottom: "1px solid rgba(0,0,0,0.06)",
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          fontWeight={700}
+                          sx={{
+                            color: style.border,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.9,
+                          }}
+                        >
                           {params.group}
                         </Typography>
                       </Box>
@@ -387,7 +466,9 @@ export const SolicitudNewPage = () => {
 
               {form.subcategoria && DESCRIPCION_SUBCATEGORIA[form.subcategoria] && (
                 <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", px: 1 }}>
-                  <InfoOutlinedIcon sx={{ fontSize: 16, color: "info.main", mt: 0.3, flexShrink: 0 }} />
+                  <InfoOutlinedIcon
+                    sx={{ fontSize: 16, color: "info.main", mt: 0.3, flexShrink: 0 }}
+                  />
                   <Typography variant="caption" color="text.secondary">
                     {DESCRIPCION_SUBCATEGORIA[form.subcategoria]}
                   </Typography>
@@ -403,7 +484,9 @@ export const SolicitudNewPage = () => {
                     onChange={(e) => set("subTipo", e.target.value)}
                   >
                     {SUB_TIPO_EQUIPOS.map((s) => (
-                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                      <MenuItem key={s.value} value={s.value}>
+                        {s.label}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -418,7 +501,9 @@ export const SolicitudNewPage = () => {
                     onChange={(e) => set("subTipo", e.target.value)}
                   >
                     {SUB_TIPO_SISTEMAS.map((s) => (
-                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                      <MenuItem key={s.value} value={s.value}>
+                        {s.label}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -436,7 +521,9 @@ export const SolicitudNewPage = () => {
                   >
                     <MenuItem value="">General / Otro</MenuItem>
                     {SUB_TIPO_RED.map((s) => (
-                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                      <MenuItem key={s.value} value={s.value}>
+                        {s.label}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -454,7 +541,9 @@ export const SolicitudNewPage = () => {
                   >
                     <MenuItem value="">General / Otro</MenuItem>
                     {SUB_TIPO_CUENTAS.map((s) => (
-                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                      <MenuItem key={s.value} value={s.value}>
+                        {s.label}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -464,7 +553,8 @@ export const SolicitudNewPage = () => {
                 label="Asunto"
                 value={form.asunto}
                 onChange={(e) => set("asunto", e.target.value)}
-                fullWidth required
+                fullWidth
+                required
                 inputProps={{ maxLength: 100 }}
                 helperText={`${form.asunto.length}/100`}
               />
@@ -473,7 +563,10 @@ export const SolicitudNewPage = () => {
                 label="Descripción"
                 value={form.descripcion}
                 onChange={(e) => set("descripcion", e.target.value)}
-                fullWidth required multiline rows={3}
+                fullWidth
+                required
+                multiline
+                rows={3}
                 inputProps={{ maxLength: 500 }}
                 helperText={`${form.descripcion.length}/500`}
               />
@@ -482,7 +575,13 @@ export const SolicitudNewPage = () => {
               {form.subcategoria === "SALA_JUNTAS" && (
                 <Box>
                   <Divider sx={{ mb: 1.5 }} />
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" gutterBottom>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    fontWeight={600}
+                    display="block"
+                    gutterBottom
+                  >
                     EQUIPAMIENTO ADICIONAL PARA LA SALA
                   </Typography>
                   <FormGroup row sx={{ gap: 0.5, flexWrap: "wrap" }}>
@@ -494,7 +593,10 @@ export const SolicitudNewPage = () => {
                             size="small"
                             checked={!!salaJuntasEquipo[item.key]}
                             onChange={(e) =>
-                              setSalaJuntasEquipo((prev) => ({ ...prev, [item.key]: e.target.checked }))
+                              setSalaJuntasEquipo((prev) => ({
+                                ...prev,
+                                [item.key]: e.target.checked,
+                              }))
                             }
                           />
                         }
@@ -513,7 +615,13 @@ export const SolicitudNewPage = () => {
                     inputProps={{ min: 1 }}
                     placeholder="Ej: 15"
                   />
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mt: 2, mb: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    fontWeight={600}
+                    display="block"
+                    sx={{ mt: 2, mb: 0.5 }}
+                  >
                     FECHA Y HORA DE USO *
                   </Typography>
                   <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
@@ -523,21 +631,39 @@ export const SolicitudNewPage = () => {
                         value={fechaUso ? dayjs(fechaUso) : null}
                         onChange={(v) => setFechaUso(v ? v.format("YYYY-MM-DD") : "")}
                         minDate={dayjs()}
-                        slotProps={{ textField: { size: "small", required: true, sx: { flex: 1, minWidth: 160 } } }}
+                        slotProps={{
+                          textField: {
+                            size: "small",
+                            required: true,
+                            sx: { flex: 1, minWidth: 160 },
+                          },
+                        }}
                       />
                       <TimePicker
                         label="Hora inicio"
                         value={horaInicio ? dayjs(`2000-01-01T${horaInicio}`) : null}
                         onChange={(v) => setHoraInicio(v ? v.format("HH:mm") : "")}
                         ampm={false}
-                        slotProps={{ textField: { size: "small", required: true, sx: { flex: 1, minWidth: 130 } } }}
+                        slotProps={{
+                          textField: {
+                            size: "small",
+                            required: true,
+                            sx: { flex: 1, minWidth: 130 },
+                          },
+                        }}
                       />
                       <TimePicker
                         label="Hora fin"
                         value={horaFin ? dayjs(`2000-01-01T${horaFin}`) : null}
                         onChange={(v) => setHoraFin(v ? v.format("HH:mm") : "")}
                         ampm={false}
-                        slotProps={{ textField: { size: "small", required: true, sx: { flex: 1, minWidth: 130 } } }}
+                        slotProps={{
+                          textField: {
+                            size: "small",
+                            required: true,
+                            sx: { flex: 1, minWidth: 130 },
+                          },
+                        }}
                       />
                     </Box>
                   </LocalizationProvider>
@@ -549,7 +675,13 @@ export const SolicitudNewPage = () => {
               {form.subcategoria === "PRESTAMO_EQUIPO" && (
                 <Box>
                   <Divider sx={{ mb: 1.5 }} />
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" gutterBottom>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    fontWeight={600}
+                    display="block"
+                    gutterBottom
+                  >
                     EQUIPO SOLICITADO
                   </Typography>
                   <FormControl fullWidth size="small">
@@ -560,7 +692,9 @@ export const SolicitudNewPage = () => {
                       onChange={(e) => setPrestamoEquipo(e.target.value)}
                     >
                       {EQUIPO_PRESTAMO.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                        <MenuItem key={opt} value={opt}>
+                          {opt}
+                        </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
@@ -583,7 +717,13 @@ export const SolicitudNewPage = () => {
               {form.subcategoria === "MOBILIARIO" && (
                 <Box>
                   <Divider sx={{ mb: 1.5 }} />
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" gutterBottom>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    fontWeight={600}
+                    display="block"
+                    gutterBottom
+                  >
                     FECHA Y HORA DE USO *
                   </Typography>
                   <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
@@ -593,21 +733,39 @@ export const SolicitudNewPage = () => {
                         value={fechaUso ? dayjs(fechaUso) : null}
                         onChange={(v) => setFechaUso(v ? v.format("YYYY-MM-DD") : "")}
                         minDate={dayjs()}
-                        slotProps={{ textField: { size: "small", required: true, sx: { flex: 1, minWidth: 160 } } }}
+                        slotProps={{
+                          textField: {
+                            size: "small",
+                            required: true,
+                            sx: { flex: 1, minWidth: 160 },
+                          },
+                        }}
                       />
                       <TimePicker
                         label="Hora inicio"
                         value={horaInicio ? dayjs(`2000-01-01T${horaInicio}`) : null}
                         onChange={(v) => setHoraInicio(v ? v.format("HH:mm") : "")}
                         ampm={false}
-                        slotProps={{ textField: { size: "small", required: true, sx: { flex: 1, minWidth: 130 } } }}
+                        slotProps={{
+                          textField: {
+                            size: "small",
+                            required: true,
+                            sx: { flex: 1, minWidth: 130 },
+                          },
+                        }}
                       />
                       <TimePicker
                         label="Hora fin"
                         value={horaFin ? dayjs(`2000-01-01T${horaFin}`) : null}
                         onChange={(v) => setHoraFin(v ? v.format("HH:mm") : "")}
                         ampm={false}
-                        slotProps={{ textField: { size: "small", required: true, sx: { flex: 1, minWidth: 130 } } }}
+                        slotProps={{
+                          textField: {
+                            size: "small",
+                            required: true,
+                            sx: { flex: 1, minWidth: 130 },
+                          },
+                        }}
                       />
                     </Box>
                   </LocalizationProvider>
@@ -619,7 +777,13 @@ export const SolicitudNewPage = () => {
               {form.subcategoria === "PAPELERIA" && (
                 <Box>
                   <Divider sx={{ mb: 1.5 }} />
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" gutterBottom>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    fontWeight={600}
+                    display="block"
+                    gutterBottom
+                  >
                     ARTÍCULOS SOLICITADOS
                   </Typography>
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -631,7 +795,10 @@ export const SolicitudNewPage = () => {
                               size="small"
                               checked={!!papeleriaItems[art.key]}
                               onChange={(e) =>
-                                setPapeleriaItems((prev) => ({ ...prev, [art.key]: e.target.checked }))
+                                setPapeleriaItems((prev) => ({
+                                  ...prev,
+                                  [art.key]: e.target.checked,
+                                }))
                               }
                             />
                           }
@@ -644,7 +811,10 @@ export const SolicitudNewPage = () => {
                             size="small"
                             value={papeleriaCantidades[art.key] ?? ""}
                             onChange={(e) =>
-                              setPapeleriaCantidades((prev) => ({ ...prev, [art.key]: e.target.value }))
+                              setPapeleriaCantidades((prev) => ({
+                                ...prev,
+                                [art.key]: e.target.value,
+                              }))
                             }
                             sx={{ width: 160 }}
                           />
@@ -661,9 +831,15 @@ export const SolicitudNewPage = () => {
               ) : (
                 <FormControl fullWidth required>
                   <InputLabel>Ubicación</InputLabel>
-                  <Select value={form.ubicacionAreaId} label="Ubicación" onChange={(e) => onAreaChange(e.target.value)}>
+                  <Select
+                    value={form.ubicacionAreaId}
+                    label="Ubicación"
+                    onChange={(e) => onAreaChange(e.target.value)}
+                  >
                     {areas.map((a) => (
-                      <MenuItem key={a.id} value={a.id}>{a.label} — {LABEL_PISO[a.piso] ?? a.piso}</MenuItem>
+                      <MenuItem key={a.id} value={a.id}>
+                        {a.label} — {LABEL_PISO[a.piso] ?? a.piso}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -684,10 +860,7 @@ export const SolicitudNewPage = () => {
 
         {/* Mapa 3D */}
         <Grid item xs={12} md={6} sx={{ height: "100%", position: "relative" }}>
-          <BuildingViewer
-            autoHighlight={highlight}
-            sx={{ height: "100%", borderRadius: 2 }}
-          />
+          <BuildingViewer autoHighlight={highlight} sx={{ height: "100%", borderRadius: 2 }} />
           {user?.areaId && (
             <Chip
               label={`📍 ${user.nombreCompleto ?? user.nombre} — ${user.area}`}

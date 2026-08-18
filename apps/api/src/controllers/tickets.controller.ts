@@ -50,13 +50,44 @@ export const asignar = async (req: AuthRequest, res: Response, next: NextFunctio
   }
 };
 
-export const cambiarEstado = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const aceptar = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const ticket = await ticketsService.cambiarEstado(
+    const ticket = await ticketsService.aceptarTicket(parseId(req.params.id), req.user!);
+    res.json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const reasignarArea = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const ticket = await ticketsService.reasignarArea(
       parseId(req.params.id),
-      req.body,
+      req.body.subcategoria,
       req.user!,
     );
+    res.json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const actualizarPrioridad = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const ticket = await ticketsService.actualizarPrioridad(
+      parseId(req.params.id),
+      req.body.prioridad,
+      req.user!,
+    );
+    res.json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const cambiarEstado = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const ticket = await ticketsService.cambiarEstado(parseId(req.params.id), req.body, req.user!);
     res.json({ ticket });
   } catch (err) {
     next(err);

@@ -1,10 +1,17 @@
 import { api } from "./client.js";
 
-export const getSolicitudes = (params) => api.get("/api/solicitudes", { params }).then((r) => r.data);
+export const getSolicitudes = (params) =>
+  api.get("/api/solicitudes", { params }).then((r) => r.data);
 export const getSolicitud = (id) => api.get(`/api/solicitudes/${id}`).then((r) => r.data);
 export const createSolicitud = (body) => api.post("/api/solicitudes", body).then((r) => r.data);
 export const asignarSolicitud = (id, tecnicoId) =>
   api.patch(`/api/solicitudes/${id}/asignar`, { tecnicoId }).then((r) => r.data);
+export const aceptarSolicitud = (id) =>
+  api.patch(`/api/solicitudes/${id}/aceptar`).then((r) => r.data);
+export const reasignarAreaSolicitud = (id, subcategoria) =>
+  api.patch(`/api/solicitudes/${id}/reasignar-area`, { subcategoria }).then((r) => r.data);
+export const actualizarPrioridadSolicitud = (id, prioridad) =>
+  api.patch(`/api/solicitudes/${id}/prioridad`, { prioridad }).then((r) => r.data);
 export const cambiarEstado = (id, estado, comentario) =>
   api.patch(`/api/solicitudes/${id}/estado`, { estado, comentario }).then((r) => r.data);
 export const agregarComentario = (id, texto, esInterno = false) =>
@@ -14,4 +21,6 @@ export const getMisPasos = () => api.get("/api/solicitudes/mis-pasos").then((r) 
 export const completarPaso = (ticketId, pasoId, body) =>
   api.patch(`/api/solicitudes/${ticketId}/pasos/${pasoId}/completar`, body).then((r) => r.data);
 export const asignarPaso = (ticketId, pasoId, tecnicoId) =>
-  api.patch(`/api/solicitudes/${ticketId}/pasos/${pasoId}/asignar`, { tecnicoId }).then((r) => r.data);
+  api
+    .patch(`/api/solicitudes/${ticketId}/pasos/${pasoId}/asignar`, { tecnicoId })
+    .then((r) => r.data);
