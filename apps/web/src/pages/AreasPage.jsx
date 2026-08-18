@@ -666,6 +666,16 @@ export const AreasPage = () => {
 
   // ── Guardar todo ───────────────────────────────────────────────────────────
 
+  /** Descarta TODOS los cambios pendientes (localStorage + state) y resincroniza con servidor. */
+  const handleDescartarPendientes = async () => {
+    if (pendingCount === 0) return;
+    if (!window.confirm(`¿Descartar ${pendingCount} cambio(s) pendiente(s) sin guardar?`)) return;
+    persistPending({});
+    setSaveAllError("");
+    dragOriginalsRef.current = {};
+    await loadAreas();
+  };
+
   const handleGuardarTodo = async () => {
     const ids = Object.keys(pendingChanges);
     if (ids.length === 0) return;
@@ -675,23 +685,39 @@ export const AreasPage = () => {
       .map((a) => (pendingChanges[a.id] ? { ...a, ...pendingChanges[a.id] } : a))
       .filter((a) => a.gridX1 != null && a.gridY1 != null && a.gridX2 != null && a.gridY2 != null)
       .map(areaToRect);
+
+    // No abortar el lote entero por un área inválida: excluirla y avisar,
+    // guardando el resto de los cambios pendientes que sí sean válidos.
+    const idsValidos = [];
+    const invalidas = [];
     for (const id of ids) {
       const rect = proyectadas.find((r) => r.id === id);
-      if (!rect) continue;
+      if (!rect) {
+        idsValidos.push(id); // sin geometría mapeada: no hay huella que validar
+        continue;
+      }
       const errorGeometria = validarGeometriaArea(
         rect,
         proyectadas.filter((r) => r.id !== id),
       );
       if (errorGeometria) {
-        setSaveAllError(`"${rect.label ?? id}": ${errorGeometria}`);
-        return;
+        invalidas.push(`"${rect.label ?? id}": ${errorGeometria}`);
+      } else {
+        idsValidos.push(id);
       }
+    }
+
+    if (idsValidos.length === 0) {
+      setSaveAllError(
+        `Ningún cambio pendiente es válido — descarta los cambios para desbloquear el guardado. ${invalidas[0] ?? ""}`,
+      );
+      return;
     }
 
     setSavingAll(true);
     setSaveAllError("");
     try {
-      for (const id of ids) {
+      for (const id of idsValidos) {
         const ch = pendingChanges[id];
         await updateArea(id, {
           label: ch.label,
@@ -706,7 +732,11 @@ export const AreasPage = () => {
           nombrePropio: ch.nombrePropio ?? null,
         });
       }
-      persistPending({});
+      if (invalidas.length > 0) {
+        setSaveAllError(
+          `${invalidas.length} área(s) quedaron pendientes por geometría inválida: ${invalidas.join(" · ")}`,
+        );
+      }
       await loadAreas();
     } catch (err) {
       setSaveAllError(err.response?.data?.error ?? "Error al guardar cambios");
@@ -1224,6 +1254,33 @@ export const AreasPage = () => {
               Render
             </Button>
           </Tooltip>
+
+          {/* Descartar cambios pendientes */}
+          {pendingCount > 0 && (
+            <Tooltip title="Descarta todos los cambios pendientes sin guardar (limpia el atasco si un cambio inválido bloquea el guardado)">
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                startIcon={<CloseIcon sx={{ fontSize: 14 }} />}
+                onClick={handleDescartarPendientes}
+                disabled={savingAll}
+                sx={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  py: 0.4,
+                  borderColor: "rgba(198,40,40,0.4)",
+                  color: "#c62828",
+                  "&:hover": {
+                    bgcolor: "rgba(198,40,40,0.08)",
+                    borderColor: "rgba(198,40,40,0.7)",
+                  },
+                }}
+              >
+                Descartar
+              </Button>
+            </Tooltip>
+          )}
 
           {/* Guardar todo */}
           <Tooltip title="Persiste todos los cambios pendientes en la base de datos">
