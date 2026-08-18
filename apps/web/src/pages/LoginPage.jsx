@@ -1,8 +1,18 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Box, Tabs, Tab, TextField, Button, Typography,
-  Alert, InputAdornment, IconButton, CircularProgress, Chip, Divider,
+  Box,
+  Tabs,
+  Tab,
+  TextField,
+  Button,
+  Typography,
+  Alert,
+  InputAdornment,
+  IconButton,
+  CircularProgress,
+  Chip,
+  Divider,
 } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
@@ -17,10 +27,10 @@ import siastLogo from "../img/siast-logo.png";
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/i;
 
-const PASO_RFC              = "rfc";
-const PASO_CONFIRMAR_TEL    = "confirmar_tel";  // primer acceso: confirmar o cambiar teléfono
-const PASO_TELEFONO         = "telefono";        // primer acceso: registrar teléfono nuevo
-const PASO_OTP              = "otp";
+const PASO_RFC = "rfc";
+const PASO_CONFIRMAR_TEL = "confirmar_tel"; // primer acceso: confirmar o cambiar teléfono
+const PASO_TELEFONO = "telefono"; // primer acceso: registrar teléfono nuevo
+const PASO_OTP = "otp";
 
 // ── Componente OTP: 6 cajas individuales ─────────────────────────────────────
 function OtpInput({ length = 6, value, onChange, onComplete, disabled }) {
@@ -31,7 +41,9 @@ function OtpInput({ length = 6, value, onChange, onComplete, disabled }) {
   // Así evitamos que un re-render del padre (p.ej. loading→true) recree la
   // función y dispare el effect de nuevo, enviando el OTP dos veces.
   const onCompleteRef = useRef(onComplete);
-  useEffect(() => { onCompleteRef.current = onComplete; });
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  });
 
   // Guard para disparar onComplete una sola vez por código completo.
   const firedRef = useRef(false);
@@ -54,8 +66,14 @@ function OtpInput({ length = 6, value, onChange, onComplete, disabled }) {
       }
       return;
     }
-    if (e.key === "ArrowLeft" && i > 0) { focusAt(i - 1); return; }
-    if (e.key === "ArrowRight" && i < length - 1) { focusAt(i + 1); return; }
+    if (e.key === "ArrowLeft" && i > 0) {
+      focusAt(i - 1);
+      return;
+    }
+    if (e.key === "ArrowRight" && i < length - 1) {
+      focusAt(i + 1);
+      return;
+    }
   };
 
   const handleChange = (i, e) => {
@@ -92,7 +110,9 @@ function OtpInput({ length = 6, value, onChange, onComplete, disabled }) {
         <Box
           key={i}
           component="input"
-          ref={(el) => { refs.current[i] = el; }}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
           value={digit}
           inputMode="numeric"
           pattern="[0-9]*"
@@ -140,6 +160,19 @@ export const LoginPage = () => {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [avisoIntentos, setAvisoIntentos] = useState("");
+
+  // authRateLimiter permite 5 intentos por IP cada 15 min en /api/auth/* — avisar
+  // antes de que se bloquee (solicitar-otp, verificar-otp y login comparten el bucket).
+  const checkIntentos = (n) => {
+    if (n != null && n > 0 && n <= 2) {
+      setAvisoIntentos(
+        `Quedan ${n} intento${n === 1 ? "" : "s"} antes de bloqueo temporal por 15 minutos.`,
+      );
+    } else {
+      setAvisoIntentos("");
+    }
+  };
   const [showPass, setShowPass] = useState(false);
 
   // Estado flujo empleado
@@ -164,15 +197,20 @@ export const LoginPage = () => {
     setHint("");
     setDevCodigo("");
     setError("");
+    setAvisoIntentos("");
   };
 
   const handleSolicitarOtp = async (e) => {
     e.preventDefault();
     setError("");
-    if (!RFC_REGEX.test(rfc)) { setError("Formato de RFC inválido"); return; }
+    if (!RFC_REGEX.test(rfc)) {
+      setError("Formato de RFC inválido");
+      return;
+    }
     setLoading(true);
     try {
       const res = await solicitarOtp(rfc.toUpperCase());
+      checkIntentos(res.intentosRestantes);
       if (res.necesitaConfirmarTelefono) {
         // Primer acceso con teléfono conocido → confirmar o cambiar
         setTelefonoCensurado(res.telefonoCensurado);
@@ -187,6 +225,7 @@ export const LoginPage = () => {
       }
     } catch (err) {
       setError(err.response?.data?.error ?? "RFC no encontrado en el sistema");
+      checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
     }
@@ -201,11 +240,13 @@ export const LoginPage = () => {
       // El usuario confirma que sí es su número → enviar sin telefonoNuevo
       // El backend detecta primerAcceso=true y el tel ya guardado, lo confirma
       const res = await solicitarOtp(rfc.toUpperCase(), "__CONFIRMAR__");
+      checkIntentos(res.intentosRestantes);
       setHint(res.hint);
       if (res.devCodigo) setDevCodigo(res.devCodigo);
       setPaso(PASO_OTP);
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al confirmar teléfono");
+      checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
     }
@@ -216,15 +257,20 @@ export const LoginPage = () => {
     e.preventDefault();
     setError("");
     const limpio = telefono.replace(/\D/g, "");
-    if (limpio.length !== 10) { setError("Ingresa un número de 10 dígitos"); return; }
+    if (limpio.length !== 10) {
+      setError("Ingresa un número de 10 dígitos");
+      return;
+    }
     setLoading(true);
     try {
       const res = await solicitarOtp(rfc.toUpperCase(), limpio);
+      checkIntentos(res.intentosRestantes);
       setHint(res.hint);
       if (res.devCodigo) setDevCodigo(res.devCodigo);
       setPaso(PASO_OTP);
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al actualizar teléfono");
+      checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
     }
@@ -234,15 +280,20 @@ export const LoginPage = () => {
     e.preventDefault();
     setError("");
     const limpio = telefono.replace(/\D/g, "");
-    if (limpio.length !== 10) { setError("Ingresa un número de 10 dígitos"); return; }
+    if (limpio.length !== 10) {
+      setError("Ingresa un número de 10 dígitos");
+      return;
+    }
     setLoading(true);
     try {
       const res = await solicitarOtp(rfc.toUpperCase(), limpio);
+      checkIntentos(res.intentosRestantes);
       setHint(res.hint);
       if (res.devCodigo) setDevCodigo(res.devCodigo);
       setPaso(PASO_OTP);
     } catch (err) {
       setError(err.response?.data?.error ?? "No se pudo registrar el teléfono");
+      checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
     }
@@ -250,7 +301,10 @@ export const LoginPage = () => {
 
   const doVerificar = async (cod) => {
     setError("");
-    if ((cod ?? codigo).length !== 6) { setError("El código debe tener 6 dígitos"); return; }
+    if ((cod ?? codigo).length !== 6) {
+      setError("El código debe tener 6 dígitos");
+      return;
+    }
     setLoading(true);
     try {
       const data = await verificarOtp(rfc.toUpperCase(), cod ?? codigo);
@@ -258,13 +312,17 @@ export const LoginPage = () => {
       navigate(redirectTo ?? "/solicitudes/nueva");
     } catch (err) {
       setError(err.response?.data?.error ?? "Código incorrecto o expirado");
+      checkIntentos(err.intentosRestantes);
       setCodigo("");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerificarOtp = (e) => { e.preventDefault(); doVerificar(codigo); };
+  const handleVerificarOtp = (e) => {
+    e.preventDefault();
+    doVerificar(codigo);
+  };
 
   const handleReenviar = async () => {
     setError("");
@@ -273,9 +331,11 @@ export const LoginPage = () => {
     setLoading(true);
     try {
       const res = await solicitarOtp(rfc.toUpperCase());
+      checkIntentos(res.intentosRestantes);
       if (res.devCodigo) setDevCodigo(res.devCodigo);
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al reenviar el código");
+      checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
     }
@@ -291,6 +351,7 @@ export const LoginPage = () => {
       navigate(redirectTo ?? "/dashboard");
     } catch (err) {
       setError(err.response?.data?.error ?? "Credenciales incorrectas");
+      checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
     }
@@ -301,7 +362,9 @@ export const LoginPage = () => {
     <Box sx={{ width: "100%", maxWidth: 400 }}>
       {/* Logo / Header */}
       <Box sx={{ mb: 4, width: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1.5, mb: 1 }}>
+        <Box
+          sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1.5, mb: 1 }}
+        >
           <Box
             component="img"
             src={siastLogo}
@@ -321,7 +384,18 @@ export const LoginPage = () => {
             SIAST
           </Typography>
         </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 400, mt: 0.5, textAlign: "center", textTransform: "uppercase", letterSpacing: 1, fontSize: 11 }}>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{
+            fontWeight: 400,
+            mt: 0.5,
+            textAlign: "center",
+            textTransform: "uppercase",
+            letterSpacing: 1,
+            fontSize: 11,
+          }}
+        >
           Sistema de Atención y Soporte Técnico
         </Typography>
         <Divider sx={{ mt: 2, borderColor: "#9D244933" }} />
@@ -329,7 +403,11 @@ export const LoginPage = () => {
 
       <Tabs
         value={tab}
-        onChange={(_, v) => { setTab(v); setError(""); }}
+        onChange={(_, v) => {
+          setTab(v);
+          setError("");
+          setAvisoIntentos("");
+        }}
         variant="fullWidth"
         sx={{ mb: 3 }}
       >
@@ -337,14 +415,27 @@ export const LoginPage = () => {
         <Tab label="ACCESO STAFF" sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }} />
       </Tabs>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      {avisoIntentos && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {avisoIntentos}
+        </Alert>
+      )}
 
       {/* ══════════════════════════════ EMPLEADOS ══════════════════════════════ */}
       {tab === 0 && (
         <>
           {/* Paso 1: RFC */}
           {paso === PASO_RFC && (
-            <Box component="form" onSubmit={handleSolicitarOtp} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Box
+              component="form"
+              onSubmit={handleSolicitarOtp}
+              sx={{ display: "flex", flexDirection: "column", gap: 2 }}
+            >
               <TextField
                 label="RFC"
                 value={rfc}
@@ -353,9 +444,21 @@ export const LoginPage = () => {
                 autoFocus
                 inputProps={{ maxLength: 13, style: { letterSpacing: 3 } }}
                 helperText="Ej: PELJ850312HDF"
-                InputProps={{ startAdornment: <InputAdornment position="start"><BadgeIcon fontSize="small" /></InputAdornment> }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <BadgeIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
               />
-              <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || rfc.length < 12}>
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading || rfc.length < 12}
+              >
                 {loading ? <CircularProgress size={22} color="inherit" /> : "Continuar"}
               </Button>
               <Typography variant="caption" color="text.secondary" textAlign="center">
@@ -379,14 +482,22 @@ export const LoginPage = () => {
                 onClick={handleConfirmarTelefono}
                 disabled={loading}
               >
-                {loading ? <CircularProgress size={22} color="inherit" /> : `Si, enviar codigo a ${telefonoCensurado}`}
+                {loading ? (
+                  <CircularProgress size={22} color="inherit" />
+                ) : (
+                  `Si, enviar codigo a ${telefonoCensurado}`
+                )}
               </Button>
 
               <Typography variant="caption" color="text.secondary" textAlign="center">
                 ¿No es tu numero?
               </Typography>
 
-              <Box component="form" onSubmit={handleCambiarTelefono} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              <Box
+                component="form"
+                onSubmit={handleCambiarTelefono}
+                sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
+              >
                 <TextField
                   label="Mi numero correcto"
                   value={telefono}
@@ -394,7 +505,13 @@ export const LoginPage = () => {
                   fullWidth
                   inputProps={{ maxLength: 10, inputMode: "numeric" }}
                   helperText="10 digitos — Ej: 9512345678"
-                  InputProps={{ startAdornment: <InputAdornment position="start"><PhoneAndroidIcon fontSize="small" /></InputAdornment> }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PhoneAndroidIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
                 />
                 <Button
                   type="submit"
@@ -414,9 +531,14 @@ export const LoginPage = () => {
 
           {/* Paso 1.5b: Registrar teléfono (primer acceso sin teléfono) */}
           {paso === PASO_TELEFONO && (
-            <Box component="form" onSubmit={handleRegistrarTelefono} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Box
+              component="form"
+              onSubmit={handleRegistrarTelefono}
+              sx={{ display: "flex", flexDirection: "column", gap: 2 }}
+            >
               <Alert severity="info" icon={<PhoneAndroidIcon />}>
-                Es tu primer acceso. Registra tu numero de celular para recibir codigos de verificacion.
+                Es tu primer acceso. Registra tu numero de celular para recibir codigos de
+                verificacion.
               </Alert>
               <TextField
                 label="Numero de celular"
@@ -426,10 +548,26 @@ export const LoginPage = () => {
                 autoFocus
                 inputProps={{ maxLength: 10, inputMode: "numeric" }}
                 helperText="10 digitos sin codigo de pais — Ej: 9512345678"
-                InputProps={{ startAdornment: <InputAdornment position="start"><PhoneAndroidIcon fontSize="small" /></InputAdornment> }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PhoneAndroidIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
               />
-              <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || telefono.replace(/\D/g, "").length !== 10}>
-                {loading ? <CircularProgress size={22} color="inherit" /> : "Registrar y enviar codigo"}
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading || telefono.replace(/\D/g, "").length !== 10}
+              >
+                {loading ? (
+                  <CircularProgress size={22} color="inherit" />
+                ) : (
+                  "Registrar y enviar codigo"
+                )}
               </Button>
               <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
                 Volver
@@ -439,7 +577,11 @@ export const LoginPage = () => {
 
           {/* Paso 2: OTP con cajas individuales */}
           {paso === PASO_OTP && (
-            <Box component="form" onSubmit={handleVerificarOtp} sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+            <Box
+              component="form"
+              onSubmit={handleVerificarOtp}
+              sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}
+            >
               <Alert severity="success" icon={<PhoneAndroidIcon />}>
                 Codigo enviado a <strong>{hint}</strong>. Revisa WhatsApp.
               </Alert>
@@ -455,7 +597,13 @@ export const LoginPage = () => {
               )}
 
               <Box>
-                <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mb={1}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                  textAlign="center"
+                  mb={1}
+                >
                   Ingresa el codigo de 6 digitos
                 </Typography>
                 <OtpInput
@@ -492,7 +640,11 @@ export const LoginPage = () => {
 
       {/* ══════════════════════════════ STAFF ══════════════════════════════ */}
       {tab === 1 && (
-        <Box component="form" onSubmit={handleLoginStaff} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Box
+          component="form"
+          onSubmit={handleLoginStaff}
+          sx={{ display: "flex", flexDirection: "column", gap: 2 }}
+        >
           <TextField
             label="Usuario"
             value={usuario}
@@ -518,7 +670,13 @@ export const LoginPage = () => {
               ),
             }}
           />
-          <Button type="submit" variant="contained" fullWidth size="large" disabled={loading || !usuario || !password}>
+          <Button
+            type="submit"
+            variant="contained"
+            fullWidth
+            size="large"
+            disabled={loading || !usuario || !password}
+          >
             {loading ? <CircularProgress size={22} color="inherit" /> : "Iniciar Sesion"}
           </Button>
         </Box>
@@ -604,7 +762,8 @@ export const LoginPage = () => {
                 display: "block",
               }}
             >
-              Centro Administrativo del Poder<br />
+              Centro Administrativo del Poder
+              <br />
               Ejecutivo y Judicial
             </Typography>
             <Typography
@@ -618,7 +777,8 @@ export const LoginPage = () => {
                 fontStyle: "italic",
               }}
             >
-              "General Porfirio Díaz. Soldado de la Patria"<br />
+              "General Porfirio Díaz. Soldado de la Patria"
+              <br />
               Edificio "D" Saúl Martínez
             </Typography>
           </Box>

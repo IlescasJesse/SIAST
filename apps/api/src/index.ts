@@ -58,6 +58,10 @@ app.use(
   cors({
     origin: corsOrigins,
     credentials: true,
+    // El header RateLimit (draft-8) no está en la safelist del navegador — hay
+    // que exponerlo explícito para que el frontend avise intentos restantes antes
+    // del bloqueo por IP (rate-limit.middleware.ts).
+    exposedHeaders: ["RateLimit"],
   }),
 );
 app.use(helmet());
