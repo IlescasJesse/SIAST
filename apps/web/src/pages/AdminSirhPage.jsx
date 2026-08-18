@@ -4,6 +4,7 @@ import {
   Table, TableHead, TableBody, TableRow, TableCell, TablePagination,
   TextField, InputAdornment, Stack, Divider, Tooltip, IconButton,
   Card, CardContent, Grid,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from "@mui/material";
 import SyncIcon from "@mui/icons-material/Sync";
 import SearchIcon from "@mui/icons-material/Search";
@@ -21,15 +22,31 @@ import { useNotifStore } from "../store/notificaciones.js";
 
 const PISOS = { PB: "PB", NIVEL_1: "N1", NIVEL_2: "N2", NIVEL_3: "N3" };
 
-function StatCard({ icon, label, value, color = "text.primary" }) {
+function StatCard({ icon, label, value, color = "text.primary", onClick }) {
   return (
-    <Card variant="outlined" sx={{ flex: 1, minWidth: 140 }}>
+    <Card
+      variant="outlined"
+      sx={{
+        flex: 1,
+        minWidth: 140,
+        ...(onClick && {
+          cursor: "pointer",
+          "&:hover": { borderColor: "warning.main", bgcolor: "rgba(237,108,2,0.04)" },
+        }),
+      }}
+      onClick={onClick}
+    >
       <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
         <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
           {icon}
           <Typography variant="caption" color="text.secondary">{label}</Typography>
         </Stack>
         <Typography variant="h5" fontWeight={700} color={color}>{value ?? "—"}</Typography>
+        {onClick && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+            Ver detalle
+          </Typography>
+        )}
       </CardContent>
     </Card>
   );
@@ -49,6 +66,7 @@ export function AdminSirhPage() {
   const [exporting, setExporting] = useState(false);
   const [error, setError]         = useState("");
   const [syncMsg, setSyncMsg]     = useState("");
+  const [erroresOpen, setErroresOpen] = useState(false);
   const searchTimer             = useRef(null);
 
   const loadStatus = useCallback(async () => {
@@ -250,6 +268,7 @@ export function AdminSirhPage() {
               label="Errores"
               value={status.errores}
               color="warning.main"
+              onClick={() => setErroresOpen(true)}
             />
           )}
           <Card variant="outlined" sx={{ flex: 1, minWidth: 160 }}>
@@ -358,6 +377,45 @@ export function AdminSirhPage() {
         labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
         labelRowsPerPage="Filas"
       />
+
+      {/* ── Detalle de errores del último sync ─────────────────────────────── */}
+      <Dialog open={erroresOpen} onClose={() => setErroresOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Errores del último sync ({status?.errores ?? 0})</DialogTitle>
+        <DialogContent>
+          {(status?.detalleErrores ?? []).length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No hay detalle disponible (el servidor se reinició desde el último sync con errores).
+            </Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>RFC</TableCell>
+                  <TableCell>Motivo</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {status.detalleErrores.map((e, i) => (
+                  <TableRow key={`${e.rfc}-${i}`}>
+                    <TableCell sx={{ fontFamily: "monospace", fontSize: 12, whiteSpace: "nowrap" }}>
+                      {e.rfc}
+                    </TableCell>
+                    <TableCell sx={{ fontSize: 12 }}>{e.mensaje}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {status?.errores > (status?.detalleErrores?.length ?? 0) && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+              Mostrando los primeros {status.detalleErrores.length} de {status.errores} errores.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setErroresOpen(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

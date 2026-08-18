@@ -32,7 +32,11 @@ export interface SyncStatus {
   errores: number;
   totalRecibidos: number;
   totalValidos: number;
+  detalleErrores: { rfc: string; mensaje: string }[];
 }
+
+// Tope de detalles guardados para no inflar el status en memoria si falla media plantilla
+const MAX_DETALLE_ERRORES = 100;
 
 export const syncStatus: SyncStatus = {
   ultimaSync: null,
@@ -42,6 +46,7 @@ export const syncStatus: SyncStatus = {
   errores: 0,
   totalRecibidos: 0,
   totalValidos: 0,
+  detalleErrores: [],
 };
 
 // ============================================================
@@ -434,8 +439,10 @@ function buildEmpleadoData(emp: SirhEmpleado) {
     emp.VACACIONES?.PERIODO != null
       ? parseInt(String(emp.VACACIONES.PERIODO), 10) || undefined
       : undefined;
+  // VarChar(20) en DB — SIRH a veces manda timestamp completo en vez de fecha corta; truncar
+  // en vez de dejar que prisma.empleado.create() truene toda la sincronización de ese registro.
   const vacacionesFecha = emp.VACACIONES?.FECHA_VACACIONES
-    ? emp.VACACIONES.FECHA_VACACIONES.trim() || undefined
+    ? emp.VACACIONES.FECHA_VACACIONES.trim().slice(0, 20) || undefined
     : undefined;
 
   return {
@@ -547,6 +554,7 @@ export async function syncEmpleados(): Promise<void> {
   let creados = 0;
   let actualizados = 0;
   let errores = 0;
+  const detalleErrores: { rfc: string; mensaje: string }[] = [];
 
   // Procesar en lotes paralelos de 10 para acelerar la sync (~10x más rápido)
   const BATCH_SIZE = 10;
@@ -562,7 +570,17 @@ export async function syncEmpleados(): Promise<void> {
         else actualizados++;
       } else {
         errores++;
+        // Los errores de Prisma vienen en un bloque multilínea con el código fuente
+        // citado; la línea útil del motivo real es la última no vacía, no la primera.
+        const lineas = (r.reason?.message ?? String(r.reason))
+          .split("\n")
+          .map((l: string) => l.trim())
+          .filter(Boolean);
+        const mensaje = lineas[lineas.length - 1] ?? "Error desconocido";
         console.error(`[SIRH] Error con RFC ${lote[j].RFC}:`, r.reason?.message);
+        if (detalleErrores.length < MAX_DETALLE_ERRORES) {
+          detalleErrores.push({ rfc: lote[j].RFC ?? "?", mensaje });
+        }
       }
     }
   }
@@ -574,6 +592,7 @@ export async function syncEmpleados(): Promise<void> {
   syncStatus.errores = errores;
   syncStatus.totalRecibidos = todos.length;
   syncStatus.totalValidos = validos.length;
+  syncStatus.detalleErrores = detalleErrores;
 
   console.log(
     `[SIRH] Sync completada — creados: ${creados}, actualizados: ${actualizados}, errores: ${errores}`,
