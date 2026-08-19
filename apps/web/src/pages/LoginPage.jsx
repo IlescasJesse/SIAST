@@ -18,6 +18,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import BadgeIcon from "@mui/icons-material/Badge";
 import PhoneAndroidIcon from "@mui/icons-material/PhoneAndroid";
+import EmailIcon from "@mui/icons-material/Email";
 import LockIcon from "@mui/icons-material/Lock";
 import { useAuthStore } from "../store/auth.js";
 import { useNotifStore } from "../store/notificaciones.js";
@@ -183,6 +184,9 @@ export const LoginPage = () => {
   const [codigo, setCodigo] = useState("");
   const [hint, setHint] = useState("");
   const [devCodigo, setDevCodigo] = useState("");
+  // Canal de entrega del OTP actual — "whatsapp" (default) o "email" (alternativa,
+  // feedback staff 2026-08-12: no todos pueden recibir por WhatsApp).
+  const [canalOtp, setCanalOtp] = useState("whatsapp");
 
   // Estado flujo staff
   const [usuario, setUsuario] = useState("");
@@ -198,6 +202,7 @@ export const LoginPage = () => {
     setDevCodigo("");
     setError("");
     setAvisoIntentos("");
+    setCanalOtp("whatsapp");
   };
 
   const handleSolicitarOtp = async (e) => {
@@ -220,6 +225,7 @@ export const LoginPage = () => {
         setPaso(PASO_TELEFONO);
       } else {
         setHint(res.hint);
+        setCanalOtp(res.canal ?? "whatsapp");
         if (res.devCodigo) setDevCodigo(res.devCodigo);
         setPaso(PASO_OTP);
       }
@@ -242,6 +248,7 @@ export const LoginPage = () => {
       const res = await solicitarOtp(rfc.toUpperCase(), "__CONFIRMAR__");
       checkIntentos(res.intentosRestantes);
       setHint(res.hint);
+      setCanalOtp(res.canal ?? "whatsapp");
       if (res.devCodigo) setDevCodigo(res.devCodigo);
       setPaso(PASO_OTP);
     } catch (err) {
@@ -266,6 +273,7 @@ export const LoginPage = () => {
       const res = await solicitarOtp(rfc.toUpperCase(), limpio);
       checkIntentos(res.intentosRestantes);
       setHint(res.hint);
+      setCanalOtp(res.canal ?? "whatsapp");
       if (res.devCodigo) setDevCodigo(res.devCodigo);
       setPaso(PASO_OTP);
     } catch (err) {
@@ -289,6 +297,7 @@ export const LoginPage = () => {
       const res = await solicitarOtp(rfc.toUpperCase(), limpio);
       checkIntentos(res.intentosRestantes);
       setHint(res.hint);
+      setCanalOtp(res.canal ?? "whatsapp");
       if (res.devCodigo) setDevCodigo(res.devCodigo);
       setPaso(PASO_OTP);
     } catch (err) {
@@ -330,11 +339,32 @@ export const LoginPage = () => {
     setDevCodigo("");
     setLoading(true);
     try {
-      const res = await solicitarOtp(rfc.toUpperCase());
+      const res = await solicitarOtp(rfc.toUpperCase(), undefined, canalOtp);
       checkIntentos(res.intentosRestantes);
+      setHint(res.hint);
       if (res.devCodigo) setDevCodigo(res.devCodigo);
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al reenviar el código");
+      checkIntentos(err.intentosRestantes);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Alternativa a WhatsApp cuando el empleado no puede recibirlo (feedback staff 2026-08-12).
+  const handleEnviarPorCorreo = async () => {
+    setError("");
+    setCodigo("");
+    setDevCodigo("");
+    setLoading(true);
+    try {
+      const res = await solicitarOtp(rfc.toUpperCase(), undefined, "email");
+      checkIntentos(res.intentosRestantes);
+      setHint(res.hint);
+      setCanalOtp("email");
+      if (res.devCodigo) setDevCodigo(res.devCodigo);
+    } catch (err) {
+      setError(err.response?.data?.error ?? "No hay correo registrado para este empleado");
       checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
@@ -582,8 +612,12 @@ export const LoginPage = () => {
               onSubmit={handleVerificarOtp}
               sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}
             >
-              <Alert severity="success" icon={<PhoneAndroidIcon />}>
-                Codigo enviado a <strong>{hint}</strong>. Revisa WhatsApp.
+              <Alert
+                severity="success"
+                icon={canalOtp === "email" ? <EmailIcon /> : <PhoneAndroidIcon />}
+              >
+                Codigo enviado a <strong>{hint}</strong>.{" "}
+                {canalOtp === "email" ? "Revisa tu correo." : "Revisa WhatsApp."}
               </Alert>
               {devCodigo && (
                 <Chip
@@ -633,6 +667,19 @@ export const LoginPage = () => {
                   Reenviar codigo
                 </Button>
               </Box>
+
+              {canalOtp !== "email" && (
+                <Button
+                  variant="text"
+                  size="small"
+                  startIcon={<EmailIcon fontSize="small" />}
+                  onClick={handleEnviarPorCorreo}
+                  disabled={loading}
+                  sx={{ alignSelf: "center" }}
+                >
+                  ¿No puedes recibir por WhatsApp? Enviar por correo
+                </Button>
+              )}
             </Box>
           )}
         </>

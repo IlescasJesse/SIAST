@@ -2,10 +2,14 @@ import { randomInt } from "crypto";
 import bcrypt from "bcrypt";
 import { prisma } from "../config/database.js";
 import { enviarOtp } from "./whatsapp.service.js";
+import { enviarOtpEmail, maskEmail } from "./email.service.js";
 import { fetchEmpleadoByRfc, updateTelefonoEnSirh } from "./sirh.service.js";
 
 const OTP_TTL_MINUTOS = 10;
 const OTP_BCRYPT_ROUNDS = 10;
+
+/** Canal de entrega del OTP — "email" es alternativa cuando WhatsApp no es viable (feedback staff 2026-08-12) */
+export type CanalOtp = "whatsapp" | "email";
 
 /** Genera un código numérico de 6 dígitos usando CSPRNG */
 const generarCodigo = (): string => randomInt(100000, 999999).toString();
@@ -20,6 +24,7 @@ export const maskTelefono = (tel: string): string => tel.slice(-4).padStart(tel.
 export interface SolicitarOtpResult {
   ok: true;
   hint: string;
+  canal: CanalOtp;
 }
 
 /** Primer acceso: empleado SÍ tiene teléfono en DB → pedir confirmación */
@@ -39,8 +44,9 @@ export interface NecesitaTelefonoResult {
 
 async function generarYEnviarOtp(
   rfc: string,
-  telefono: string,
+  destino: string,
   nombreCompleto: string,
+  canal: CanalOtp,
 ): Promise<SolicitarOtpResult> {
   // Invalidar OTPs anteriores
   await prisma.otpToken.updateMany({
@@ -52,16 +58,17 @@ async function generarYEnviarOtp(
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTOS * 60 * 1000);
 
   // SEC: solo se persiste el hash — el código en claro vive únicamente
-  // el tiempo del envío por WhatsApp y nunca regresa en la respuesta HTTP.
+  // el tiempo del envío y nunca regresa en la respuesta HTTP.
   const codigoHash = await bcrypt.hash(codigo, OTP_BCRYPT_ROUNDS);
   await prisma.otpToken.create({ data: { rfc, codigo: codigoHash, expiresAt } });
 
-  await enviarOtp(telefono, codigo, nombreCompleto);
+  if (canal === "email") {
+    await enviarOtpEmail(destino, codigo, nombreCompleto);
+    return { ok: true, hint: maskEmail(destino), canal };
+  }
 
-  return {
-    ok: true,
-    hint: maskTelefono(telefono),
-  };
+  await enviarOtp(destino, codigo, nombreCompleto);
+  return { ok: true, hint: maskTelefono(destino), canal };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,11 +90,12 @@ async function generarYEnviarOtp(
 export const solicitarOtp = async (
   rfc: string,
   telefonoNuevo?: string,
+  canal: CanalOtp = "whatsapp",
 ): Promise<SolicitarOtpResult | NecesitaConfirmarTelefonoResult | NecesitaTelefonoResult> => {
   // Buscar empleado en DB local
   let empleado = await prisma.empleado.findUnique({
     where: { rfc, activo: true },
-    select: { telefono: true, nombreCompleto: true, primerAcceso: true, sirhId: true },
+    select: { telefono: true, email: true, nombreCompleto: true, primerAcceso: true, sirhId: true },
   });
 
   // Si no está en DB, intentar importar del SIRH al vuelo
@@ -96,7 +104,13 @@ export const solicitarOtp = async (
     if (importado) {
       empleado = await prisma.empleado.findUnique({
         where: { rfc, activo: true },
-        select: { telefono: true, nombreCompleto: true, primerAcceso: true, sirhId: true },
+        select: {
+          telefono: true,
+          email: true,
+          nombreCompleto: true,
+          primerAcceso: true,
+          sirhId: true,
+        },
       });
     }
   }
@@ -146,7 +160,9 @@ export const solicitarOtp = async (
       data: { primerAcceso: false, fechaUltimoAcceso: new Date() },
     });
 
-    return generarYEnviarOtp(rfc, telefonoFinal, empleado.nombreCompleto);
+    // El registro/confirmación de teléfono siempre envía por WhatsApp — es el
+    // canal que se está registrando en este paso.
+    return generarYEnviarOtp(rfc, telefonoFinal, empleado.nombreCompleto, "whatsapp");
   }
 
   // ── Caso: primer acceso (primerAcceso=true) sin teléfono proporcionado ────
@@ -163,6 +179,22 @@ export const solicitarOtp = async (
   }
 
   // ── Caso: acceso normal (ya confirmó antes) ───────────────────────────────
+  // Selector de canal (feedback staff 2026-08-12): email es alternativa cuando
+  // el empleado no puede recibir por WhatsApp. Requiere correo ya registrado
+  // en SIAST/SIRH — a diferencia del teléfono, no hay flujo de alta aquí.
+  if (canal === "email") {
+    if (!empleado.email) {
+      throw Object.assign(new Error("No hay correo registrado para este empleado"), {
+        status: 422,
+      });
+    }
+    await prisma.empleado.update({
+      where: { rfc },
+      data: { fechaUltimoAcceso: new Date() },
+    });
+    return generarYEnviarOtp(rfc, empleado.email, empleado.nombreCompleto, "email");
+  }
+
   if (!empleado.telefono) {
     // Edge case: primerAcceso=false pero sin teléfono (datos corruptos)
     return { necesitaTelefono: true };
@@ -174,7 +206,7 @@ export const solicitarOtp = async (
     data: { fechaUltimoAcceso: new Date() },
   });
 
-  return generarYEnviarOtp(rfc, empleado.telefono, empleado.nombreCompleto);
+  return generarYEnviarOtp(rfc, empleado.telefono, empleado.nombreCompleto, "whatsapp");
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

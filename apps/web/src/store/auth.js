@@ -36,8 +36,8 @@ export const useAuthStore = create((set) => ({
 
   // ── OTP (empleados) ───────────────────────────────────────
   /** Paso 1: solicitar código OTP. Devuelve { ok, hint, devCodigo? } o { necesitaTelefono: true } */
-  solicitarOtp: async (rfc, telefono) =>
-    conIntentosRestantes(() => api.post("/api/auth/solicitar-otp", { rfc, telefono })),
+  solicitarOtp: async (rfc, telefono, canal) =>
+    conIntentosRestantes(() => api.post("/api/auth/solicitar-otp", { rfc, telefono, canal })),
 
   /** Paso 2: verificar código OTP y obtener sesión */
   verificarOtp: async (rfc, codigo) => {

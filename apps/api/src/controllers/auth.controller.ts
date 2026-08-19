@@ -10,7 +10,10 @@ import { signToken } from "../config/jwt.js";
 import type { JwtPayload } from "../types/index.js";
 
 const getMeta = (req: Request) => ({
-  ipAddress: (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? undefined,
+  ipAddress:
+    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
+    req.socket.remoteAddress ??
+    undefined,
   userAgent: req.headers["user-agent"]?.slice(0, 300) ?? undefined,
 });
 
@@ -18,10 +21,17 @@ const getMeta = (req: Request) => ({
 
 export const solicitarOtp = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { rfc, telefono } = req.body as { rfc: string; telefono?: string };
-    if (!rfc) { res.status(400).json({ error: "RFC requerido" }); return; }
+    const { rfc, telefono, canal } = req.body as {
+      rfc: string;
+      telefono?: string;
+      canal?: "whatsapp" | "email";
+    };
+    if (!rfc) {
+      res.status(400).json({ error: "RFC requerido" });
+      return;
+    }
 
-    const result = await otpService.solicitarOtp(rfc.toUpperCase(), telefono);
+    const result = await otpService.solicitarOtp(rfc.toUpperCase(), telefono, canal);
     res.json(result);
   } catch (err) {
     next(err);
@@ -31,7 +41,10 @@ export const solicitarOtp = async (req: Request, res: Response, next: NextFuncti
 export const verificarOtp = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { rfc, codigo } = req.body as { rfc: string; codigo: string };
-    if (!rfc || !codigo) { res.status(400).json({ error: "RFC y código requeridos" }); return; }
+    if (!rfc || !codigo) {
+      res.status(400).json({ error: "RFC y código requeridos" });
+      return;
+    }
 
     await otpService.verificarOtp(rfc.toUpperCase(), codigo);
 
@@ -74,7 +87,10 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
       res.status(400).json({ error: "Datos de contraseña inválidos" });
       return;
     }
-    const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { password: true } });
+    const u = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      select: { password: true },
+    });
     if (!u || !(await bcrypt.compare(actual, u.password))) {
       res.status(401).json({ error: "La contraseña actual no es correcta" });
       return;
@@ -105,7 +121,9 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     let payload: JwtPayload & { iat?: number; exp?: number };
     try {
       // Permitir tokens expirados para poder renovarlos
-      payload = jwt.verify(token, process.env.JWT_SECRET!, { ignoreExpiration: true }) as JwtPayload & {
+      payload = jwt.verify(token, process.env.JWT_SECRET!, {
+        ignoreExpiration: true,
+      }) as JwtPayload & {
         iat?: number;
         exp?: number;
       };
