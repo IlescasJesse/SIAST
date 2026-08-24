@@ -68,6 +68,8 @@ interface SirhEmpleado {
   NUMPLA?: number;
   NIVEL?: string;
   FECHA_INGRESO?: string;
+  FECHA_NAC?: string;
+  FECHA_NOMBRAMIENTO?: string;
   SANGRE?: string;
   SEXO?: string;
   VACACIONES?: {
@@ -656,19 +658,60 @@ export async function fetchEmpleadoByRfc(rfc: string): Promise<boolean> {
 }
 
 // ============================================================
+// updateEmployee de SIRH hace `$set: {...data}` de TODO lo que
+// mandamos, y su controller fuerza FECHA_NAC/FECHA_INGRESO/
+// FECHA_NOMBRAMIENTO a null si no vienen en el body (bug de su
+// lado — no es un $set parcial seguro). Para no borrar esas 3
+// fechas en cada actualización de teléfono/correo, las leemos
+// primero y las reenviamos tal cual junto con el campo nuevo.
+// ============================================================
+
+async function fetchFechasParaPreservar(rfc: string): Promise<{
+  FECHA_NAC?: string;
+  FECHA_INGRESO?: string;
+  FECHA_NOMBRAMIENTO?: string;
+}> {
+  try {
+    const resp = await sirhFetch(`/api/personal/getemployee/${encodeURIComponent(rfc)}`);
+    if (!resp.ok) return {};
+    const emp = (await resp.json()) as SirhEmpleado;
+    return {
+      FECHA_NAC: emp.FECHA_NAC,
+      FECHA_INGRESO: emp.FECHA_INGRESO,
+      FECHA_NOMBRAMIENTO: emp.FECHA_NOMBRAMIENTO,
+    };
+  } catch (err) {
+    console.warn(
+      `[SIRH] No se pudieron leer fechas a preservar para RFC ${rfc}:`,
+      (err as Error).message,
+    );
+    return {};
+  }
+}
+
+// ============================================================
 // Actualizar TEL_PERSONAL en SIRH — se llama cuando el empleado
 // confirma o cambia su teléfono en el primer acceso
 // ============================================================
 
-export async function updateTelefonoEnSirh(sirhId: string, telefono: string): Promise<boolean> {
+export async function updateTelefonoEnSirh(
+  rfc: string,
+  sirhId: string,
+  telefono: string,
+): Promise<boolean> {
   if (!SIRH_ENABLED) return false;
 
   try {
+    const fechas = await fetchFechasParaPreservar(rfc);
+
     const resp = await sirhFetch("/api/personal/updateEmployee", {
       method: "POST",
       body: JSON.stringify({
-        _id: sirhId,
-        TEL_PERSONAL: telefono,
+        data: {
+          _id: sirhId,
+          TEL_PERSONAL: telefono,
+          ...fechas,
+        },
       }),
     });
 
@@ -678,10 +721,57 @@ export async function updateTelefonoEnSirh(sirhId: string, telefono: string): Pr
     }
 
     const body = await resp.text().catch(() => "");
-    console.warn(`[SIRH] updateEmployee respondió ${resp.status}: ${body}`);
+    console.error(
+      `[SIRH] FALLO al actualizar TEL_PERSONAL (sirhId ${sirhId}) — updateEmployee respondió ${resp.status}: ${body}`,
+    );
     return false;
   } catch (err) {
-    console.warn(`[SIRH] No se pudo actualizar TEL_PERSONAL en SIRH:`, (err as Error).message);
+    console.error(
+      `[SIRH] FALLO al actualizar TEL_PERSONAL (sirhId ${sirhId}):`,
+      (err as Error).message,
+    );
+    return false;
+  }
+}
+
+// ============================================================
+// Actualizar EMAIL en SIRH — se llama cuando el empleado
+// confirma o cambia su correo en el primer acceso / perfil
+// ============================================================
+
+export async function updateEmailEnSirh(
+  rfc: string,
+  sirhId: string,
+  email: string,
+): Promise<boolean> {
+  if (!SIRH_ENABLED) return false;
+
+  try {
+    const fechas = await fetchFechasParaPreservar(rfc);
+
+    const resp = await sirhFetch("/api/personal/updateEmployee", {
+      method: "POST",
+      body: JSON.stringify({
+        data: {
+          _id: sirhId,
+          EMAIL: email,
+          ...fechas,
+        },
+      }),
+    });
+
+    if (resp.ok) {
+      console.log(`[SIRH] EMAIL actualizado para sirhId ${sirhId} → ${email}`);
+      return true;
+    }
+
+    const body = await resp.text().catch(() => "");
+    console.error(
+      `[SIRH] FALLO al actualizar EMAIL (sirhId ${sirhId}) — updateEmployee respondió ${resp.status}: ${body}`,
+    );
+    return false;
+  } catch (err) {
+    console.error(`[SIRH] FALLO al actualizar EMAIL (sirhId ${sirhId}):`, (err as Error).message);
     return false;
   }
 }

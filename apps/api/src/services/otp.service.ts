@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import { prisma } from "../config/database.js";
 import { enviarOtp } from "./whatsapp.service.js";
 import { enviarOtpEmail, maskEmail } from "./email.service.js";
-import { fetchEmpleadoByRfc, updateTelefonoEnSirh } from "./sirh.service.js";
+import { fetchEmpleadoByRfc, updateTelefonoEnSirh, updateEmailEnSirh } from "./sirh.service.js";
 
 const OTP_TTL_MINUTOS = 10;
 const OTP_BCRYPT_ROUNDS = 10;
@@ -27,7 +27,13 @@ export interface SolicitarOtpResult {
   canal: CanalOtp;
 }
 
-/** Primer acceso: empleado SÍ tiene teléfono en DB → pedir confirmación */
+/** Primer acceso: empleado SÍ tiene correo en DB → pedir confirmación (prioridad sobre teléfono) */
+export interface NecesitaConfirmarEmailResult {
+  necesitaConfirmarEmail: true;
+  emailCensurado: string; // ej: "j***z@dominio.com"
+}
+
+/** Primer acceso: empleado SÍ tiene teléfono en DB pero no correo → pedir confirmación */
 export interface NecesitaConfirmarTelefonoResult {
   necesitaConfirmarTelefono: true;
   telefonoCensurado: string; // ej: "******5678"
@@ -71,17 +77,28 @@ async function generarYEnviarOtp(
   return { ok: true, hint: maskTelefono(destino), canal };
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // solicitar-otp
 //
+// Prioridad de canal (feedback staff 2026-08-19): correo primero, WhatsApp como
+// alternativa — tanto en primer acceso como en accesos posteriores.
+//
 // Flujo primer acceso:
-//   1. Sin teléfono en DB         → { necesitaTelefono: true }
-//   2. Con teléfono, sin confirmar → { necesitaConfirmarTelefono: true, telefonoCensurado }
+//   1. Con correo en DB           → { necesitaConfirmarEmail: true, emailCensurado }
+//   2. Sin correo, con teléfono   → { necesitaConfirmarTelefono: true, telefonoCensurado }
+//   3. Sin correo ni teléfono     → { necesitaTelefono: true }
 //
 // Flujo normal (primerAcceso=false o ya confirmó):
-//   → Genera y envía OTP directamente
+//   → Envía por `canal` si se especifica explícito; si no, correo si hay
+//     correo registrado, si no WhatsApp.
 //
-// Cuando se pasa `telefono` en el body:
+// Cuando se pasa `emailNuevo`:
+//   - "__CONFIRMAR__" = acepta el correo que ya tenemos en DB
+//   - cualquier otro valor = lo valida y actualiza en SIAST + SIRH (si cambió y hay sirhId)
+//
+// Cuando se pasa `telefonoNuevo` (igual que antes):
 //   - Si es primer acceso SIN teléfono previo → registra y envía OTP
 //   - Si es primer acceso CON teléfono previo diferente → actualiza SIAST + SIRH, envía OTP
 //   - Si el teléfono es igual al que ya tenemos → envía OTP sin tocar SIRH
@@ -90,8 +107,14 @@ async function generarYEnviarOtp(
 export const solicitarOtp = async (
   rfc: string,
   telefonoNuevo?: string,
-  canal: CanalOtp = "whatsapp",
-): Promise<SolicitarOtpResult | NecesitaConfirmarTelefonoResult | NecesitaTelefonoResult> => {
+  canal?: CanalOtp,
+  emailNuevo?: string,
+): Promise<
+  | SolicitarOtpResult
+  | NecesitaConfirmarEmailResult
+  | NecesitaConfirmarTelefonoResult
+  | NecesitaTelefonoResult
+> => {
   // Buscar empleado en DB local
   let empleado = await prisma.empleado.findUnique({
     where: { rfc, activo: true },
@@ -119,6 +142,44 @@ export const solicitarOtp = async (
     throw Object.assign(new Error("RFC no encontrado en el sistema"), { status: 404 });
   }
 
+  // ── Caso: se proporcionó un correo (confirmación o cambio) — prioridad ────
+  if (emailNuevo) {
+    const esConfirmacion = emailNuevo === "__CONFIRMAR__";
+    let emailFinal = empleado.email;
+
+    if (!esConfirmacion) {
+      const limpio = emailNuevo.trim().toLowerCase();
+      if (!EMAIL_REGEX.test(limpio)) {
+        throw Object.assign(new Error("Correo inválido"), { status: 400 });
+      }
+
+      const esDiferente = empleado.email !== limpio;
+
+      await prisma.empleado.update({ where: { rfc }, data: { email: limpio } });
+
+      // Si cambió y tenemos sirhId → retroalimentar SIRH en background
+      if (esDiferente && empleado.sirhId) {
+        updateEmailEnSirh(rfc, empleado.sirhId, limpio).catch((e) =>
+          console.warn("[OTP] No se pudo actualizar EMAIL en SIRH:", e.message),
+        );
+      }
+
+      emailFinal = limpio;
+    }
+
+    if (!emailFinal) {
+      throw Object.assign(new Error("No hay correo registrado"), { status: 422 });
+    }
+
+    // Marcar primer acceso completado
+    await prisma.empleado.update({
+      where: { rfc },
+      data: { primerAcceso: false, fechaUltimoAcceso: new Date() },
+    });
+
+    return generarYEnviarOtp(rfc, emailFinal, empleado.nombreCompleto, "email");
+  }
+
   // ── Caso: se proporcionó un teléfono (confirmación o registro) ────────────
   if (telefonoNuevo) {
     // "__CONFIRMAR__" = el empleado acepta el teléfono que ya tenemos en DB
@@ -142,7 +203,7 @@ export const solicitarOtp = async (
 
       // Si cambió y tenemos sirhId → retroalimentar SIRH en background
       if (esDiferente && empleado.sirhId) {
-        updateTelefonoEnSirh(empleado.sirhId, limpio).catch((e) =>
+        updateTelefonoEnSirh(rfc, empleado.sirhId, limpio).catch((e) =>
           console.warn("[OTP] No se pudo actualizar SIRH:", e.message),
         );
       }
@@ -165,13 +226,16 @@ export const solicitarOtp = async (
     return generarYEnviarOtp(rfc, telefonoFinal, empleado.nombreCompleto, "whatsapp");
   }
 
-  // ── Caso: primer acceso (primerAcceso=true) sin teléfono proporcionado ────
+  // ── Caso: primer acceso (primerAcceso=true) sin canal confirmado aún ──────
+  // Prioridad: correo > teléfono.
   if (empleado.primerAcceso) {
+    if (empleado.email) {
+      return { necesitaConfirmarEmail: true, emailCensurado: maskEmail(empleado.email) };
+    }
     if (!empleado.telefono) {
-      // Sin teléfono → pedir que lo registre
+      // Ni correo ni teléfono → pedir que registre uno (el único canal disponible)
       return { necesitaTelefono: true };
     }
-    // Tiene teléfono → pedir que confirme o cambie
     return {
       necesitaConfirmarTelefono: true,
       telefonoCensurado: maskTelefono(empleado.telefono),
@@ -179,34 +243,90 @@ export const solicitarOtp = async (
   }
 
   // ── Caso: acceso normal (ya confirmó antes) ───────────────────────────────
-  // Selector de canal (feedback staff 2026-08-12): email es alternativa cuando
-  // el empleado no puede recibir por WhatsApp. Requiere correo ya registrado
-  // en SIAST/SIRH — a diferencia del teléfono, no hay flujo de alta aquí.
-  if (canal === "email") {
+  // canal explícito (botón "cambiar canal" o reenviar) fuerza ese canal; sin
+  // canal explícito, prioridad correo > WhatsApp.
+  const canalEfectivo: CanalOtp = canal ?? (empleado.email ? "email" : "whatsapp");
+
+  if (canalEfectivo === "email") {
     if (!empleado.email) {
       throw Object.assign(new Error("No hay correo registrado para este empleado"), {
         status: 422,
       });
     }
-    await prisma.empleado.update({
-      where: { rfc },
-      data: { fechaUltimoAcceso: new Date() },
-    });
+    await prisma.empleado.update({ where: { rfc }, data: { fechaUltimoAcceso: new Date() } });
     return generarYEnviarOtp(rfc, empleado.email, empleado.nombreCompleto, "email");
   }
 
   if (!empleado.telefono) {
-    // Edge case: primerAcceso=false pero sin teléfono (datos corruptos)
+    if (canal === "whatsapp") {
+      // Se pidió WhatsApp explícito (botón "cambiar canal") — error claro en vez
+      // de reabrir el flujo de registro de teléfono a media sesión.
+      throw Object.assign(new Error("No hay teléfono registrado para WhatsApp"), {
+        status: 422,
+      });
+    }
+    // Auto-selección sin correo ni teléfono (datos corruptos): pedir registro
     return { necesitaTelefono: true };
   }
 
-  // Actualizar fecha último acceso
-  await prisma.empleado.update({
-    where: { rfc },
-    data: { fechaUltimoAcceso: new Date() },
-  });
-
+  await prisma.empleado.update({ where: { rfc }, data: { fechaUltimoAcceso: new Date() } });
   return generarYEnviarOtp(rfc, empleado.telefono, empleado.nombreCompleto, "whatsapp");
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Preferencia de notificaciones por WhatsApp (Perfil) — feedback staff 2026-08-19
+//
+// Activar requiere teléfono confirmado (doble captura en el frontend); desactivar
+// no toca el teléfono — sigue disponible como canal de OTP.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface NotificacionesWhatsappResult {
+  telefono: string | null;
+  notificacionesWhatsapp: boolean;
+}
+
+export const actualizarNotificacionesWhatsapp = async (
+  rfc: string,
+  enabled: boolean,
+  telefonoNuevo?: string,
+): Promise<NotificacionesWhatsappResult> => {
+  const empleado = await prisma.empleado.findUnique({
+    where: { rfc, activo: true },
+    select: { telefono: true, sirhId: true },
+  });
+  if (!empleado) throw Object.assign(new Error("Empleado no encontrado"), { status: 404 });
+
+  if (!enabled) {
+    await prisma.empleado.update({ where: { rfc }, data: { notificacionesWhatsapp: false } });
+    return { telefono: empleado.telefono, notificacionesWhatsapp: false };
+  }
+
+  // Activar: requiere teléfono (el que ya tenía, o uno nuevo confirmado en el formulario)
+  let telefonoFinal = empleado.telefono;
+  if (telefonoNuevo) {
+    const limpio = telefonoNuevo.replace(/\D/g, "").slice(-10);
+    if (limpio.length !== 10) {
+      throw Object.assign(new Error("Número de celular inválido (10 dígitos)"), { status: 400 });
+    }
+    const esDiferente = empleado.telefono !== limpio;
+    await prisma.empleado.update({ where: { rfc }, data: { telefono: limpio } });
+    if (esDiferente && empleado.sirhId) {
+      updateTelefonoEnSirh(rfc, empleado.sirhId, limpio).catch((e) =>
+        console.warn("[Perfil] No se pudo actualizar SIRH:", e.message),
+      );
+    }
+    telefonoFinal = limpio;
+  }
+
+  if (!telefonoFinal) {
+    throw Object.assign(
+      new Error("Registra un número de celular para activar las notificaciones por WhatsApp"),
+      { status: 422 },
+    );
+  }
+
+  await prisma.empleado.update({ where: { rfc }, data: { notificacionesWhatsapp: true } });
+  return { telefono: telefonoFinal, notificacionesWhatsapp: true };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

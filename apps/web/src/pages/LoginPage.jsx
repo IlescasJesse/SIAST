@@ -29,9 +29,11 @@ import siastLogo from "../img/siast-logo.png";
 const RFC_REGEX = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/i;
 
 const PASO_RFC = "rfc";
-const PASO_CONFIRMAR_TEL = "confirmar_tel"; // primer acceso: confirmar o cambiar teléfono
-const PASO_TELEFONO = "telefono"; // primer acceso: registrar teléfono nuevo
+const PASO_CONFIRMAR_EMAIL = "confirmar_email"; // primer acceso: confirmar o cambiar correo (prioridad sobre teléfono)
+const PASO_CONFIRMAR_TEL = "confirmar_tel"; // primer acceso sin correo: confirmar o cambiar teléfono
+const PASO_TELEFONO = "telefono"; // primer acceso sin correo ni teléfono: registrar teléfono nuevo
 const PASO_OTP = "otp";
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ── Componente OTP: 6 cajas individuales ─────────────────────────────────────
 function OtpInput({ length = 6, value, onChange, onComplete, disabled }) {
@@ -181,12 +183,14 @@ export const LoginPage = () => {
   const [rfc, setRfc] = useState("");
   const [telefono, setTelefono] = useState("");
   const [telefonoCensurado, setTelefonoCensurado] = useState(""); // para confirmar
+  const [emailCensurado, setEmailCensurado] = useState(""); // para confirmar
+  const [emailNuevoInput, setEmailNuevoInput] = useState(""); // para cambiar el correo
   const [codigo, setCodigo] = useState("");
   const [hint, setHint] = useState("");
   const [devCodigo, setDevCodigo] = useState("");
-  // Canal de entrega del OTP actual — "whatsapp" (default) o "email" (alternativa,
-  // feedback staff 2026-08-12: no todos pueden recibir por WhatsApp).
-  const [canalOtp, setCanalOtp] = useState("whatsapp");
+  // Canal de entrega del OTP actual — prioridad correo > WhatsApp (feedback staff
+  // 2026-08-19); se actualiza con lo que el backend efectivamente usó (res.canal).
+  const [canalOtp, setCanalOtp] = useState("email");
 
   // Estado flujo staff
   const [usuario, setUsuario] = useState("");
@@ -197,12 +201,14 @@ export const LoginPage = () => {
     setRfc("");
     setTelefono("");
     setTelefonoCensurado("");
+    setEmailCensurado("");
+    setEmailNuevoInput("");
     setCodigo("");
     setHint("");
     setDevCodigo("");
     setError("");
     setAvisoIntentos("");
-    setCanalOtp("whatsapp");
+    setCanalOtp("email");
   };
 
   const handleSolicitarOtp = async (e) => {
@@ -216,8 +222,12 @@ export const LoginPage = () => {
     try {
       const res = await solicitarOtp(rfc.toUpperCase());
       checkIntentos(res.intentosRestantes);
-      if (res.necesitaConfirmarTelefono) {
-        // Primer acceso con teléfono conocido → confirmar o cambiar
+      if (res.necesitaConfirmarEmail) {
+        // Primer acceso con correo conocido → confirmar o cambiar (prioridad sobre teléfono)
+        setEmailCensurado(res.emailCensurado);
+        setPaso(PASO_CONFIRMAR_EMAIL);
+      } else if (res.necesitaConfirmarTelefono) {
+        // Primer acceso sin correo pero con teléfono conocido → confirmar o cambiar
         setTelefonoCensurado(res.telefonoCensurado);
         setPaso(PASO_CONFIRMAR_TEL);
       } else if (res.necesitaTelefono) {
@@ -231,6 +241,51 @@ export const LoginPage = () => {
       }
     } catch (err) {
       setError(err.response?.data?.error ?? "RFC no encontrado en el sistema");
+      checkIntentos(err.intentosRestantes);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Paso 1.5: Confirmar correo existente (primer acceso, prioridad sobre teléfono)
+  const handleConfirmarEmail = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await solicitarOtp(rfc.toUpperCase(), undefined, undefined, "__CONFIRMAR__");
+      checkIntentos(res.intentosRestantes);
+      setHint(res.hint);
+      setCanalOtp(res.canal ?? "email");
+      if (res.devCodigo) setDevCodigo(res.devCodigo);
+      setPaso(PASO_OTP);
+    } catch (err) {
+      setError(err.response?.data?.error ?? "Error al confirmar correo");
+      checkIntentos(err.intentosRestantes);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Paso 1.5 alt: Cambiar correo (primer acceso, correo diferente al de SIRH)
+  const handleCambiarEmail = async (e) => {
+    e.preventDefault();
+    setError("");
+    const limpio = emailNuevoInput.trim();
+    if (!EMAIL_REGEX.test(limpio)) {
+      setError("Ingresa un correo válido");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await solicitarOtp(rfc.toUpperCase(), undefined, undefined, limpio);
+      checkIntentos(res.intentosRestantes);
+      setHint(res.hint);
+      setCanalOtp(res.canal ?? "email");
+      if (res.devCodigo) setDevCodigo(res.devCodigo);
+      setPaso(PASO_OTP);
+    } catch (err) {
+      setError(err.response?.data?.error ?? "Error al actualizar correo");
       checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
@@ -351,20 +406,27 @@ export const LoginPage = () => {
     }
   };
 
-  // Alternativa a WhatsApp cuando el empleado no puede recibirlo (feedback staff 2026-08-12).
-  const handleEnviarPorCorreo = async () => {
+  // Cambia al canal contrario del actual — correo es el default (prioridad,
+  // feedback staff 2026-08-19), WhatsApp queda como alternativa y viceversa.
+  const handleCambiarCanal = async () => {
+    const destino = canalOtp === "email" ? "whatsapp" : "email";
     setError("");
     setCodigo("");
     setDevCodigo("");
     setLoading(true);
     try {
-      const res = await solicitarOtp(rfc.toUpperCase(), undefined, "email");
+      const res = await solicitarOtp(rfc.toUpperCase(), undefined, destino);
       checkIntentos(res.intentosRestantes);
       setHint(res.hint);
-      setCanalOtp("email");
+      setCanalOtp(res.canal ?? destino);
       if (res.devCodigo) setDevCodigo(res.devCodigo);
     } catch (err) {
-      setError(err.response?.data?.error ?? "No hay correo registrado para este empleado");
+      setError(
+        err.response?.data?.error ??
+          (destino === "email"
+            ? "No hay correo registrado para este empleado"
+            : "No hay teléfono registrado para WhatsApp"),
+      );
       checkIntentos(err.intentosRestantes);
     } finally {
       setLoading(false);
@@ -492,8 +554,70 @@ export const LoginPage = () => {
                 {loading ? <CircularProgress size={22} color="inherit" /> : "Continuar"}
               </Button>
               <Typography variant="caption" color="text.secondary" textAlign="center">
-                Te enviaremos un codigo de verificacion por WhatsApp
+                Te enviaremos un codigo de verificacion por correo o WhatsApp
               </Typography>
+            </Box>
+          )}
+
+          {/* Paso 1.5: Confirmar correo (primer acceso con correo en DB — prioridad) */}
+          {paso === PASO_CONFIRMAR_EMAIL && (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <Alert severity="info" icon={<EmailIcon />}>
+                <strong>Primer acceso.</strong> Tenemos registrado el correo{" "}
+                <strong>{emailCensurado}</strong>. ¿Es correcto?
+              </Alert>
+
+              <Button
+                variant="contained"
+                fullWidth
+                size="large"
+                onClick={handleConfirmarEmail}
+                disabled={loading}
+              >
+                {loading ? (
+                  <CircularProgress size={22} color="inherit" />
+                ) : (
+                  `Si, enviar codigo a ${emailCensurado}`
+                )}
+              </Button>
+
+              <Typography variant="caption" color="text.secondary" textAlign="center">
+                ¿No es tu correo?
+              </Typography>
+
+              <Box
+                component="form"
+                onSubmit={handleCambiarEmail}
+                sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
+              >
+                <TextField
+                  label="Mi correo correcto"
+                  type="email"
+                  value={emailNuevoInput}
+                  onChange={(e) => setEmailNuevoInput(e.target.value)}
+                  fullWidth
+                  helperText="Ej: nombre@finanzasoaxaca.gob.mx"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <EmailIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Button
+                  type="submit"
+                  variant="outlined"
+                  fullWidth
+                  disabled={loading || !EMAIL_REGEX.test(emailNuevoInput.trim())}
+                >
+                  Usar este correo y enviar codigo
+                </Button>
+              </Box>
+
+              <Button variant="text" size="small" onClick={resetEmpleado} disabled={loading}>
+                Volver
+              </Button>
             </Box>
           )}
 
@@ -668,18 +792,24 @@ export const LoginPage = () => {
                 </Button>
               </Box>
 
-              {canalOtp !== "email" && (
-                <Button
-                  variant="text"
-                  size="small"
-                  startIcon={<EmailIcon fontSize="small" />}
-                  onClick={handleEnviarPorCorreo}
-                  disabled={loading}
-                  sx={{ alignSelf: "center" }}
-                >
-                  ¿No puedes recibir por WhatsApp? Enviar por correo
-                </Button>
-              )}
+              <Button
+                variant="text"
+                size="small"
+                startIcon={
+                  canalOtp === "email" ? (
+                    <PhoneAndroidIcon fontSize="small" />
+                  ) : (
+                    <EmailIcon fontSize="small" />
+                  )
+                }
+                onClick={handleCambiarCanal}
+                disabled={loading}
+                sx={{ alignSelf: "center" }}
+              >
+                {canalOtp === "email"
+                  ? "¿No puedes revisar tu correo? Enviar por WhatsApp"
+                  : "¿No puedes recibir por WhatsApp? Enviar por correo"}
+              </Button>
             </Box>
           )}
         </>

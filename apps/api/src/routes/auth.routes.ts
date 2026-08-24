@@ -12,5 +12,6 @@ router.post("/logout", authMiddleware, ctrl.logout);
 router.post("/refresh", authRateLimiter, ctrl.refreshToken); // renovación sin requerir token válido
 router.get("/me", authMiddleware, ctrl.me);
 router.patch("/password", authMiddleware, ctrl.changePassword);
+router.patch("/notificaciones-whatsapp", authMiddleware, ctrl.actualizarNotificacionesWhatsapp);
 
 export default router;

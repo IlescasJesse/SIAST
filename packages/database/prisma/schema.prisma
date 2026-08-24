@@ -194,8 +194,11 @@ model Empleado {
   // Datos del SIRH adicionales
   adscripcion    String?      @db.VarChar(200) // ej: "SECRETARÍA DE FINANZAS Y ADMINISTRACIÓN"
 
-  telefono       String?      @db.VarChar(20) // celular para OTP (se registra en primer acceso)
-  primerAcceso   Boolean      @default(true)  // true hasta que el empleado confirma su teléfono
+  telefono       String?      @db.VarChar(20) // celular para OTP y notificaciones de solicitudes
+  // Opt-in explícito para recibir notificaciones de solicitudes por WhatsApp — se
+  // activa desde Perfil, requiere teléfono confirmado (feedback staff 2026-08-19).
+  notificacionesWhatsapp Boolean @default(false)
+  primerAcceso   Boolean      @default(true)  // true hasta que el empleado confirma su correo/teléfono
   fechaUltimoAcceso DateTime?                 // última vez que inició sesión
 
   // Datos extendidos del SIRH

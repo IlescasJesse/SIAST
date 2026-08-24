@@ -21,17 +21,18 @@ const getMeta = (req: Request) => ({
 
 export const solicitarOtp = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { rfc, telefono, canal } = req.body as {
+    const { rfc, telefono, canal, email } = req.body as {
       rfc: string;
       telefono?: string;
       canal?: "whatsapp" | "email";
+      email?: string;
     };
     if (!rfc) {
       res.status(400).json({ error: "RFC requerido" });
       return;
     }
 
-    const result = await otpService.solicitarOtp(rfc.toUpperCase(), telefono, canal);
+    const result = await otpService.solicitarOtp(rfc.toUpperCase(), telefono, canal, email);
     res.json(result);
   } catch (err) {
     next(err);
@@ -100,6 +101,31 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
       data: { password: await bcrypt.hash(nueva, 10) },
     });
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Preferencia de notificaciones por WhatsApp (Perfil, solo EMPLEADO) ────────
+
+export const actualizarNotificacionesWhatsapp = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const user = req.user!;
+    if (user.rol !== "EMPLEADO") {
+      res.status(403).json({ error: "Solo empleados tienen esta preferencia" });
+      return;
+    }
+    const { enabled, telefono } = req.body as { enabled: boolean; telefono?: string };
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({ error: "'enabled' es requerido (boolean)" });
+      return;
+    }
+    const result = await otpService.actualizarNotificacionesWhatsapp(user.rfc!, enabled, telefono);
+    res.json(result);
   } catch (err) {
     next(err);
   }
