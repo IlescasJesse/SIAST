@@ -52,7 +52,22 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
       },
       orderBy: { nombre: "asc" },
     });
-    res.json({ data });
+
+    // Carga de trabajo actual — tickets activos por técnico (feedback staff P3-7:
+    // mostrar cuántas solicitudes tiene ya cada técnico al momento de asignar).
+    const conteos = await prisma.ticket.groupBy({
+      by: ["tecnicoId"],
+      where: {
+        tecnicoId: { in: data.map((t) => t.id) },
+        estado: { in: ["ABIERTO", "ASIGNADO", "EN_PROGRESO"] },
+      },
+      _count: { _all: true },
+    });
+    const conteoPorTecnico = new Map(conteos.map((c) => [c.tecnicoId, c._count._all]));
+
+    res.json({
+      data: data.map((t) => ({ ...t, ticketsActivos: conteoPorTecnico.get(t.id) ?? 0 })),
+    });
   } catch (err) {
     next(err);
   }

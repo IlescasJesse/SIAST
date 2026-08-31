@@ -860,7 +860,8 @@ export const SolicitudDetailPage = () => {
             >
               {tecnicos.map((t) => (
                 <MenuItem key={t.id} value={t.id}>
-                  {t.nombre} {t.apellidos} ({t.rol})
+                  {t.nombre} {t.apellidos} ({t.rol}) — {t.ticketsActivos ?? 0} activo
+                  {t.ticketsActivos === 1 ? "" : "s"}
                 </MenuItem>
               ))}
             </Select>
@@ -965,7 +966,8 @@ export const SolicitudDetailPage = () => {
               >
                 {tecnicosFiltradosPaso.map((t) => (
                   <MenuItem key={t.id} value={t.id}>
-                    {t.nombre} {t.apellidos}
+                    {t.nombre} {t.apellidos} — {t.ticketsActivos ?? 0} activo
+                    {t.ticketsActivos === 1 ? "" : "s"}
                   </MenuItem>
                 ))}
               </Select>
