@@ -9,3 +9,5 @@ export const updatePassword = (body) => api.patch("/api/auth/password", body).th
 export const getPerfil = () => api.get("/api/auth/me").then((r) => r.data);
 export const updateNotificacionesWhatsapp = (body) =>
   api.patch("/api/auth/notificaciones-whatsapp", body).then((r) => r.data);
+export const completarPerfil = (body) =>
+  api.patch("/api/auth/completar-perfil", body).then((r) => r.data);

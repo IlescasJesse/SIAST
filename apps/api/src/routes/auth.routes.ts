@@ -13,5 +13,6 @@ router.post("/refresh", authRateLimiter, ctrl.refreshToken); // renovación sin 
 router.get("/me", authMiddleware, ctrl.me);
 router.patch("/password", authMiddleware, ctrl.changePassword);
 router.patch("/notificaciones-whatsapp", authMiddleware, ctrl.actualizarNotificacionesWhatsapp);
+router.patch("/completar-perfil", authMiddleware, ctrl.completarPerfil);
 
 export default router;

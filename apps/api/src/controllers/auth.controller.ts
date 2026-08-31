@@ -190,6 +190,69 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
   }
 };
 
+// ── Completar perfil (primer acceso — feedback staff P3-9, 2026-08-31) ────────
+// correoInstitucional y emailPersonal son opcionales en DB, pero se exige al
+// menos uno de los dos al completar el perfil (muchos empleados no tienen
+// correo institucional asignado).
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const completarPerfil = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user!;
+    if (user.rol !== "EMPLEADO") {
+      res.status(403).json({ error: "Solo empleados completan este perfil" });
+      return;
+    }
+
+    const { correoInstitucional, emailPersonal, extension, areaId } = req.body as {
+      correoInstitucional?: string | null;
+      emailPersonal?: string | null;
+      extension?: string | null;
+      areaId?: string;
+    };
+
+    const ci = correoInstitucional?.trim().toLowerCase() || null;
+    const ep = emailPersonal?.trim().toLowerCase() || null;
+    if (ci && !EMAIL_REGEX.test(ci)) {
+      res.status(400).json({ error: "Correo institucional inválido" });
+      return;
+    }
+    if (ep && !EMAIL_REGEX.test(ep)) {
+      res.status(400).json({ error: "Correo personal inválido" });
+      return;
+    }
+    if (!ci && !ep) {
+      res
+        .status(400)
+        .json({ error: "Captura tu correo institucional o, en su defecto, tu correo personal" });
+      return;
+    }
+
+    if (areaId) {
+      const area = await prisma.areaEdificio.findUnique({ where: { id: areaId } });
+      if (!area || !area.activo) {
+        res.status(400).json({ error: "Ubicación inválida" });
+        return;
+      }
+    }
+
+    const empleado = await prisma.empleado.update({
+      where: { rfc: user.rfc! },
+      data: {
+        correoInstitucional: ci,
+        emailPersonal: ep,
+        extension: extension?.trim() || null,
+        ...(areaId ? { areaId } : {}),
+        perfilCompleto: true,
+      },
+      include: { area: true },
+    });
+    res.json(empleado);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const me = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const user = req.user!;

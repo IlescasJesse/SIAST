@@ -52,6 +52,7 @@ import { SolicitudNewPage } from "./pages/SolicitudNewPage.jsx";
 import { SolicitudDetailPage } from "./pages/SolicitudDetailPage.jsx";
 import { UsuariosPage } from "./pages/UsuariosPage.jsx";
 import { PerfilPage } from "./pages/PerfilPage.jsx";
+import { CompletarPerfilPage } from "./pages/CompletarPerfilPage.jsx";
 import { AreasPage } from "./pages/AreasPage.jsx";
 import { RecursosPage } from "./pages/RecursosPage.jsx";
 import { AdminPage } from "./pages/AdminPage.jsx";
@@ -67,6 +68,15 @@ const ProtectedRoute = ({ roles }) => {
     return <Navigate to={`/login${redirectParam}`} replace />;
   }
   if (roles && !roles.includes(user.rol)) return <Navigate to="/" replace />;
+  // Empleado con perfil incompleto (feedback staff P3-9) — bloquea el resto de
+  // la app hasta que capture correo (institucional o personal) y ubicación.
+  if (
+    user.rol === "EMPLEADO" &&
+    user.perfilCompleto === false &&
+    location.pathname !== "/completar-perfil"
+  ) {
+    return <Navigate to="/completar-perfil" replace />;
+  }
   return <Outlet />;
 };
 
@@ -216,6 +226,7 @@ export const App = () => {
 
               {/* Perfil */}
               <Route path="/perfil" element={<PerfilPage />} />
+              <Route path="/completar-perfil" element={<CompletarPerfilPage />} />
             </Route>
           </Route>
 

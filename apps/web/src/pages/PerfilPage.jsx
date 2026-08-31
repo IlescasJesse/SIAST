@@ -17,9 +17,15 @@ import {
 } from "@mui/material";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { useAuthStore } from "../store/auth.js";
-import { updatePassword, updateNotificacionesWhatsapp, getPerfil } from "../api/usuarios.js";
+import {
+  updatePassword,
+  updateNotificacionesWhatsapp,
+  getPerfil,
+  completarPerfil,
+} from "../api/usuarios.js";
 
 const TEL_REGEX = /^\d{10}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const PerfilPage = () => {
   const { user } = useAuthStore();
@@ -63,14 +69,57 @@ export const PerfilPage = () => {
   const [notifSaving, setNotifSaving] = useState(false);
   const [telForm, setTelForm] = useState(null); // null = cerrado; { paso: 1|2, tel1, tel2 }
 
+  // Datos de contacto editables (correo institucional/personal, extensión) —
+  // feedback staff P3-9, mismos campos que el onboarding de completar perfil.
+  const [contactoForm, setContactoForm] = useState(null);
+  const [contactoMsg, setContactoMsg] = useState(null);
+  const [contactoSaving, setContactoSaving] = useState(false);
+
   useEffect(() => {
     if (!isEmpleado) return;
     setPerfilLoading(true);
     getPerfil()
-      .then(setPerfil)
+      .then((p) => {
+        setPerfil(p);
+        setContactoForm({
+          correoInstitucional: p.correoInstitucional ?? "",
+          emailPersonal: p.emailPersonal ?? "",
+          extension: p.extension ?? "",
+        });
+      })
       .catch(() => {})
       .finally(() => setPerfilLoading(false));
   }, [isEmpleado]);
+
+  const correoValido = (v) => !v || EMAIL_REGEX.test(v);
+  const puedeGuardarContacto =
+    contactoForm &&
+    (contactoForm.correoInstitucional.trim() || contactoForm.emailPersonal.trim()) &&
+    correoValido(contactoForm.correoInstitucional.trim()) &&
+    correoValido(contactoForm.emailPersonal.trim());
+
+  const handleGuardarContacto = async (e) => {
+    e.preventDefault();
+    if (!puedeGuardarContacto) return;
+    setContactoSaving(true);
+    setContactoMsg(null);
+    try {
+      const actualizado = await completarPerfil({
+        correoInstitucional: contactoForm.correoInstitucional.trim() || null,
+        emailPersonal: contactoForm.emailPersonal.trim() || null,
+        extension: contactoForm.extension.trim() || null,
+      });
+      setPerfil((p) => ({ ...p, ...actualizado }));
+      setContactoMsg({ type: "success", text: "Datos de contacto actualizados" });
+    } catch (err) {
+      setContactoMsg({
+        type: "error",
+        text: err.response?.data?.error ?? "Error al actualizar los datos de contacto",
+      });
+    } finally {
+      setContactoSaving(false);
+    }
+  };
 
   const aplicarNotificaciones = async (enabled, telefono) => {
     setNotifSaving(true);
@@ -219,6 +268,62 @@ export const PerfilPage = () => {
           </Grid>
         </CardContent>
       </Card>
+
+      {/* Datos de contacto — correo institucional/personal, extensión — solo empleados */}
+      {isEmpleado && contactoForm && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+              Datos de contacto
+            </Typography>
+            <Box
+              component="form"
+              onSubmit={handleGuardarContacto}
+              sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
+            >
+              {contactoMsg && <Alert severity={contactoMsg.type}>{contactoMsg.text}</Alert>}
+              <TextField
+                label="Correo institucional"
+                type="email"
+                value={contactoForm.correoInstitucional}
+                onChange={(e) =>
+                  setContactoForm((f) => ({ ...f, correoInstitucional: e.target.value }))
+                }
+                error={!correoValido(contactoForm.correoInstitucional.trim())}
+                fullWidth
+              />
+              <TextField
+                label="Correo personal"
+                type="email"
+                value={contactoForm.emailPersonal}
+                onChange={(e) => setContactoForm((f) => ({ ...f, emailPersonal: e.target.value }))}
+                error={!correoValido(contactoForm.emailPersonal.trim())}
+                helperText="Requerido solo si no tienes correo institucional"
+                fullWidth
+              />
+              <TextField
+                label="Extensión telefónica"
+                value={contactoForm.extension}
+                onChange={(e) =>
+                  setContactoForm((f) => ({
+                    ...f,
+                    extension: e.target.value.replace(/\D/g, "").slice(0, 10),
+                  }))
+                }
+                fullWidth
+              />
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={!puedeGuardarContacto || contactoSaving}
+                sx={{ alignSelf: "flex-start" }}
+              >
+                {contactoSaving ? <CircularProgress size={20} color="inherit" /> : "Guardar"}
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Notificaciones por WhatsApp — solo empleados */}
       {isEmpleado && (

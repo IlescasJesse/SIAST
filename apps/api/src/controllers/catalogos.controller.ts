@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/database.js";
 import { SUBCATEGORIAS_POR_CATEGORIA, validarGeometriaArea } from "@stf/shared";
 import { sirhFetch } from "../services/sirhAuth.service.js";
+import type { AuthRequest } from "../types/index.js";
 
 export const categorias = (_req: Request, res: Response) => {
   res.json({
@@ -632,6 +633,100 @@ export const eliminarArea = async (req: Request, res: Response, next: NextFuncti
     });
 
     res.json({ data: area, mensaje: "Área desactivada correctamente" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Sugerencia de ubicación por adscripción (feedback staff P3-9, 2026-08-31) ─
+
+// Palabras sin valor discriminante en nombres de adscripción/área — se ignoran
+// al comparar (si no, dominan el score y todo matchea con todo).
+const STOPWORDS = new Set([
+  "DE",
+  "DEL",
+  "LA",
+  "LAS",
+  "EL",
+  "LOS",
+  "Y",
+  "EN",
+  "A",
+  "AL",
+  "PARA",
+  "SECRETARIA",
+  "SECRETARÍA",
+  "DIRECCION",
+  "DIRECCIÓN",
+  "DEPARTAMENTO",
+  "COORDINACION",
+  "COORDINACIÓN",
+  "UNIDAD",
+]);
+
+const tokenizar = (texto: string): Set<string> =>
+  new Set(
+    texto
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "") // quita acentos (marcas combinantes tras NFD)
+      .toUpperCase()
+      .replace(/[^A-Z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 1 && !STOPWORDS.has(t)),
+  );
+
+// Similitud Jaccard sobre tokens (intersección / unión) — simple, sin
+// dependencias, suficiente para nombres cortos de adscripción/área.
+const similitud = (a: Set<string>, b: Set<string>): number => {
+  if (a.size === 0 || b.size === 0) return 0;
+  let interseccion = 0;
+  for (const t of a) if (b.has(t)) interseccion++;
+  const union = a.size + b.size - interseccion;
+  return interseccion / union;
+};
+
+/**
+ * GET /api/catalogos/areas-sugeridas
+ * Para el empleado autenticado: rankea las áreas del edificio por similitud
+ * de texto entre su `adscripcion` (SIRH) y `adscripcionNombre`/`label` de
+ * cada área, para sugerir dónde ubicarse al completar su perfil. No reemplaza
+ * el mapeo exacto de sirh.service.ts (usado en el import automático) — es una
+ * ayuda para que el empleado confirme/corrija manualmente.
+ */
+export const areasSugeridas = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user!;
+    if (user.rol !== "EMPLEADO") {
+      res.status(403).json({ error: "Solo empleados tienen sugerencias de ubicación" });
+      return;
+    }
+
+    const empleado = await prisma.empleado.findUnique({
+      where: { rfc: user.rfc! },
+      select: { adscripcion: true, areaId: true },
+    });
+
+    const areas = await prisma.areaEdificio.findMany({
+      where: { activo: true, esComun: false },
+      orderBy: [{ floor: "asc" }, { label: "asc" }],
+    });
+
+    if (!empleado?.adscripcion) {
+      // Sin adscripción de SIRH no hay con qué comparar — regresar el catálogo
+      // completo sin score para que el empleado busque manualmente.
+      res.json({ data: areas.map((a) => ({ ...a, score: 0 })) });
+      return;
+    }
+
+    const tokensEmpleado = tokenizar(empleado.adscripcion);
+    const data = areas
+      .map((a) => {
+        const tokensArea = tokenizar(a.adscripcionNombre ?? a.label);
+        return { ...a, score: similitud(tokensEmpleado, tokensArea) };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    res.json({ data, actual: empleado.areaId });
   } catch (err) {
     next(err);
   }

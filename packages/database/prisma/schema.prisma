@@ -194,12 +194,22 @@ model Empleado {
   // Datos del SIRH adicionales
   adscripcion    String?      @db.VarChar(200) // ej: "SECRETARÍA DE FINANZAS Y ADMINISTRACIÓN"
 
-  telefono       String?      @db.VarChar(20) // celular para OTP y notificaciones de solicitudes
+  telefono       String?      @db.VarChar(20) // celular personal — OTP y notificaciones de solicitudes
   // Opt-in explícito para recibir notificaciones de solicitudes por WhatsApp — se
   // activa desde Perfil, requiere teléfono confirmado (feedback staff 2026-08-19).
   notificacionesWhatsapp Boolean @default(false)
   primerAcceso   Boolean      @default(true)  // true hasta que el empleado confirma su correo/teléfono
   fechaUltimoAcceso DateTime?                 // última vez que inició sesión
+
+  // Datos de perfil capturados por el empleado (feedback staff P3-9, 2026-08-31).
+  // correoInstitucional y emailPersonal son ambos opcionales a nivel DB — la regla
+  // de negocio (al menos uno de los dos) se valida en el servicio al completar perfil.
+  correoInstitucional String?  @db.VarChar(200)
+  emailPersonal        String?  @db.VarChar(200)
+  extension            String?  @db.VarChar(10)
+  // true una vez que el empleado llenó el formulario de perfil obligatorio de
+  // primer acceso (correo institucional o personal + confirma su ubicación)
+  perfilCompleto        Boolean @default(false)
 
   // Datos extendidos del SIRH
   sirhId         String?      @unique @db.VarChar(24) // _id de MongoDB en SIRH

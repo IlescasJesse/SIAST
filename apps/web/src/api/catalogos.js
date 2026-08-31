@@ -28,6 +28,10 @@ export const getSirhEmpleado = (rfc) =>
 export const getDisponibilidadTecnico = (empleadoId) =>
   api.get(`/api/catalogos/disponibilidad-tecnico/${empleadoId}`).then((r) => r.data);
 
+// ─── Áreas sugeridas por adscripción (completar perfil) ───────────────────
+export const getAreasSugeridas = () =>
+  api.get("/api/catalogos/areas-sugeridas").then((r) => r.data);
+
 // ─── Áreas de Soporte (Phase 3) ──────────────────────────────────────────
 export const getAreasSoporte = () => api.get("/api/admin/areas-soporte").then((r) => r.data.data);
 

@@ -67,4 +67,13 @@ export const useAuthStore = create((set) => ({
     localStorage.removeItem("siast_user");
     set({ user: null, token: null });
   },
+
+  // Mergea campos sueltos en el user guardado (ej. tras completar perfil) sin
+  // requerir un nuevo login — el JWT no cambia, solo el snapshot local.
+  updateUser: (patch) =>
+    set((state) => {
+      const user = { ...state.user, ...patch };
+      localStorage.setItem("siast_user", JSON.stringify(user));
+      return { user };
+    }),
 }));

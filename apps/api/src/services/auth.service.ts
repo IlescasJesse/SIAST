@@ -48,12 +48,21 @@ export const loginRFC = async (rfc: string, meta: RequestMeta = {}) => {
   }
 
   if (!empleado) {
-    await registrarAcceso({ tipo: "EMPLEADO", identifier: rfcUp, resultado: "FAIL_NOT_FOUND", ...meta });
+    await registrarAcceso({
+      tipo: "EMPLEADO",
+      identifier: rfcUp,
+      resultado: "FAIL_NOT_FOUND",
+      ...meta,
+    });
     throw Object.assign(new Error("RFC no encontrado en el sistema"), { status: 404 });
   }
 
   const ticketsActivos = await prisma.ticket.count({
-    where: { empleadoRfc: empleado.rfc, activo: true, estado: { notIn: ["RESUELTO", "CANCELADO"] } },
+    where: {
+      empleadoRfc: empleado.rfc,
+      activo: true,
+      estado: { notIn: ["RESUELTO", "CANCELADO"] },
+    },
   });
 
   const expiresInMs = msFromExpiry(EMPLEADO_JWT_EXPIRES_IN);
@@ -64,7 +73,13 @@ export const loginRFC = async (rfc: string, meta: RequestMeta = {}) => {
     EMPLEADO_JWT_EXPIRES_IN,
   );
 
-  await registrarAcceso({ tipo: "EMPLEADO", identifier: rfcUp, resultado: "OK", empleadoRfc: rfcUp, ...meta });
+  await registrarAcceso({
+    tipo: "EMPLEADO",
+    identifier: rfcUp,
+    resultado: "OK",
+    empleadoRfc: rfcUp,
+    ...meta,
+  });
 
   return {
     token,
@@ -84,6 +99,7 @@ export const loginRFC = async (rfc: string, meta: RequestMeta = {}) => {
       puesto: empleado.puesto ?? null,
       rol: "EMPLEADO" as const,
       ticketsActivos,
+      perfilCompleto: empleado.perfilCompleto,
     },
   };
 };
@@ -92,18 +108,35 @@ export const loginStaff = async (usuario: string, password: string, meta: Reques
   const user = await prisma.usuario.findUnique({ where: { usuario } });
 
   if (!user) {
-    await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "FAIL_NOT_FOUND", ...meta });
+    await registrarAcceso({
+      tipo: "STAFF",
+      identifier: usuario,
+      resultado: "FAIL_NOT_FOUND",
+      ...meta,
+    });
     throw Object.assign(new Error("Credenciales incorrectas"), { status: 401 });
   }
 
   if (!user.activo) {
-    await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "FAIL_INACTIVE", usuarioId: user.id, ...meta });
+    await registrarAcceso({
+      tipo: "STAFF",
+      identifier: usuario,
+      resultado: "FAIL_INACTIVE",
+      usuarioId: user.id,
+      ...meta,
+    });
     throw Object.assign(new Error("Credenciales incorrectas"), { status: 401 });
   }
 
   const passwordOk = await bcrypt.compare(password, user.password);
   if (!passwordOk) {
-    await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "FAIL_PASSWORD", usuarioId: user.id, ...meta });
+    await registrarAcceso({
+      tipo: "STAFF",
+      identifier: usuario,
+      resultado: "FAIL_PASSWORD",
+      usuarioId: user.id,
+      ...meta,
+    });
     throw Object.assign(new Error("Credenciales incorrectas"), { status: 401 });
   }
 
@@ -123,7 +156,13 @@ export const loginStaff = async (usuario: string, password: string, meta: Reques
   }
   const token = signToken(jwtPayload);
 
-  await registrarAcceso({ tipo: "STAFF", identifier: usuario, resultado: "OK", usuarioId: user.id, ...meta });
+  await registrarAcceso({
+    tipo: "STAFF",
+    identifier: usuario,
+    resultado: "OK",
+    usuarioId: user.id,
+    ...meta,
+  });
 
   return {
     token,
