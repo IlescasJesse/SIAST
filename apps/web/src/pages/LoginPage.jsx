@@ -363,12 +363,21 @@ export const LoginPage = () => {
     }
   };
 
+  // Guard contra doble envío: el auto-submit del OtpInput y un Enter en el
+  // <form> pueden disparar doVerificar dos veces con el mismo código — la
+  // segunda falla (código ya usado) y esa 401 dispara logout vía el
+  // interceptor de refresh. `loading` (estado) no basta porque ambos
+  // disparos pueden ocurrir en el mismo tick antes del re-render.
+  const verificandoRef = useRef(false);
+
   const doVerificar = async (cod) => {
+    if (verificandoRef.current) return;
     setError("");
     if ((cod ?? codigo).length !== 6) {
       setError("El código debe tener 6 dígitos");
       return;
     }
+    verificandoRef.current = true;
     setLoading(true);
     try {
       const data = await verificarOtp(rfc.toUpperCase(), cod ?? codigo);
@@ -379,6 +388,7 @@ export const LoginPage = () => {
       checkIntentos(err.intentosRestantes);
       setCodigo("");
     } finally {
+      verificandoRef.current = false;
       setLoading(false);
     }
   };

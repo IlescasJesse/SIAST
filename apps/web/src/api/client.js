@@ -1,7 +1,6 @@
 import axios from "axios";
 
-export const API_BASE =
-  import.meta.env.VITE_API_URL ?? `${window.location.origin}`;
+export const API_BASE = import.meta.env.VITE_API_URL ?? `${window.location.origin}`;
 
 export const api = axios.create({ baseURL: API_BASE });
 
@@ -59,11 +58,9 @@ api.interceptors.response.use(
 
       try {
         // Intentar renovar el token (endpoint acepta tokens expirados recientemente)
-        const { data } = await axios.post(
-          `${API_BASE}/api/auth/refresh`,
-          null,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
+        const { data } = await axios.post(`${API_BASE}/api/auth/refresh`, null, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         const newToken = data.token;
         localStorage.setItem("siast_token", newToken);
@@ -84,10 +81,14 @@ api.interceptors.response.use(
         // Reintentar la petición original
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
-      } catch {
+      } catch (refreshErr) {
         isRefreshing = false;
         processQueue(null);
-        forceLogout();
+        // 429 en /refresh = rate limit, no sesión inválida — no cerrar sesión,
+        // solo dejar que la petición original falle y se pueda reintentar.
+        if (refreshErr.response?.status !== 429) {
+          forceLogout();
+        }
         return Promise.reject(err);
       }
     }
@@ -123,11 +124,9 @@ export function iniciarRenovacionProactiva() {
     // Si quedan menos de MARGEN_SECS segundos → renovar
     if (secsRemaining > 0 && secsRemaining < MARGEN_SECS) {
       try {
-        const { data } = await axios.post(
-          `${API_BASE}/api/auth/refresh`,
-          null,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
+        const { data } = await axios.post(`${API_BASE}/api/auth/refresh`, null, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         localStorage.setItem("siast_token", data.token);
         console.debug("[SIAST] Token renovado proactivamente");
       } catch {
