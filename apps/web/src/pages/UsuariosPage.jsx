@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { confirmar, avisar } from "../store/dialogs.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
   Box,
@@ -287,12 +288,19 @@ export const UsuariosPage = () => {
   };
 
   const handleEliminar = async (id) => {
-    if (!window.confirm("¿Eliminar este usuario?")) return;
+    if (
+      !(await confirmar({
+        titulo: "¿Eliminar este usuario?",
+        severidad: "error",
+        textoAceptar: "Eliminar",
+      }))
+    )
+      return;
     try {
       await deleteUsuario(id);
       load();
     } catch (err) {
-      alert(err.response?.data?.error ?? "Error al eliminar");
+      avisar({ mensaje: err.response?.data?.error ?? "Error al eliminar", severidad: "error" });
     }
   };
 
