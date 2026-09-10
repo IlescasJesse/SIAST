@@ -211,6 +211,12 @@ model Empleado {
   // primer acceso (correo institucional o personal + confirma su ubicación)
   perfilCompleto        Boolean @default(false)
 
+  // Personal por honorarios (invitado): registrado manualmente por ADMIN/Mesa de
+  // Ayuda, NO proviene del SIRH. Se autentica y opera igual que un EMPLEADO
+  // (máx. 2 tickets activos). La sync SIRH nunca lo toca (no tiene sirhId).
+  // Feedback staff P4-12.
+  esHonorarios          Boolean @default(false)
+
   // Datos extendidos del SIRH
   sirhId         String?      @unique @db.VarChar(24) // _id de MongoDB en SIRH
   curp           String?      @db.VarChar(18)
