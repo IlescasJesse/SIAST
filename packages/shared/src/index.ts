@@ -165,6 +165,7 @@ export const EmpleadoSchema = z.object({
   emailPersonal: z.string().nullable().optional(),
   extension: z.string().nullable().optional(),
   perfilCompleto: z.boolean().optional(),
+  esHonorarios: z.boolean().optional(),
   areaId: z.string(),
   piso: PisoEdificioSchema,
   activo: z.boolean(),

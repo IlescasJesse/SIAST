@@ -53,6 +53,8 @@ import { SolicitudDetailPage } from "./pages/SolicitudDetailPage.jsx";
 import { UsuariosPage } from "./pages/UsuariosPage.jsx";
 import { PerfilPage } from "./pages/PerfilPage.jsx";
 import { CompletarPerfilPage } from "./pages/CompletarPerfilPage.jsx";
+import { HonorariosPage } from "./pages/HonorariosPage.jsx";
+import { DialogHost } from "./components/common/DialogHost.jsx";
 import { AreasPage } from "./pages/AreasPage.jsx";
 import { RecursosPage } from "./pages/RecursosPage.jsx";
 import { AdminPage } from "./pages/AdminPage.jsx";
@@ -87,6 +89,7 @@ export const App = () => {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <DialogHost />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Pública */}
@@ -222,6 +225,18 @@ export const App = () => {
                   element={
                     <PageErrorBoundary>
                       <AdminPage />
+                    </PageErrorBoundary>
+                  }
+                />
+              </Route>
+
+              {/* Honorarios (invitados) — ADMIN y Mesa de Ayuda */}
+              <Route element={<ProtectedRoute roles={["ADMIN", "MESA_AYUDA"]} />}>
+                <Route
+                  path="/honorarios"
+                  element={
+                    <PageErrorBoundary>
+                      <HonorariosPage />
                     </PageErrorBoundary>
                   }
                 />

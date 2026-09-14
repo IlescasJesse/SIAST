@@ -99,6 +99,16 @@ npm run db:studio    # prisma studio (puerto 5555)
 
 ---
 
+## Abrir este repo desde Claude Desktop (sin terminal)
+
+Repo remoto: `https://github.com/IlescasJesse/SIAST.git`, rama `main`.
+
+1. Abrir la app **Claude Desktop** (Windows/Mac/Linux) — trae Chat + Code en una ventana, mismo motor que la CLI.
+2. Ir a la pestaña **Code**.
+3. Abrir carpeta local: `C:\Users\JESSE ILESCAS\Documents\siast` (ya clonado, ya con este `CLAUDE.md` — se carga automático igual que en la CLI).
+4. Requiere lo mismo que la CLI: MySQL/XAMPP corriendo antes de `npm run dev` (ver [Requisito: MySQL](#requisito-mysql)) y `packages/database/.env` con `DATABASE_URL`.
+5. Mismos comandos, mismos hooks, mismos slash commands — solo cambia la interfaz (diff viewer, árbol de archivos, terminal integrada visible en vez de manejarla tú).
+
 ## Estado Actual (actualizado 2026-09-14)
 
 - Backend 100% en Prisma + MySQL (la migración desde mock data ya se completó)
@@ -107,3 +117,23 @@ npm run db:studio    # prisma studio (puerto 5555)
 - Fase actual del roadmap: **Phase 5 — Reportes Exportables**, no iniciada.
   Hubo ~24 commits de feedback de staff (jun-ago 2026) hechos fuera del
   flujo de fases GSD — ver `.planning/STATE.md` para el detalle.
+
+### Feedback staff (reunión 2026-08-12) — seguimiento
+
+9 de 13 puntos cerrados. Ver memoria del proyecto para detalle de cada uno.
+
+**Hechos:**
+
+- P1 — reasignación entre áreas, prioridad manual, bloqueo de solicitudes repetitivas
+- P2 — fórmula de productividad + responsables resuelven directo, aviso de intentos antes de bloqueo IP, verificación por correo
+- P3-7 — conteo de tickets activos por técnico al asignar
+- P3-9 — perfil obligatorio (correo institucional `@finanzasoaxaca.gob.mx` o personal + ubicación), con redirect correcto tras guardar
+- P4-12 — registro de personal por honorarios (invitados), autenticación por RFC igual que empleado
+- _(extra, fuera de la lista del staff)_ sistema unificado de alertas/confirmación (`apps/web/src/store/dialogs.js`) — reemplaza `window.confirm`/`alert`
+
+**Pendientes:**
+
+- P3-8 (categoría telefonía + Osticket) — bloqueado, requiere definición con equipo de redes
+- P4-10 (formato de registro redes/dominio) — bloqueado, espera formato de Ramiro
+- P4-11 (organigrama de encargados/técnicos) — en pausa, Jesse decide si usa los datos actuales de DB o espera definir fuente
+- P4-13 (nuevo teléfono de Mesa de Ayuda) — trivial, falta el número

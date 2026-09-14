@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { confirmar, avisar } from "../store/dialogs.js";
 import { useNavigate } from "react-router-dom";
 import {
   Box,
@@ -441,12 +442,21 @@ export const RecursosPage = () => {
   };
 
   const handleEliminarCatalogo = async (cat) => {
-    if (!window.confirm(`¿Eliminar el tipo "${cat.nombre}" y todas sus unidades?`)) return;
+    if (
+      !(await confirmar({
+        titulo: `Eliminar tipo "${cat.nombre}"`,
+        mensaje: "Se eliminarán también todas sus unidades. Escribe el nombre para confirmar.",
+        severidad: "error",
+        textoAceptar: "Eliminar",
+        textoConfirmacion: cat.nombre,
+      }))
+    )
+      return;
     try {
       await deleteCatalogo(cat.id);
       loadCatalogos();
     } catch (err) {
-      alert(err?.response?.data?.error ?? "Error al eliminar.");
+      avisar({ mensaje: err?.response?.data?.error ?? "Error al eliminar.", severidad: "error" });
     }
   };
 
@@ -494,7 +504,11 @@ export const RecursosPage = () => {
 
   const handleEliminarUnidad = async (unidad) => {
     if (
-      !window.confirm(`¿Eliminar la unidad${unidad.numSerie ? ` N/S: ${unidad.numSerie}` : ""} ?`)
+      !(await confirmar({
+        titulo: `¿Eliminar la unidad${unidad.numSerie ? ` N/S: ${unidad.numSerie}` : ""}?`,
+        severidad: "error",
+        textoAceptar: "Eliminar",
+      }))
     )
       return;
     try {
@@ -506,7 +520,10 @@ export const RecursosPage = () => {
       }
       loadCatalogos();
     } catch (err) {
-      alert(err?.response?.data?.error ?? "Error al eliminar la unidad.");
+      avisar({
+        mensaje: err?.response?.data?.error ?? "Error al eliminar la unidad.",
+        severidad: "error",
+      });
     }
   };
 
@@ -526,7 +543,15 @@ export const RecursosPage = () => {
   };
 
   const handleDevolver = async (asignacion) => {
-    if (!window.confirm("¿Marcar esta asignación como devuelta y liberar la unidad?")) return;
+    if (
+      !(await confirmar({
+        titulo: "¿Marcar como devuelta?",
+        mensaje: "Se liberará la unidad asignada.",
+        severidad: "warning",
+        textoAceptar: "Devolver",
+      }))
+    )
+      return;
     try {
       await updateAsignacion(asignacion.id, { estado: "DEVUELTA" });
       if (dialogHistorial) {
@@ -536,7 +561,10 @@ export const RecursosPage = () => {
       if (tab === 2) loadAsignacionesAll();
       loadCatalogos();
     } catch (err) {
-      alert(err?.response?.data?.error ?? "Error al registrar la devolución.");
+      avisar({
+        mensaje: err?.response?.data?.error ?? "Error al registrar la devolución.",
+        severidad: "error",
+      });
     }
   };
 
@@ -712,7 +740,10 @@ export const RecursosPage = () => {
           handleVerUnidades(res.data.catalogo);
         }
       } catch {
-        alert(`No se encontró ningún equipo con el número de serie: ${codigo}`);
+        avisar({
+          mensaje: `No se encontró ningún equipo con el número de serie: ${codigo}`,
+          severidad: "warning",
+        });
       }
     },
     [scannerMode, handleVerUnidades],

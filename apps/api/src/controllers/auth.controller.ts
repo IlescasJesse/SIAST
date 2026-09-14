@@ -195,6 +195,8 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
 // menos uno de los dos al completar el perfil (muchos empleados no tienen
 // correo institucional asignado).
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// El correo institucional de la Secretaría de Finanzas usa este dominio fijo.
+const DOMINIO_INSTITUCIONAL = "@finanzasoaxaca.gob.mx";
 
 export const completarPerfil = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -217,10 +219,10 @@ export const completarPerfil = async (req: AuthRequest, res: Response, next: Nex
       res.status(400).json({ error: "Correo institucional inválido" });
       return;
     }
-    if (ci && !ci.endsWith("@finanzasoaxaca.gob.mx")) {
-      res
-        .status(400)
-        .json({ error: "El correo institucional debe terminar en @finanzasoaxaca.gob.mx" });
+    if (ci && !ci.endsWith(DOMINIO_INSTITUCIONAL)) {
+      res.status(400).json({
+        error: `El correo institucional debe terminar en ${DOMINIO_INSTITUCIONAL}`,
+      });
       return;
     }
     if (ep && !EMAIL_REGEX.test(ep)) {

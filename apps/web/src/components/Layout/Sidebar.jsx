@@ -19,6 +19,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import BadgeIcon from "@mui/icons-material/Badge";
 import { useAuthStore } from "../../store/auth.js";
 
 const DRAWER_W = 220;
@@ -113,6 +114,12 @@ const menuItems = (rol) => {
         "GESTOR_INVENTARIO",
         "RESPONSABLE_RECURSOS_MATERIALES",
       ],
+    },
+    {
+      label: "Honorarios",
+      icon: <BadgeIcon />,
+      to: "/honorarios",
+      roles: ["ADMIN", "MESA_AYUDA"],
     },
     { label: "Administración", icon: <AdminPanelSettingsIcon />, to: "/admin", roles: ["ADMIN"] },
     {

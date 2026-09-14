@@ -40,6 +40,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useTheme, useMediaQuery } from "@mui/material";
+import { confirmar } from "../store/dialogs.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
   Box,
@@ -675,7 +676,15 @@ export const AreasPage = () => {
   /** Descarta TODOS los cambios pendientes (localStorage + state) y resincroniza con servidor. */
   const handleDescartarPendientes = async () => {
     if (pendingCount === 0) return;
-    if (!window.confirm(`¿Descartar ${pendingCount} cambio(s) pendiente(s) sin guardar?`)) return;
+    if (
+      !(await confirmar({
+        titulo: `¿Descartar ${pendingCount} cambio(s) pendiente(s)?`,
+        mensaje: "Los cambios sin guardar se perderán.",
+        severidad: "warning",
+        textoAceptar: "Descartar",
+      }))
+    )
+      return;
     persistPending({});
     setSaveAllError("");
     dragOriginalsRef.current = {};
@@ -814,7 +823,17 @@ export const AreasPage = () => {
 
   const handleEliminar = async () => {
     if (!editForm) return;
-    if (!window.confirm(`¿Desactivar el área "${editForm.label}"?`)) return;
+    if (
+      !(await confirmar({
+        titulo: `Desactivar área "${editForm.label}"`,
+        mensaje:
+          "Esta acción afecta los tickets asociados al área. Escribe el nombre para confirmar.",
+        severidad: "error",
+        textoAceptar: "Desactivar",
+        textoConfirmacion: editForm.label,
+      }))
+    )
+      return;
     try {
       await deleteArea(editForm.id);
       await loadAreas();

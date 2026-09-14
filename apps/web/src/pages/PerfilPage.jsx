@@ -26,6 +26,7 @@ import {
 
 const TEL_REGEX = /^\d{10}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Dominio institucional fijo de la Secretaría de Finanzas de Oaxaca.
 const DOMINIO_INSTITUCIONAL = "@finanzasoaxaca.gob.mx";
 
 export const PerfilPage = () => {
@@ -93,12 +94,14 @@ export const PerfilPage = () => {
   }, [isEmpleado]);
 
   const correoValido = (v) => !v || EMAIL_REGEX.test(v);
-  const institucionalValido = (v) =>
-    !v || (EMAIL_REGEX.test(v) && v.toLowerCase().endsWith(DOMINIO_INSTITUCIONAL));
+  const institucionalValido = (v) => {
+    const t = v.trim();
+    return !t || (EMAIL_REGEX.test(t) && t.toLowerCase().endsWith(DOMINIO_INSTITUCIONAL));
+  };
   const puedeGuardarContacto =
     contactoForm &&
     (contactoForm.correoInstitucional.trim() || contactoForm.emailPersonal.trim()) &&
-    institucionalValido(contactoForm.correoInstitucional.trim()) &&
+    institucionalValido(contactoForm.correoInstitucional) &&
     correoValido(contactoForm.emailPersonal.trim());
 
   const handleGuardarContacto = async (e) => {
@@ -292,11 +295,11 @@ export const PerfilPage = () => {
                 onChange={(e) =>
                   setContactoForm((f) => ({ ...f, correoInstitucional: e.target.value }))
                 }
-                error={!institucionalValido(contactoForm.correoInstitucional.trim())}
+                error={!institucionalValido(contactoForm.correoInstitucional)}
                 helperText={
-                  !institucionalValido(contactoForm.correoInstitucional.trim())
+                  !institucionalValido(contactoForm.correoInstitucional)
                     ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
-                    : undefined
+                    : `Termina en ${DOMINIO_INSTITUCIONAL}`
                 }
                 fullWidth
               />

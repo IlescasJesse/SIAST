@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { confirmar } from "../store/dialogs.js";
 import {
   Box,
   Typography,
@@ -202,7 +203,14 @@ export const AdminUsuariosPage = () => {
   };
 
   const desactivar = async (u) => {
-    if (!window.confirm(`¿Desactivar a ${u.nombre} ${u.apellidos}?`)) return;
+    if (
+      !(await confirmar({
+        titulo: `¿Desactivar a ${u.nombre} ${u.apellidos}?`,
+        severidad: "warning",
+        textoAceptar: "Desactivar",
+      }))
+    )
+      return;
     try {
       await desactivarUsuario(u.id);
       cargar();

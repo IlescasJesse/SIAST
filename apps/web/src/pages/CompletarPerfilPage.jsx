@@ -16,6 +16,7 @@ import { completarPerfil } from "../api/usuarios.js";
 import { getAreasSugeridas } from "../api/catalogos.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Dominio institucional fijo de la Secretaría de Finanzas de Oaxaca.
 const DOMINIO_INSTITUCIONAL = "@finanzasoaxaca.gob.mx";
 
 // Formulario obligatorio de primer acceso (feedback staff P3-9, 2026-08-31):
@@ -53,11 +54,13 @@ export const CompletarPerfilPage = () => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const correoValido = (v) => !v || EMAIL_REGEX.test(v);
-  const institucionalValido = (v) =>
-    !v || (EMAIL_REGEX.test(v) && v.toLowerCase().endsWith(DOMINIO_INSTITUCIONAL));
+  const institucionalValido = (v) => {
+    const t = v.trim();
+    return !t || (EMAIL_REGEX.test(t) && t.toLowerCase().endsWith(DOMINIO_INSTITUCIONAL));
+  };
   const puedeGuardar =
     (form.correoInstitucional.trim() || form.emailPersonal.trim()) &&
-    institucionalValido(form.correoInstitucional.trim()) &&
+    institucionalValido(form.correoInstitucional) &&
     correoValido(form.emailPersonal.trim());
 
   const handleSubmit = async (e) => {
@@ -78,6 +81,8 @@ export const CompletarPerfilPage = () => {
         area: empleado.area?.label,
         piso: empleado.piso,
       });
+      // updateUser no navega por sí solo — sin esto la página se queda montada
+      // en /completar-perfil y parece que "no pasó nada" al guardar.
       navigate("/", { replace: true });
     } catch (error) {
       setErr(error.response?.data?.error ?? "Error al guardar el perfil");
@@ -110,11 +115,11 @@ export const CompletarPerfilPage = () => {
               type="email"
               value={form.correoInstitucional}
               onChange={(e) => set("correoInstitucional", e.target.value)}
-              error={!institucionalValido(form.correoInstitucional.trim())}
+              error={!institucionalValido(form.correoInstitucional)}
               helperText={
-                !institucionalValido(form.correoInstitucional.trim())
+                !institucionalValido(form.correoInstitucional)
                   ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
-                  : "Si no tienes uno asignado, captura tu correo personal abajo"
+                  : `Termina en ${DOMINIO_INSTITUCIONAL}. Si no tienes uno asignado, captura tu correo personal abajo`
               }
               fullWidth
             />
