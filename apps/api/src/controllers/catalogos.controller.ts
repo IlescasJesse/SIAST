@@ -222,6 +222,8 @@ const CreateAreaSchema = z.object({
     .nullable()
     .optional(),
   nombrePropio: z.string().max(150).nullable().optional(),
+  adscripcionNombre: z.string().max(200).nullable().optional(),
+  adscripcionNivel: z.number().int().nullable().optional(),
 });
 
 const UpdateAreaSchema = z.object({
@@ -250,6 +252,8 @@ const UpdateAreaSchema = z.object({
     .nullable()
     .optional(),
   nombrePropio: z.string().max(150).nullable().optional(),
+  adscripcionNombre: z.string().max(200).nullable().optional(),
+  adscripcionNivel: z.number().int().nullable().optional(),
 });
 
 /**
@@ -320,6 +324,8 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
       esComun,
       tipoComun,
       nombrePropio,
+      adscripcionNombre,
+      adscripcionNivel,
     } = parse.data;
 
     const existente = await prisma.areaEdificio.findUnique({ where: { id } });
@@ -355,6 +361,8 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
         esComun: esComun ?? false,
         tipoComun: (tipoComun ?? null) as import("@prisma/client").TipoAreaComun | null,
         nombrePropio: nombrePropio ?? null,
+        adscripcionNombre: adscripcionNombre ?? null,
+        adscripcionNivel: adscripcionNivel ?? null,
         activo: true,
       },
     });
@@ -396,6 +404,8 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
       esComun,
       tipoComun,
       nombrePropio,
+      adscripcionNombre,
+      adscripcionNivel,
     } = parse.data;
 
     // piso (enum) siempre se deriva de floor para evitar inconsistencias
@@ -437,6 +447,8 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
           tipoComun: tipoComun as import("@prisma/client").TipoAreaComun | null,
         }),
         ...(nombrePropio !== undefined && { nombrePropio }),
+        ...(adscripcionNombre !== undefined && { adscripcionNombre }),
+        ...(adscripcionNivel !== undefined && { adscripcionNivel }),
       },
     });
 
