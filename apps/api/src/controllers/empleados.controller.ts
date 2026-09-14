@@ -6,14 +6,20 @@ import type { PisoEdificio } from "@stf/shared";
 export const ubicacion = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rfc = (req.query.rfc as string)?.toUpperCase();
-    if (!rfc) { res.status(400).json({ error: "RFC requerido" }); return; }
+    if (!rfc) {
+      res.status(400).json({ error: "RFC requerido" });
+      return;
+    }
 
-    const empleado = await prisma.empleado.findUnique({
-      where: { rfc },
+    const empleado = await prisma.empleado.findFirst({
+      where: { rfc, activo: true },
       include: { area: true },
     });
 
-    if (!empleado) { res.status(404).json({ error: "Empleado no encontrado" }); return; }
+    if (!empleado) {
+      res.status(404).json({ error: "Empleado no encontrado" });
+      return;
+    }
 
     res.json({
       rfc: empleado.rfc,
