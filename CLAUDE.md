@@ -37,13 +37,13 @@ Monorepo: npm workspaces (`apps/web`, `apps/api`, `apps/modelado-3d`, `packages/
 
 Usa `/agent` para invocar un agente especializado según la tarea:
 
-| Agente | Invocar con | Cuándo usarlo |
-|--------|-------------|---------------|
-| `modelado-3d` | `/agent modelado-3d` | Three.js, GLB, raycasting, pins, visor edificio |
-| `senior-programacion` | `/agent senior-programacion` | Arquitectura, features fullstack, revisión de código |
-| `analizador-db` | `/agent analizador-db` | Esquema DB, migraciones, queries, análisis de datos |
-| `revisor-seguridad` | `/agent revisor-seguridad` | Auditoría de seguridad: OTP, JWT, CORS, roles, soft delete — antes de deploy o tras tocar auth |
-| `orquestador` | `/agent orquestador` | Inicio de sesión o alcance no claro — mapa de alcance + plan de delegación |
+| Agente                | Invocar con                  | Cuándo usarlo                                                                                  |
+| --------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `modelado-3d`         | `/agent modelado-3d`         | Three.js, GLB, raycasting, pins, visor edificio                                                |
+| `senior-programacion` | `/agent senior-programacion` | Arquitectura, features fullstack, revisión de código                                           |
+| `analizador-db`       | `/agent analizador-db`       | Esquema DB, migraciones, queries, análisis de datos                                            |
+| `revisor-seguridad`   | `/agent revisor-seguridad`   | Auditoría de seguridad: OTP, JWT, CORS, roles, soft delete — antes de deploy o tras tocar auth |
+| `orquestador`         | `/agent orquestador`         | Inicio de sesión o alcance no claro — mapa de alcance + plan de delegación                     |
 
 ---
 
@@ -99,8 +99,36 @@ npm run db:studio    # prisma studio (puerto 5555)
 
 ---
 
+## Abrir este repo desde Claude Desktop (sin terminal)
+
+Repo remoto: `https://github.com/IlescasJesse/SIAST.git`, rama `main`.
+
+1. Abrir la app **Claude Desktop** (Windows/Mac/Linux) — trae Chat + Code en una ventana, mismo motor que la CLI.
+2. Ir a la pestaña **Code**.
+3. Abrir carpeta local: `C:\Users\JESSE ILESCAS\Documents\siast` (ya clonado, ya con este `CLAUDE.md` — se carga automático igual que en la CLI).
+4. Requiere lo mismo que la CLI: MySQL/XAMPP corriendo antes de `npm run dev` (ver [Requisito: MySQL](#requisito-mysql)) y `packages/database/.env` con `DATABASE_URL`.
+5. Mismos comandos, mismos hooks, mismos slash commands — solo cambia la interfaz (diff viewer, árbol de archivos, terminal integrada visible en vez de manejarla tú).
+
 ## Estado Actual
 
-- Backend con mock data en memoria → roadmap: migrar a Prisma + MySQL
-- Frontend funcional con datos simulados
-- SIRH (`localhost:3000`) pendiente — activar con `SIRH_ENABLED=true` en `.env` del API
+Backend en Prisma + MySQL (ya migrado del mock inicial). SIRH opcional — activar con `SIRH_ENABLED=true` en `.env` del API.
+
+### Feedback staff (reunión 2026-08-12) — seguimiento
+
+9 de 13 puntos cerrados. Ver memoria del proyecto para detalle de cada uno.
+
+**Hechos:**
+
+- P1 — reasignación entre áreas, prioridad manual, bloqueo de solicitudes repetitivas
+- P2 — fórmula de productividad + responsables resuelven directo, aviso de intentos antes de bloqueo IP, verificación por correo
+- P3-7 — conteo de tickets activos por técnico al asignar
+- P3-9 — perfil obligatorio (correo institucional `@finanzasoaxaca.gob.mx` o personal + ubicación), con redirect correcto tras guardar
+- P4-12 — registro de personal por honorarios (invitados), autenticación por RFC igual que empleado
+- _(extra, fuera de la lista del staff)_ sistema unificado de alertas/confirmación (`apps/web/src/store/dialogs.js`) — reemplaza `window.confirm`/`alert`
+
+**Pendientes:**
+
+- P3-8 (categoría telefonía + Osticket) — bloqueado, requiere definición con equipo de redes
+- P4-10 (formato de registro redes/dominio) — bloqueado, espera formato de Ramiro
+- P4-11 (organigrama de encargados/técnicos) — en pausa, Jesse decide si usa los datos actuales de DB o espera definir fuente
+- P4-13 (nuevo teléfono de Mesa de Ayuda) — trivial, falta el número
