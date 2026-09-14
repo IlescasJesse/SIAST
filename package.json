@@ -15,7 +15,7 @@
     "dev:3d": "npm run dev -w ./apps/modelado-3d",
     "dev:web": "npm run dev -w ./apps/web",
     "build": "npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint .",
     "format": "prettier --write ."
   },
   "keywords": [
@@ -27,7 +27,14 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "concurrently": "^9.2.1",
-    "prettier": "^3.6.2"
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^15.15.0",
+    "prettier": "^3.6.2",
+    "typescript-eslint": "^8.70.0"
   }
 }

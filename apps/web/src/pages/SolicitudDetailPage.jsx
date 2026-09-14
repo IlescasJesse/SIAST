@@ -417,6 +417,89 @@ export const SolicitudDetailPage = () => {
                 {solicitud.descripcion}
               </Typography>
 
+              {/* Equipamiento/materiales solicitados (recursosAdicionales — JSON serializado) */}
+              {solicitud.recursosAdicionales &&
+                (() => {
+                  let parsed = null;
+                  try {
+                    parsed = JSON.parse(solicitud.recursosAdicionales);
+                  } catch {
+                    return null;
+                  }
+                  if (!parsed) return null;
+                  return (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        fontWeight={600}
+                        display="block"
+                        gutterBottom
+                      >
+                        EQUIPAMIENTO / MATERIALES SOLICITADOS
+                      </Typography>
+                      {(parsed.tipo === "SALA_JUNTAS" || parsed.tipo === "MOBILIARIO") && (
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                          {parsed.equipo?.length > 0 && (
+                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                              {parsed.equipo.map((item) => (
+                                <Chip
+                                  key={item}
+                                  label={item}
+                                  size="small"
+                                  variant="outlined"
+                                  color="info"
+                                />
+                              ))}
+                            </Box>
+                          )}
+                          {parsed.asistentes && (
+                            <Typography variant="body2" color="text.secondary">
+                              Asistentes: {parsed.asistentes}
+                            </Typography>
+                          )}
+                          {(parsed.fechaUso || parsed.horaInicio || parsed.horaFin) && (
+                            <Typography variant="body2" color="text.secondary">
+                              Uso: {parsed.fechaUso ?? "—"}
+                              {parsed.horaInicio && ` ${parsed.horaInicio}`}
+                              {parsed.horaFin && ` – ${parsed.horaFin}`}
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                      {parsed.tipo === "PRESTAMO_EQUIPO" && (
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                          <Chip
+                            label={parsed.equipoPreferido}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            sx={{ alignSelf: "flex-start" }}
+                          />
+                          {parsed.descripcion && (
+                            <Typography variant="body2" color="text.secondary">
+                              {parsed.descripcion}
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                      {parsed.tipo === "PAPELERIA" && parsed.articulos?.length > 0 && (
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                          {parsed.articulos.map((a) => (
+                            <Chip
+                              key={a.articulo}
+                              label={a.cantidad ? `${a.articulo} (${a.cantidad})` : a.articulo}
+                              size="small"
+                              variant="outlined"
+                              color="info"
+                            />
+                          ))}
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })()}
+
               <Grid container spacing={1} sx={{ mb: 2 }}>
                 {[
                   ["Empleado", solicitud.empleado?.nombreCompleto ?? solicitud.empleadoRfc],

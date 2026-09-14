@@ -109,9 +109,14 @@ Repo remoto: `https://github.com/IlescasJesse/SIAST.git`, rama `main`.
 4. Requiere lo mismo que la CLI: MySQL/XAMPP corriendo antes de `npm run dev` (ver [Requisito: MySQL](#requisito-mysql)) y `packages/database/.env` con `DATABASE_URL`.
 5. Mismos comandos, mismos hooks, mismos slash commands — solo cambia la interfaz (diff viewer, árbol de archivos, terminal integrada visible en vez de manejarla tú).
 
-## Estado Actual
+## Estado Actual (actualizado 2026-09-14)
 
-Backend en Prisma + MySQL (ya migrado del mock inicial). SIRH opcional — activar con `SIRH_ENABLED=true` en `.env` del API.
+- Backend 100% en Prisma + MySQL (la migración desde mock data ya se completó)
+- SIRH implementado (`sirh.service.ts`) — activar con `SIRH_ENABLED=true` en `.env` del API
+- Enum `Rol`: **20 valores** (no 14 — ver `packages/database/prisma/schema.prisma`)
+- Fase actual del roadmap: **Phase 5 — Reportes Exportables**, no iniciada.
+  Hubo ~24 commits de feedback de staff (jun-ago 2026) hechos fuera del
+  flujo de fases GSD — ver `.planning/STATE.md` para el detalle.
 
 ### Feedback staff (reunión 2026-08-12) — seguimiento
 

@@ -14,11 +14,19 @@ export const categorias = (_req: Request, res: Response) => {
   });
 };
 
-// Mapeo categoría → roles habilitados para esa categoría
+// Mapeo categoría → roles habilitados para esa categoría.
+// TECNICO_SERVICIOS es deprecated (Phase 3) — se excluye de estas listas de
+// asignación a propósito; se mantiene solo por retrocompatibilidad con filas
+// existentes (ver schema.prisma).
 const CATEGORIA_ROLES: Record<string, string[]> = {
   TECNOLOGIAS: ["TECNICO_TI", "TECNICO_SISTEMAS", "TECNICO_REDES"],
-  SERVICIOS: ["TECNICO_SERVICIOS"],
-  RECURSOS_MATERIALES: ["GESTOR_RECURSOS_MATERIALES"],
+  SERVICIOS: ["TECNICO_ELECTRICISTA", "TECNICO_PLOMERO", "TECNICO_MOVILIDAD"],
+  RECURSOS_MATERIALES: [
+    "GESTOR_RECURSOS_MATERIALES",
+    "GESTOR_SALAS_JUNTA",
+    "GESTOR_RECURSOS",
+    "GESTOR_INVENTARIO",
+  ],
 };
 
 export const tecnicos = async (req: Request, res: Response, next: NextFunction) => {
@@ -34,8 +42,13 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
             "TECNICO_TI",
             "TECNICO_SISTEMAS",
             "TECNICO_REDES",
-            "TECNICO_SERVICIOS",
+            "TECNICO_ELECTRICISTA",
+            "TECNICO_PLOMERO",
+            "TECNICO_MOVILIDAD",
             "GESTOR_RECURSOS_MATERIALES",
+            "GESTOR_SALAS_JUNTA",
+            "GESTOR_RECURSOS",
+            "GESTOR_INVENTARIO",
           ] as import("@prisma/client").Rol[]);
 
     const data = await prisma.usuario.findMany({
@@ -222,6 +235,8 @@ const CreateAreaSchema = z.object({
     .nullable()
     .optional(),
   nombrePropio: z.string().max(150).nullable().optional(),
+  adscripcionNombre: z.string().max(200).nullable().optional(),
+  adscripcionNivel: z.number().int().nullable().optional(),
 });
 
 const UpdateAreaSchema = z.object({
@@ -250,6 +265,8 @@ const UpdateAreaSchema = z.object({
     .nullable()
     .optional(),
   nombrePropio: z.string().max(150).nullable().optional(),
+  adscripcionNombre: z.string().max(200).nullable().optional(),
+  adscripcionNivel: z.number().int().nullable().optional(),
 });
 
 /**
@@ -320,6 +337,8 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
       esComun,
       tipoComun,
       nombrePropio,
+      adscripcionNombre,
+      adscripcionNivel,
     } = parse.data;
 
     const existente = await prisma.areaEdificio.findUnique({ where: { id } });
@@ -355,6 +374,8 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
         esComun: esComun ?? false,
         tipoComun: (tipoComun ?? null) as import("@prisma/client").TipoAreaComun | null,
         nombrePropio: nombrePropio ?? null,
+        adscripcionNombre: adscripcionNombre ?? null,
+        adscripcionNivel: adscripcionNivel ?? null,
         activo: true,
       },
     });
@@ -396,6 +417,8 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
       esComun,
       tipoComun,
       nombrePropio,
+      adscripcionNombre,
+      adscripcionNivel,
     } = parse.data;
 
     // piso (enum) siempre se deriva de floor para evitar inconsistencias
@@ -437,6 +460,8 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
           tipoComun: tipoComun as import("@prisma/client").TipoAreaComun | null,
         }),
         ...(nombrePropio !== undefined && { nombrePropio }),
+        ...(adscripcionNombre !== undefined && { adscripcionNombre }),
+        ...(adscripcionNivel !== undefined && { adscripcionNivel }),
       },
     });
 

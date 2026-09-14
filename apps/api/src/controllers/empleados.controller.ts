@@ -14,8 +14,8 @@ export const ubicacion = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    const empleado = await prisma.empleado.findUnique({
-      where: { rfc },
+    const empleado = await prisma.empleado.findFirst({
+      where: { rfc, activo: true },
       include: { area: true },
     });
 

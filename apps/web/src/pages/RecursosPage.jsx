@@ -267,7 +267,12 @@ function CatalogoCard({
 export const RecursosPage = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const isGestor = user?.rol === "GESTOR_RECURSOS_MATERIALES";
+  const isGestor = [
+    "GESTOR_RECURSOS_MATERIALES",
+    "GESTOR_SALAS_JUNTA",
+    "GESTOR_RECURSOS",
+    "GESTOR_INVENTARIO",
+  ].includes(user?.rol);
   const isAdmin = user?.rol === "ADMIN";
   const isResponsable = user?.rol === "RESPONSABLE_RECURSOS_MATERIALES";
   const puedeGestionar = isGestor || isAdmin;
@@ -1364,7 +1369,8 @@ export const RecursosPage = () => {
             </Box>
           ) : unidades.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-              Sin unidades registradas. Usa "Agregar unidad" para dar de alta la primera.
+              Sin unidades registradas. Usa &ldquo;Agregar unidad&rdquo; para dar de alta la
+              primera.
             </Typography>
           ) : (
             <TableContainer>

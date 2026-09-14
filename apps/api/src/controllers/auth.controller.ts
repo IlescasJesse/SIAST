@@ -267,7 +267,29 @@ export const me = async (req: AuthRequest, res: Response, next: NextFunction) =>
     if (user.rol === "EMPLEADO") {
       const empleado = await prisma.empleado.findUnique({
         where: { rfc: user.rfc! },
-        include: { area: true },
+        select: {
+          id: true,
+          rfc: true,
+          nombre: true,
+          apellidos: true,
+          nombreCompleto: true,
+          email: true,
+          departamento: true,
+          puesto: true,
+          adscripcion: true,
+          telefono: true,
+          notificacionesWhatsapp: true,
+          primerAcceso: true,
+          fechaUltimoAcceso: true,
+          correoInstitucional: true,
+          emailPersonal: true,
+          extension: true,
+          perfilCompleto: true,
+          areaId: true,
+          piso: true,
+          activo: true,
+          area: true,
+        },
       });
       res.json(empleado);
     } else {

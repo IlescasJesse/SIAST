@@ -5,6 +5,31 @@
 **Mode:** YOLO
 **Current Milestone:** M1 — Sistema estable, seguro y con features completas
 
+## ⚠️ Nota (2026-09-14): este archivo estaba desactualizado desde 2026-06-13
+
+Entre el 13-jun y el 31-ago-2026 hubo ~24 commits de "feedback de staff"
+(P1/P2/P3) directamente sobre `apps/api`/`apps/web`/`packages` **fuera del
+flujo GSD** — no quedaron registrados aquí. Puntos concretos que este
+archivo tenía mal:
+
+- "Backend con mock data en memoria" (CLAUDE.md) — **falso**, todo usa Prisma.
+- "14 roles" — el enum `Rol` tiene **20 valores** hoy (se agregaron
+  `GESTOR_SALAS_JUNTA`, `GESTOR_RECURSOS`, `GESTOR_INVENTARIO`,
+  `RESPONSABLE_SISTEMAS`, `TECNICO_SISTEMAS`).
+- El repo estuvo 2 semanas sin actividad (31-ago → 14-sep) antes de esta sesión.
+
+El PR [#2](https://github.com/IlescasJesse/SIAST/pull/2) de esta sesión
+(2026-09-14) corrigió, fuera de fase también (son bugs/deuda técnica, no
+feature nueva): fuga de PII en `GET /me`, permisos faltantes de
+`GESTOR_SALAS_JUNTA`/`GESTOR_RECURSOS`/`GESTOR_INVENTARIO` en
+`/api/recursos`, `adscripcionNombre`/`adscripcionNivel` que Zod
+descartaba, ubicación de empleados dados de baja expuesta, ruta
+`/api/employee/location` faltante, `recursosAdicionales` invisible en
+`SolicitudDetailPage`, seed sin usuarios de prueba por rol, y ESLint
+configurado en los 6 workspaces (antes `npm run lint` no hacía nada).
+Además `npm audit fix` bajó las vulnerabilidades de dependencias de 39 a 13
+(quedan 5 paquetes que requieren breaking changes, pendientes de decisión).
+
 ## Current Phase
 
 **Phase 4: Métricas Operacionales** — COMPLETE (4/4 plans executed 2026-05-26)
@@ -15,7 +40,7 @@
 - Plan 02 decisions: JWT de staff incluye areaSoporteId para RESPONSABLE*\* scoping; TECNICO_SERVICIOS excluido (no en enum Rol); RESPONSABLE*\* areaId siempre del JWT; funciones legacy eliminadas del controlador
 - Plan 03 decisions: recharts hoisted monorepo root (npm workspaces), AdapterDateFns sobre AdapterDayjs, Box height=260 Bar/Line + 220 Pie, Tooltip antes Legend z-order obligatorio
 - Plan 04 decisions: tipoFromTab area/tecnico/proceso, userId fallback para TECNICO\_\* en tab inicial, setInterval .unref() para job diario, upsert idempotente via @@unique([fecha, areaSoporteId])
-- Next: Phase 5 — Reportes Exportables
+- Next: Phase 5 — Reportes Exportables (no iniciada; ver nota arriba sobre trabajo P1-P3 hecho fuera de fase entre Phase 4 y hoy)
 
 ## Completed Phases
 

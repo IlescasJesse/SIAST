@@ -964,9 +964,9 @@ export const LoginPage = () => {
                 fontStyle: "italic",
               }}
             >
-              "General Porfirio Díaz. Soldado de la Patria"
+              &ldquo;General Porfirio Díaz. Soldado de la Patria&rdquo;
               <br />
-              Edificio "D" Saúl Martínez
+              Edificio &ldquo;D&rdquo; Saúl Martínez
             </Typography>
           </Box>
         </Box>
