@@ -300,7 +300,9 @@ export const AreasPage = () => {
     setPendingChanges(next);
     try {
       localStorage.setItem("siast:areas:pending", JSON.stringify(next));
-    } catch {}
+    } catch {
+      /* localStorage no disponible — no bloquea el flujo en memoria */
+    }
   };
 
   const prevEditFormRef = useRef(null);
@@ -365,7 +367,9 @@ export const AreasPage = () => {
         if (!changed) return prev;
         try {
           localStorage.setItem("siast:areas:pending", JSON.stringify(cleaned));
-        } catch {}
+        } catch {
+          /* localStorage no disponible — no bloquea el flujo en memoria */
+        }
         return cleaned;
       });
     } catch (err) {
@@ -410,7 +414,9 @@ export const AreasPage = () => {
       sendToVisor("GO_TO_FLOOR", { floor });
       try {
         visor3DRef.current?.contentWindow?.SIAST3D?.showFloor?.(floor);
-      } catch {}
+      } catch {
+        /* visor 3D no cargado aún */
+      }
     },
     [sendToVisor],
   );
@@ -1124,7 +1130,9 @@ export const AreasPage = () => {
                 sendToVisor("GO_TO_FLOOR", { floor: -1 });
                 try {
                   visor3DRef.current?.contentWindow?.SIAST3D?.showBuilding?.();
-                } catch {}
+                } catch {
+                  /* visor 3D no cargado aún */
+                }
                 setSelectedId(null);
                 setEditForm(null);
               }}
@@ -2082,7 +2090,9 @@ function EditPanel({
     try {
       await deleteMueble(muebleId);
       onMueblesChange();
-    } catch {}
+    } catch {
+      /* TODO: mostrar error al usuario en vez de fallar en silencio */
+    }
   };
 
   return (

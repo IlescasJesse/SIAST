@@ -18,8 +18,8 @@ import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
 export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear código" }) {
-  const videoRef    = useRef(null);
-  const readerRef   = useRef(null);
+  const videoRef = useRef(null);
+  const readerRef = useRef(null);
   const controlsRef = useRef(null);
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState("");
@@ -27,7 +27,11 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
   const [error, setError] = useState("");
 
   const stopScanner = () => {
-    try { controlsRef.current?.stop(); } catch {}
+    try {
+      controlsRef.current?.stop();
+    } catch {
+      /* ya detenido */
+    }
     controlsRef.current = null;
     readerRef.current = null;
     try {
@@ -35,7 +39,9 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
         videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
         videoRef.current.srcObject = null;
       }
-    } catch {}
+    } catch {
+      /* ya detenido */
+    }
     setScanning(false);
   };
 
@@ -49,7 +55,9 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
         const back = devs.find((d) => /back|rear|environment/i.test(d.label));
         setSelectedDevice((back ?? devs[devs.length - 1])?.deviceId ?? "");
       })
-      .catch(() => setError("No se pudo acceder a la cámara. Verifica los permisos del navegador."));
+      .catch(() =>
+        setError("No se pudo acceder a la cámara. Verifica los permisos del navegador."),
+      );
     return () => stopScanner();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -139,14 +147,31 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
             />
 
             {!scanning && !error && (
-              <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Box
+                sx={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
                 <CircularProgress color="inherit" sx={{ color: "white" }} />
               </Box>
             )}
 
             {/* Guía visual de escaneo */}
             {scanning && (
-              <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+              <Box
+                sx={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  pointerEvents: "none",
+                }}
+              >
                 {/* Esquinas del recuadro */}
                 <Box sx={{ position: "relative", width: "65%", height: "40%" }}>
                   {["tl", "tr", "bl", "br"].map((corner) => (
@@ -154,14 +179,39 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
                       key={corner}
                       sx={{
                         position: "absolute",
-                        width: 20, height: 20,
+                        width: 20,
+                        height: 20,
                         borderColor: "rgba(255,255,255,0.95)",
                         borderStyle: "solid",
                         borderWidth: 0,
-                        ...(corner === "tl" && { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 3 }),
-                        ...(corner === "tr" && { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 3 }),
-                        ...(corner === "bl" && { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 3 }),
-                        ...(corner === "br" && { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 3 }),
+                        ...(corner === "tl" && {
+                          top: 0,
+                          left: 0,
+                          borderTopWidth: 3,
+                          borderLeftWidth: 3,
+                          borderTopLeftRadius: 3,
+                        }),
+                        ...(corner === "tr" && {
+                          top: 0,
+                          right: 0,
+                          borderTopWidth: 3,
+                          borderRightWidth: 3,
+                          borderTopRightRadius: 3,
+                        }),
+                        ...(corner === "bl" && {
+                          bottom: 0,
+                          left: 0,
+                          borderBottomWidth: 3,
+                          borderLeftWidth: 3,
+                          borderBottomLeftRadius: 3,
+                        }),
+                        ...(corner === "br" && {
+                          bottom: 0,
+                          right: 0,
+                          borderBottomWidth: 3,
+                          borderRightWidth: 3,
+                          borderBottomRightRadius: 3,
+                        }),
                       }}
                     />
                   ))}
@@ -169,14 +219,15 @@ export function BarcodeScanner({ open, onClose, onScanned, title = "Escanear có
                   <Box
                     sx={{
                       position: "absolute",
-                      left: 0, right: 0,
+                      left: 0,
+                      right: 0,
                       height: 2,
                       bgcolor: "rgba(66, 165, 245, 0.9)",
                       boxShadow: "0 0 6px rgba(66,165,245,0.8)",
                       animation: "scan-line 1.8s ease-in-out infinite",
                       "@keyframes scan-line": {
-                        "0%":   { top: "5%" },
-                        "50%":  { top: "90%" },
+                        "0%": { top: "5%" },
+                        "50%": { top: "90%" },
                         "100%": { top: "5%" },
                       },
                     }}

@@ -1338,7 +1338,8 @@ export const RecursosPage = () => {
             </Box>
           ) : unidades.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-              Sin unidades registradas. Usa "Agregar unidad" para dar de alta la primera.
+              Sin unidades registradas. Usa &ldquo;Agregar unidad&rdquo; para dar de alta la
+              primera.
             </Typography>
           ) : (
             <TableContainer>
