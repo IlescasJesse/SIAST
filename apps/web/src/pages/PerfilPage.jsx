@@ -26,6 +26,7 @@ import {
 
 const TEL_REGEX = /^\d{10}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DOMINIO_INSTITUCIONAL = "@finanzasoaxaca.gob.mx";
 
 export const PerfilPage = () => {
   const { user } = useAuthStore();
@@ -92,10 +93,12 @@ export const PerfilPage = () => {
   }, [isEmpleado]);
 
   const correoValido = (v) => !v || EMAIL_REGEX.test(v);
+  const institucionalValido = (v) =>
+    !v || (EMAIL_REGEX.test(v) && v.toLowerCase().endsWith(DOMINIO_INSTITUCIONAL));
   const puedeGuardarContacto =
     contactoForm &&
     (contactoForm.correoInstitucional.trim() || contactoForm.emailPersonal.trim()) &&
-    correoValido(contactoForm.correoInstitucional.trim()) &&
+    institucionalValido(contactoForm.correoInstitucional.trim()) &&
     correoValido(contactoForm.emailPersonal.trim());
 
   const handleGuardarContacto = async (e) => {
@@ -289,7 +292,12 @@ export const PerfilPage = () => {
                 onChange={(e) =>
                   setContactoForm((f) => ({ ...f, correoInstitucional: e.target.value }))
                 }
-                error={!correoValido(contactoForm.correoInstitucional.trim())}
+                error={!institucionalValido(contactoForm.correoInstitucional.trim())}
+                helperText={
+                  !institucionalValido(contactoForm.correoInstitucional.trim())
+                    ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
+                    : undefined
+                }
                 fullWidth
               />
               <TextField

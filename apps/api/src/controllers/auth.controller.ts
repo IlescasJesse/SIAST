@@ -217,6 +217,12 @@ export const completarPerfil = async (req: AuthRequest, res: Response, next: Nex
       res.status(400).json({ error: "Correo institucional inválido" });
       return;
     }
+    if (ci && !ci.endsWith("@finanzasoaxaca.gob.mx")) {
+      res
+        .status(400)
+        .json({ error: "El correo institucional debe terminar en @finanzasoaxaca.gob.mx" });
+      return;
+    }
     if (ep && !EMAIL_REGEX.test(ep)) {
       res.status(400).json({ error: "Correo personal inválido" });
       return;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Card,
@@ -15,12 +16,14 @@ import { completarPerfil } from "../api/usuarios.js";
 import { getAreasSugeridas } from "../api/catalogos.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DOMINIO_INSTITUCIONAL = "@finanzasoaxaca.gob.mx";
 
 // Formulario obligatorio de primer acceso (feedback staff P3-9, 2026-08-31):
 // correo institucional o personal (al menos uno), extensión y confirmar
 // ubicación en el edificio — sugerida por similitud con la adscripción SIRH.
 export const CompletarPerfilPage = () => {
   const { user, updateUser } = useAuthStore();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     correoInstitucional: "",
     emailPersonal: "",
@@ -50,9 +53,11 @@ export const CompletarPerfilPage = () => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const correoValido = (v) => !v || EMAIL_REGEX.test(v);
+  const institucionalValido = (v) =>
+    !v || (EMAIL_REGEX.test(v) && v.toLowerCase().endsWith(DOMINIO_INSTITUCIONAL));
   const puedeGuardar =
     (form.correoInstitucional.trim() || form.emailPersonal.trim()) &&
-    correoValido(form.correoInstitucional.trim()) &&
+    institucionalValido(form.correoInstitucional.trim()) &&
     correoValido(form.emailPersonal.trim());
 
   const handleSubmit = async (e) => {
@@ -73,6 +78,7 @@ export const CompletarPerfilPage = () => {
         area: empleado.area?.label,
         piso: empleado.piso,
       });
+      navigate("/", { replace: true });
     } catch (error) {
       setErr(error.response?.data?.error ?? "Error al guardar el perfil");
     } finally {
@@ -104,8 +110,12 @@ export const CompletarPerfilPage = () => {
               type="email"
               value={form.correoInstitucional}
               onChange={(e) => set("correoInstitucional", e.target.value)}
-              error={!correoValido(form.correoInstitucional.trim())}
-              helperText="Si no tienes uno asignado, captura tu correo personal abajo"
+              error={!institucionalValido(form.correoInstitucional.trim())}
+              helperText={
+                !institucionalValido(form.correoInstitucional.trim())
+                  ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
+                  : "Si no tienes uno asignado, captura tu correo personal abajo"
+              }
               fullWidth
             />
             <TextField
