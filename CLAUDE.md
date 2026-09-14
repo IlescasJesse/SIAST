@@ -37,13 +37,13 @@ Monorepo: npm workspaces (`apps/web`, `apps/api`, `apps/modelado-3d`, `packages/
 
 Usa `/agent` para invocar un agente especializado según la tarea:
 
-| Agente | Invocar con | Cuándo usarlo |
-|--------|-------------|---------------|
-| `modelado-3d` | `/agent modelado-3d` | Three.js, GLB, raycasting, pins, visor edificio |
-| `senior-programacion` | `/agent senior-programacion` | Arquitectura, features fullstack, revisión de código |
-| `analizador-db` | `/agent analizador-db` | Esquema DB, migraciones, queries, análisis de datos |
-| `revisor-seguridad` | `/agent revisor-seguridad` | Auditoría de seguridad: OTP, JWT, CORS, roles, soft delete — antes de deploy o tras tocar auth |
-| `orquestador` | `/agent orquestador` | Inicio de sesión o alcance no claro — mapa de alcance + plan de delegación |
+| Agente                | Invocar con                  | Cuándo usarlo                                                                                  |
+| --------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `modelado-3d`         | `/agent modelado-3d`         | Three.js, GLB, raycasting, pins, visor edificio                                                |
+| `senior-programacion` | `/agent senior-programacion` | Arquitectura, features fullstack, revisión de código                                           |
+| `analizador-db`       | `/agent analizador-db`       | Esquema DB, migraciones, queries, análisis de datos                                            |
+| `revisor-seguridad`   | `/agent revisor-seguridad`   | Auditoría de seguridad: OTP, JWT, CORS, roles, soft delete — antes de deploy o tras tocar auth |
+| `orquestador`         | `/agent orquestador`         | Inicio de sesión o alcance no claro — mapa de alcance + plan de delegación                     |
 
 ---
 
@@ -99,8 +99,11 @@ npm run db:studio    # prisma studio (puerto 5555)
 
 ---
 
-## Estado Actual
+## Estado Actual (actualizado 2026-09-14)
 
-- Backend con mock data en memoria → roadmap: migrar a Prisma + MySQL
-- Frontend funcional con datos simulados
-- SIRH (`localhost:3000`) pendiente — activar con `SIRH_ENABLED=true` en `.env` del API
+- Backend 100% en Prisma + MySQL (la migración desde mock data ya se completó)
+- SIRH implementado (`sirh.service.ts`) — activar con `SIRH_ENABLED=true` en `.env` del API
+- Enum `Rol`: **20 valores** (no 14 — ver `packages/database/prisma/schema.prisma`)
+- Fase actual del roadmap: **Phase 5 — Reportes Exportables**, no iniciada.
+  Hubo ~24 commits de feedback de staff (jun-ago 2026) hechos fuera del
+  flujo de fases GSD — ver `.planning/STATE.md` para el detalle.
