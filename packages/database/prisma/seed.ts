@@ -121,6 +121,56 @@ async function main() {
   console.log(`Usuario ADMIN creado: ${admin.usuario} (id=${admin.id})`);
 
   // ──────────────────────────────────────────────────────────────
+  // 3.5 USUARIOS DE PRUEBA (uno por cada rol de staff)
+  // Sin esto era imposible probar los 19 roles restantes sin crearlos
+  // a mano. Usuario = rol en minúsculas, password común de pruebas.
+  // Los RESPONSABLE_* necesitan areaSoporteId para que
+  // requireResponsableDeArea los deje ver tickets de su área.
+  // ──────────────────────────────────────────────────────────────
+  const areaSoporteIdPorNombre = Object.fromEntries(
+    (await prisma.areaSoporte.findMany()).map((a) => [a.nombre, a.id]),
+  );
+
+  const testPassword = await bcrypt.hash("Test2026!", 10);
+
+  const usuariosPrueba: { rol: Rol; areaSoporte?: string }[] = [
+    { rol: Rol.MESA_AYUDA },
+    { rol: Rol.TECNICO_TI },
+    { rol: Rol.TECNICO_REDES },
+    { rol: Rol.TECNICO_SISTEMAS },
+    { rol: Rol.TECNICO_ELECTRICISTA },
+    { rol: Rol.TECNICO_PLOMERO },
+    { rol: Rol.TECNICO_MOVILIDAD },
+    { rol: Rol.RESPONSABLE_TI, areaSoporte: "TI" },
+    { rol: Rol.RESPONSABLE_REDES, areaSoporte: "REDES" },
+    { rol: Rol.RESPONSABLE_SISTEMAS, areaSoporte: "SISTEMAS" },
+    { rol: Rol.RESPONSABLE_MANTENIMIENTO, areaSoporte: "MANTENIMIENTO" },
+    { rol: Rol.RESPONSABLE_RECURSOS_MATERIALES, areaSoporte: "RECURSOS_MATERIALES" },
+    { rol: Rol.GESTOR_RECURSOS_MATERIALES },
+    { rol: Rol.GESTOR_SALAS_JUNTA },
+    { rol: Rol.GESTOR_RECURSOS },
+    { rol: Rol.GESTOR_INVENTARIO },
+  ];
+
+  for (const { rol, areaSoporte } of usuariosPrueba) {
+    await prisma.usuario.create({
+      data: {
+        nombre: "Prueba",
+        apellidos: rol.replace(/_/g, " "),
+        usuario: rol.toLowerCase(),
+        password: testPassword,
+        rol,
+        activo: true,
+        esEmpleadoEstructura: false,
+        ...(areaSoporte && { areaSoporteId: areaSoporteIdPorNombre[areaSoporte] }),
+      },
+    });
+  }
+  console.log(
+    `${usuariosPrueba.length} usuarios de prueba creados (uno por rol staff, usuario=<rol_minusculas>, password: Test2026!)`,
+  );
+
+  // ──────────────────────────────────────────────────────────────
   // 4. PROCESOS DE FLUJO MULTI-PASO
   // ──────────────────────────────────────────────────────────────
   await seedProcesos(prisma);
