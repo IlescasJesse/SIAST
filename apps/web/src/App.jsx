@@ -98,13 +98,16 @@ export const App = () => {
               {/* Redirect raíz según rol */}
               <Route path="/" element={<RootRedirect />} />
 
-              {/* Recursos Materiales — Admin, Gestor y Responsable */}
+              {/* Recursos Materiales — Admin, todos los Gestores y Responsable */}
               <Route
                 element={
                   <ProtectedRoute
                     roles={[
                       "ADMIN",
                       "GESTOR_RECURSOS_MATERIALES",
+                      "GESTOR_SALAS_JUNTA",
+                      "GESTOR_RECURSOS",
+                      "GESTOR_INVENTARIO",
                       "RESPONSABLE_RECURSOS_MATERIALES",
                     ]}
                   />

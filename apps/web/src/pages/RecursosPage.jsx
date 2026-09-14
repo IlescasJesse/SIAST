@@ -137,7 +137,14 @@ function fmtFecha(iso) {
 
 // ── CatalogoCard (componente externo para evitar re-render) ───────────────────
 
-function CatalogoCard({ catalogo, puedeGestionar, onVerUnidades, onEditar, onEliminar, onAgregarUnidad }) {
+function CatalogoCard({
+  catalogo,
+  puedeGestionar,
+  onVerUnidades,
+  onEditar,
+  onEliminar,
+  onAgregarUnidad,
+}) {
   const totalUnidades = catalogo._count?.unidades ?? 0;
   const disponibles = catalogo.unidades?.length ?? 0;
   const isSala = catalogo.tipo === "INMOBILIARIO";
@@ -259,7 +266,12 @@ function CatalogoCard({ catalogo, puedeGestionar, onVerUnidades, onEditar, onEli
 export const RecursosPage = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const isGestor = user?.rol === "GESTOR_RECURSOS_MATERIALES";
+  const isGestor = [
+    "GESTOR_RECURSOS_MATERIALES",
+    "GESTOR_SALAS_JUNTA",
+    "GESTOR_RECURSOS",
+    "GESTOR_INVENTARIO",
+  ].includes(user?.rol);
   const isAdmin = user?.rol === "ADMIN";
   const isResponsable = user?.rol === "RESPONSABLE_RECURSOS_MATERIALES";
   const puedeGestionar = isGestor || isAdmin;
@@ -290,7 +302,12 @@ export const RecursosPage = () => {
 
   // ── Dialog: Nueva unidad ─────────────────────────────────────────────────
   const [dialogNuevaUnidad, setDialogNuevaUnidad] = useState(null); // null | catalogoId
-  const [formUnidad, setFormUnidad] = useState({ numSerie: "", piso: "", areaId: "", disponible: true });
+  const [formUnidad, setFormUnidad] = useState({
+    numSerie: "",
+    piso: "",
+    areaId: "",
+    disponible: true,
+  });
   const [savingUnidad, setSavingUnidad] = useState(false);
   const [errorUnidadForm, setErrorUnidadForm] = useState("");
 
@@ -476,7 +493,10 @@ export const RecursosPage = () => {
   };
 
   const handleEliminarUnidad = async (unidad) => {
-    if (!window.confirm(`¿Eliminar la unidad${unidad.numSerie ? ` N/S: ${unidad.numSerie}` : ""} ?`)) return;
+    if (
+      !window.confirm(`¿Eliminar la unidad${unidad.numSerie ? ` N/S: ${unidad.numSerie}` : ""} ?`)
+    )
+      return;
     try {
       await deleteUnidad(unidad.id);
       // Refrescar la lista de unidades en el dialog
@@ -649,8 +669,7 @@ export const RecursosPage = () => {
     }
     // Necesitamos una unidad para registrar el rechazo — usar la primera disponible si no se seleccionó
     const anyUnidad =
-      Number(unidadSelId) ||
-      catalogos.flatMap((c) => c.unidades ?? []).find((u) => u)?.id;
+      Number(unidadSelId) || catalogos.flatMap((c) => c.unidades ?? []).find((u) => u)?.id;
     if (!anyUnidad) {
       setErrorAsigForm("No hay unidades en el inventario para registrar el rechazo.");
       return;
@@ -707,8 +726,7 @@ export const RecursosPage = () => {
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase();
       lista = lista.filter(
-        (c) =>
-          c.nombre.toLowerCase().includes(q) || (c.marca ?? "").toLowerCase().includes(q),
+        (c) => c.nombre.toLowerCase().includes(q) || (c.marca ?? "").toLowerCase().includes(q),
       );
     }
     return lista;
@@ -734,16 +752,8 @@ export const RecursosPage = () => {
           icon={<ConfirmationNumberIcon fontSize="small" />}
           iconPosition="start"
         />
-        <Tab
-          label="Inventario"
-          icon={<InventoryIcon fontSize="small" />}
-          iconPosition="start"
-        />
-        <Tab
-          label="Asignaciones"
-          icon={<HandshakeIcon fontSize="small" />}
-          iconPosition="start"
-        />
+        <Tab label="Inventario" icon={<InventoryIcon fontSize="small" />} iconPosition="start" />
+        <Tab label="Asignaciones" icon={<HandshakeIcon fontSize="small" />} iconPosition="start" />
       </Tabs>
 
       {/* ── TAB 0: Solicitudes ─────────────────────────────────────────────── */}
@@ -766,20 +776,38 @@ export const RecursosPage = () => {
                 <TableBody>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton variant="text" width={80} /></TableCell>
-                      <TableCell><Skeleton variant="text" /></TableCell>
-                      <TableCell><Skeleton variant="text" width={100} /></TableCell>
-                      <TableCell><Skeleton variant="text" width={140} /></TableCell>
-                      <TableCell><Skeleton variant="text" width={70} /></TableCell>
-                      <TableCell><Skeleton variant="text" width={110} /></TableCell>
-                      {puedeGestionar && <TableCell><Skeleton variant="text" width={40} /></TableCell>}
+                      <TableCell>
+                        <Skeleton variant="text" width={80} />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" width={100} />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" width={140} />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" width={70} />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" width={110} />
+                      </TableCell>
+                      {puedeGestionar && (
+                        <TableCell>
+                          <Skeleton variant="text" width={40} />
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </TableContainer>
           ) : errorTickets ? (
-            <Alert severity="error" sx={{ m: 2 }}>{errorTickets}</Alert>
+            <Alert severity="error" sx={{ m: 2 }}>
+              {errorTickets}
+            </Alert>
           ) : (
             <TableContainer>
               <Table size="small">
@@ -1012,7 +1040,9 @@ export const RecursosPage = () => {
               >
                 <MenuItem value="TODOS">Todos</MenuItem>
                 {Object.entries(ESTADO_ASIG_LABEL).map(([k, v]) => (
-                  <MenuItem key={k} value={k}>{v}</MenuItem>
+                  <MenuItem key={k} value={k}>
+                    {v}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -1044,7 +1074,9 @@ export const RecursosPage = () => {
                 <CircularProgress />
               </Box>
             ) : errorAsignacionesAll ? (
-              <Alert severity="error" sx={{ m: 2 }}>{errorAsignacionesAll}</Alert>
+              <Alert severity="error" sx={{ m: 2 }}>
+                {errorAsignacionesAll}
+              </Alert>
             ) : (
               <TableContainer>
                 <Table size="small">
@@ -1062,8 +1094,10 @@ export const RecursosPage = () => {
                   <TableBody>
                     {asignacionesAll
                       .filter((a) => filtroAsigEstado === "TODOS" || a.estado === filtroAsigEstado)
-                      .filter((a) => filtroAsigTipo === "TODOS" || a.unidad?.catalogo?.tipo === filtroAsigTipo)
-                      .length === 0 ? (
+                      .filter(
+                        (a) =>
+                          filtroAsigTipo === "TODOS" || a.unidad?.catalogo?.tipo === filtroAsigTipo,
+                      ).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                           <Typography variant="body2" color="text.secondary">
@@ -1073,23 +1107,37 @@ export const RecursosPage = () => {
                       </TableRow>
                     ) : (
                       asignacionesAll
-                        .filter((a) => filtroAsigEstado === "TODOS" || a.estado === filtroAsigEstado)
-                        .filter((a) => filtroAsigTipo === "TODOS" || a.unidad?.catalogo?.tipo === filtroAsigTipo)
+                        .filter(
+                          (a) => filtroAsigEstado === "TODOS" || a.estado === filtroAsigEstado,
+                        )
+                        .filter(
+                          (a) =>
+                            filtroAsigTipo === "TODOS" ||
+                            a.unidad?.catalogo?.tipo === filtroAsigTipo,
+                        )
                         .map((a) => (
                           <TableRow key={a.id} hover>
                             <TableCell>
                               <Typography variant="body2" fontWeight={600}>
                                 {a.unidad?.catalogo?.nombre ?? "—"}
                               </Typography>
-                              <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                fontFamily="monospace"
+                              >
                                 {a.unidad?.numSerie ?? `#${a.unidadId}`}
                               </Typography>
                             </TableCell>
                             <TableCell>
                               <Chip
-                                label={a.unidad?.catalogo?.tipo === "TECNOLOGICO" ? "Equipo" : "Sala"}
+                                label={
+                                  a.unidad?.catalogo?.tipo === "TECNOLOGICO" ? "Equipo" : "Sala"
+                                }
                                 size="small"
-                                color={a.unidad?.catalogo?.tipo === "TECNOLOGICO" ? "primary" : "info"}
+                                color={
+                                  a.unidad?.catalogo?.tipo === "TECNOLOGICO" ? "primary" : "info"
+                                }
                                 variant="outlined"
                                 sx={{ height: 20, fontSize: 11 }}
                               />
@@ -1106,7 +1154,8 @@ export const RecursosPage = () => {
                             </TableCell>
                             <TableCell>
                               <Typography variant="caption">
-                                {a.fechaInicio ? fmtFecha(a.fechaInicio) : "—"} → {a.fechaFin ? fmtFecha(a.fechaFin) : "—"}
+                                {a.fechaInicio ? fmtFecha(a.fechaInicio) : "—"} →{" "}
+                                {a.fechaFin ? fmtFecha(a.fechaFin) : "—"}
                               </Typography>
                             </TableCell>
                             <TableCell>
@@ -1127,7 +1176,12 @@ export const RecursosPage = () => {
                                 </Button>
                               )}
                               {a.estado === "PENDIENTE" && puedeGestionar && (
-                                <Chip label="Sin gestionar" size="small" color="warning" variant="outlined" />
+                                <Chip
+                                  label="Sin gestionar"
+                                  size="small"
+                                  color="warning"
+                                  variant="outlined"
+                                />
                               )}
                             </TableCell>
                           </TableRow>
@@ -1225,13 +1279,17 @@ export const RecursosPage = () => {
               control={
                 <Switch
                   checked={formCatalogo.requiereHorario}
-                  onChange={(e) => setFormCatalogo((f) => ({ ...f, requiereHorario: e.target.checked }))}
+                  onChange={(e) =>
+                    setFormCatalogo((f) => ({ ...f, requiereHorario: e.target.checked }))
+                  }
                   size="small"
                 />
               }
               label={
                 <Box>
-                  <Typography variant="body2" fontWeight={500}>Requiere fecha y hora de uso</Typography>
+                  <Typography variant="body2" fontWeight={500}>
+                    Requiere fecha y hora de uso
+                  </Typography>
                   <Typography variant="caption" color="text.secondary">
                     Al solicitar este recurso se pedirá fecha y horario de reservación
                   </Typography>
@@ -1443,7 +1501,9 @@ export const RecursosPage = () => {
       >
         <DialogTitle>
           Historial de asignaciones —{" "}
-          {dialogHistorial?.numSerie ? `N/S: ${dialogHistorial.numSerie}` : `Unidad #${dialogHistorial?.id}`}
+          {dialogHistorial?.numSerie
+            ? `N/S: ${dialogHistorial.numSerie}`
+            : `Unidad #${dialogHistorial?.id}`}
         </DialogTitle>
         <DialogContent>
           {loadingAsig ? (
@@ -1528,9 +1588,7 @@ export const RecursosPage = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>
-          Gestionar solicitud — {dialogAsig?.folio ?? `#${dialogAsig?.id}`}
-        </DialogTitle>
+        <DialogTitle>Gestionar solicitud — {dialogAsig?.folio ?? `#${dialogAsig?.id}`}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
             {errorAsigForm && <Alert severity="error">{errorAsigForm}</Alert>}
@@ -1572,7 +1630,13 @@ export const RecursosPage = () => {
                     {parsed.tipo === "SALA_JUNTAS" && parsed.equipo?.length > 0 && (
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                         {parsed.equipo.map((item) => (
-                          <Chip key={item} label={item} size="small" variant="outlined" color="info" />
+                          <Chip
+                            key={item}
+                            label={item}
+                            size="small"
+                            variant="outlined"
+                            color="info"
+                          />
                         ))}
                       </Box>
                     )}
@@ -1697,9 +1761,7 @@ export const RecursosPage = () => {
               <TextField
                 label="Propósito de salida *"
                 value={formAsig.propositoSalida}
-                onChange={(e) =>
-                  setFormAsig((f) => ({ ...f, propositoSalida: e.target.value }))
-                }
+                onChange={(e) => setFormAsig((f) => ({ ...f, propositoSalida: e.target.value }))}
                 fullWidth
                 size="small"
                 multiline
@@ -1784,9 +1846,7 @@ export const RecursosPage = () => {
                   label="Fecha de inicio"
                   type="datetime-local"
                   value={formPrestamo.fechaInicio}
-                  onChange={(e) =>
-                    setFormPrestamo((f) => ({ ...f, fechaInicio: e.target.value }))
-                  }
+                  onChange={(e) => setFormPrestamo((f) => ({ ...f, fechaInicio: e.target.value }))}
                   fullWidth
                   size="small"
                   InputLabelProps={{ shrink: true }}
@@ -1797,9 +1857,7 @@ export const RecursosPage = () => {
                   label="Fecha de devolución"
                   type="datetime-local"
                   value={formPrestamo.fechaFin}
-                  onChange={(e) =>
-                    setFormPrestamo((f) => ({ ...f, fechaFin: e.target.value }))
-                  }
+                  onChange={(e) => setFormPrestamo((f) => ({ ...f, fechaFin: e.target.value }))}
                   fullWidth
                   size="small"
                   InputLabelProps={{ shrink: true }}
@@ -1900,16 +1958,24 @@ export const RecursosPage = () => {
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Nombre</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Nombre
+                    </Typography>
                     <Typography variant="body2">{ordenSalidaData.recurso?.nombre}</Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Marca</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Marca
+                    </Typography>
                     <Typography variant="body2">{ordenSalidaData.recurso?.marca || "—"}</Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="caption" color="text.secondary">No. de Serie</Typography>
-                    <Typography variant="body2">{ordenSalidaData.recurso?.numSerie || "—"}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      No. de Serie
+                    </Typography>
+                    <Typography variant="body2">
+                      {ordenSalidaData.recurso?.numSerie || "—"}
+                    </Typography>
                   </Grid>
 
                   <Grid item xs={12}>
@@ -1919,21 +1985,31 @@ export const RecursosPage = () => {
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Nombre</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Nombre
+                    </Typography>
                     <Typography variant="body2">{ordenSalidaData.empleado?.nombre}</Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">RFC</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      RFC
+                    </Typography>
                     <Typography variant="body2" fontFamily="monospace">
                       {ordenSalidaData.empleado?.rfc}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Puesto</Typography>
-                    <Typography variant="body2">{ordenSalidaData.empleado?.puesto || "—"}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Puesto
+                    </Typography>
+                    <Typography variant="body2">
+                      {ordenSalidaData.empleado?.puesto || "—"}
+                    </Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Área</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Área
+                    </Typography>
                     <Typography variant="body2">{ordenSalidaData.empleado?.area || "—"}</Typography>
                   </Grid>
 
@@ -1944,16 +2020,24 @@ export const RecursosPage = () => {
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Fecha inicio</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Fecha inicio
+                    </Typography>
                     <Typography variant="body2">{fmtFecha(ordenSalidaData.fechaInicio)}</Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Fecha fin</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Fecha fin
+                    </Typography>
                     <Typography variant="body2">{fmtFecha(ordenSalidaData.fechaFin)}</Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="caption" color="text.secondary">Propósito de salida</Typography>
-                    <Typography variant="body2">{ordenSalidaData.propositoSalida || "—"}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Propósito de salida
+                    </Typography>
+                    <Typography variant="body2">
+                      {ordenSalidaData.propositoSalida || "—"}
+                    </Typography>
                   </Grid>
 
                   <Grid item xs={12}>
@@ -1964,8 +2048,12 @@ export const RecursosPage = () => {
                     <Typography variant="body2">{ordenSalidaData.gestor?.nombre}</Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="caption" color="text.secondary">Fecha de emisión</Typography>
-                    <Typography variant="body2">{fmtFecha(ordenSalidaData.fechaEmision)}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Fecha de emisión
+                    </Typography>
+                    <Typography variant="body2">
+                      {fmtFecha(ordenSalidaData.fechaEmision)}
+                    </Typography>
                   </Grid>
                 </Grid>
               </CardContent>
@@ -1994,9 +2082,7 @@ export const RecursosPage = () => {
         onClose={() => setScannerOpen(false)}
         onScanned={handleScanned}
         title={
-          scannerMode === "nueva_unidad"
-            ? "Escanear número de serie"
-            : "Buscar equipo por código"
+          scannerMode === "nueva_unidad" ? "Escanear número de serie" : "Buscar equipo por código"
         }
       />
     </Box>

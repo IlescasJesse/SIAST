@@ -105,7 +105,14 @@ const menuItems = (rol) => {
       label: "Recursos",
       icon: <Inventory2Icon />,
       to: "/recursos",
-      roles: ["ADMIN", "GESTOR_RECURSOS_MATERIALES", "RESPONSABLE_RECURSOS_MATERIALES"],
+      roles: [
+        "ADMIN",
+        "GESTOR_RECURSOS_MATERIALES",
+        "GESTOR_SALAS_JUNTA",
+        "GESTOR_RECURSOS",
+        "GESTOR_INVENTARIO",
+        "RESPONSABLE_RECURSOS_MATERIALES",
+      ],
     },
     { label: "Administración", icon: <AdminPanelSettingsIcon />, to: "/admin", roles: ["ADMIN"] },
     {
