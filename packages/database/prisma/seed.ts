@@ -8,20 +8,30 @@ async function main() {
   console.log("Iniciando seed SIAST...");
 
   // ──────────────────────────────────────────────────────────────
-  // 1. LIMPIAR DATOS TRANSACCIONALES
+  // 1. LIMPIAR DATOS TRANSACCIONALES (solo si se pide explícito)
+  // Por default el seed es idempotente y NO borra nada: correrlo contra
+  // una base con datos reales no debe tirar usuarios/tickets existentes
+  // ni ensuciar métricas. Poner SEED_RESET=true solo en una base de
+  // desarrollo vacía que sí quieras resetear por completo.
   // ──────────────────────────────────────────────────────────────
-  console.log("Eliminando datos existentes...");
+  if (process.env.SEED_RESET === "true") {
+    console.log("SEED_RESET=true: eliminando datos existentes...");
 
-  await prisma.notificacion.deleteMany({});
-  await prisma.comentario.deleteMany({});
-  await prisma.historialTicket.deleteMany({});
-  await prisma.pasoTicket.deleteMany({});
-  await prisma.ticket.deleteMany({});
-  await prisma.usuario.deleteMany({});
+    await prisma.notificacion.deleteMany({});
+    await prisma.comentario.deleteMany({});
+    await prisma.historialTicket.deleteMany({});
+    await prisma.pasoTicket.deleteMany({});
+    await prisma.ticket.deleteMany({});
+    await prisma.usuario.deleteMany({});
 
-  console.log(
-    "Tablas limpiadas: notificaciones, comentarios, historial_tickets, tickets, usuarios",
-  );
+    console.log(
+      "Tablas limpiadas: notificaciones, comentarios, historial_tickets, tickets, usuarios",
+    );
+  } else {
+    console.log(
+      "SEED_RESET no está en 'true': no se borra nada, solo se crean los faltantes.",
+    );
+  }
 
   // ──────────────────────────────────────────────────────────────
   // 2. AREA DE FALLBACK MINIMA (upsert)
@@ -102,23 +112,26 @@ async function main() {
   console.log(`${areasSoporteData.length} áreas de soporte sincronizadas`);
 
   // ──────────────────────────────────────────────────────────────
-  // 3. USUARIO ADMIN (único)
+  // 3. USUARIO ADMIN (único) — solo se crea si no existe ya
   // ──────────────────────────────────────────────────────────────
-  const hashedPassword = await bcrypt.hash("Admin2026!", 10);
-
-  const admin = await prisma.usuario.create({
-    data: {
-      nombre: "Administrador",
-      apellidos: "SIAST",
-      usuario: "admin",
-      password: hashedPassword,
-      rol: Rol.ADMIN,
-      activo: true,
-      esEmpleadoEstructura: false,
-    },
-  });
-
-  console.log(`Usuario ADMIN creado: ${admin.usuario} (id=${admin.id})`);
+  const adminExistente = await prisma.usuario.findUnique({ where: { usuario: "admin" } });
+  if (adminExistente) {
+    console.log(`Usuario ADMIN ya existe (id=${adminExistente.id}), no se toca.`);
+  } else {
+    const hashedPassword = await bcrypt.hash("Admin2026!", 10);
+    const admin = await prisma.usuario.create({
+      data: {
+        nombre: "Administrador",
+        apellidos: "SIAST",
+        usuario: "admin",
+        password: hashedPassword,
+        rol: Rol.ADMIN,
+        activo: true,
+        esEmpleadoEstructura: false,
+      },
+    });
+    console.log(`Usuario ADMIN creado: ${admin.usuario} (id=${admin.id})`);
+  }
 
   // ──────────────────────────────────────────────────────────────
   // 3.5 USUARIOS DE PRUEBA (uno por cada rol de staff)
@@ -126,6 +139,9 @@ async function main() {
   // a mano. Usuario = rol en minúsculas, password común de pruebas.
   // Los RESPONSABLE_* necesitan areaSoporteId para que
   // requireResponsableDeArea los deje ver tickets de su área.
+  // Idempotente: si el usuario de un rol ya existe (staff real o corrida
+  // previa del seed), se deja como está y no se vuelve a crear — así no
+  // se duplican cuentas ni se ensucian las métricas de tickets/áreas.
   // ──────────────────────────────────────────────────────────────
   const areaSoporteIdPorNombre = Object.fromEntries(
     (await prisma.areaSoporte.findMany()).map((a) => [a.nombre, a.id]),
@@ -152,12 +168,20 @@ async function main() {
     { rol: Rol.GESTOR_INVENTARIO },
   ];
 
+  let creados = 0;
+  let saltados = 0;
   for (const { rol, areaSoporte } of usuariosPrueba) {
+    const usuarioLogin = rol.toLowerCase();
+    const yaExiste = await prisma.usuario.findUnique({ where: { usuario: usuarioLogin } });
+    if (yaExiste) {
+      saltados++;
+      continue;
+    }
     await prisma.usuario.create({
       data: {
         nombre: "Prueba",
         apellidos: rol.replace(/_/g, " "),
-        usuario: rol.toLowerCase(),
+        usuario: usuarioLogin,
         password: testPassword,
         rol,
         activo: true,
@@ -165,9 +189,10 @@ async function main() {
         ...(areaSoporte && { areaSoporteId: areaSoporteIdPorNombre[areaSoporte] }),
       },
     });
+    creados++;
   }
   console.log(
-    `${usuariosPrueba.length} usuarios de prueba creados (uno por rol staff, usuario=<rol_minusculas>, password: Test2026!)`,
+    `Usuarios de prueba: ${creados} creados, ${saltados} ya existían (sin tocar). password de los nuevos: Test2026!`,
   );
 
   // ──────────────────────────────────────────────────────────────
