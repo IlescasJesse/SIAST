@@ -311,6 +311,7 @@ export async function obtenerMetricasGlobal(
       rol: {
         in: [
           Rol.RESPONSABLE_TI,
+          Rol.RESPONSABLE_SISTEMAS,
           Rol.RESPONSABLE_REDES,
           Rol.RESPONSABLE_MANTENIMIENTO,
           Rol.RESPONSABLE_RECURSOS_MATERIALES,
