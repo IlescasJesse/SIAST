@@ -9,7 +9,7 @@
  *   fetchEmpleadoByRfc()  — búsqueda/upsert individual al hacer login-rfc
  */
 
-import { PisoEdificio } from "@prisma/client";
+import { PisoEdificio, Prisma } from "@prisma/client";
 import { prisma } from "../config/database.js";
 import { sirhFetch } from "./sirhAuth.service.js";
 
@@ -490,11 +490,31 @@ async function upsertEmpleado(
     ? await prisma.empleado.findUnique({ where: { sirhId: safeData.sirhId } })
     : null;
   if (porSirhId) {
-    await prisma.empleado.update({
-      where: { id: porSirhId.id },
-      data: { ...safeData, sincronizadoSIRH: true, activo: true },
-    });
-    return "updated";
+    try {
+      await prisma.empleado.update({
+        where: { id: porSirhId.id },
+        data: { ...safeData, sincronizadoSIRH: true, activo: true },
+      });
+      return "updated";
+    } catch (err) {
+      // RFC que manda SIRH ya pertenece a otro empleado en DB (dato duplicado o
+      // desincronizado del lado de SIRH) — actualizar todo menos el RFC para no
+      // perder el resto de la sync ni pisar el RFC de otro registro.
+      const esConflictoRfc =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002" &&
+        (err.meta?.target as string[] | undefined)?.includes("rfc");
+      if (!esConflictoRfc) throw err;
+      console.warn(
+        `[SIRH] RFC ${safeData.rfc} de sirhId=${safeData.sirhId} ya usado por otro empleado — se actualiza sin tocar el RFC (revisar duplicado)`,
+      );
+      const { rfc: _rfcEnConflicto, ...sinRfc } = safeData;
+      await prisma.empleado.update({
+        where: { id: porSirhId.id },
+        data: { ...sinRfc, sincronizadoSIRH: true, activo: true },
+      });
+      return "updated";
+    }
   }
   const porRfc = await prisma.empleado.findUnique({ where: { rfc: safeData.rfc } });
   if (porRfc) {
