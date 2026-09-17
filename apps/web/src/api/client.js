@@ -32,8 +32,14 @@ api.interceptors.response.use(
   async (err) => {
     const original = err.config;
 
+    // Login/OTP responden 401 por credenciales inválidas, no por sesión expirada —
+    // dejar que el catch de LoginPage lo maneje (avisoIntentos) sin forzar reload.
+    const esEndpointAuthPublico = /\/api\/auth\/(login|solicitar-otp|verificar-otp)$/.test(
+      original?.url ?? "",
+    );
+
     // Solo manejar 401 una vez por request
-    if (err.response?.status === 401 && !original._retry) {
+    if (err.response?.status === 401 && !original._retry && !esEndpointAuthPublico) {
       original._retry = true;
 
       const token = localStorage.getItem("siast_token");
