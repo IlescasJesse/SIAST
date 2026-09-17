@@ -56,6 +56,7 @@ import { CompletarPerfilPage } from "./pages/CompletarPerfilPage.jsx";
 import { HonorariosPage } from "./pages/HonorariosPage.jsx";
 import { DialogHost } from "./components/common/DialogHost.jsx";
 import { AreasPage } from "./pages/AreasPage.jsx";
+import { OrganigramaPage } from "./pages/OrganigramaPage.jsx";
 import { RecursosPage } from "./pages/RecursosPage.jsx";
 import { AdminPage } from "./pages/AdminPage.jsx";
 import { MetricasPage } from "./pages/MetricasPage.jsx";
@@ -241,6 +242,17 @@ export const App = () => {
                   }
                 />
               </Route>
+
+              {/* Organigrama (P4-11) — visible para todo el personal autenticado
+                  (el backend ya filtra solo usuarios activos, sin datos sensibles) */}
+              <Route
+                path="/organigrama"
+                element={
+                  <PageErrorBoundary>
+                    <OrganigramaPage />
+                  </PageErrorBoundary>
+                }
+              />
 
               {/* Perfil */}
               <Route path="/perfil" element={<PerfilPage />} />

@@ -399,6 +399,7 @@ export const LABEL_ROL: Record<string, string> = {
   TECNICO_SISTEMAS: "Técnico de Sistemas",
   RESPONSABLE_REDES: "Responsable de Redes",
   TECNICO_REDES: "Técnico de Redes",
+  TECNICO_SERVICIOS: "Técnico de Servicios", // deprecated — se conserva por filas existentes
   RESPONSABLE_MANTENIMIENTO: "Responsable de Mantenimiento",
   TECNICO_ELECTRICISTA: "Técnico Electricista",
   TECNICO_PLOMERO: "Técnico Plomero",

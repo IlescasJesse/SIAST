@@ -1,6 +1,7 @@
 import { api } from "./client.js";
 
 export const getUsuarios = () => api.get("/api/usuarios").then((r) => r.data);
+export const getOrganigrama = () => api.get("/api/usuarios/organigrama").then((r) => r.data);
 export const createUsuario = (body) => api.post("/api/usuarios", body).then((r) => r.data);
 export const updateUsuario = (id, body) =>
   api.patch(`/api/usuarios/${id}`, body).then((r) => r.data);

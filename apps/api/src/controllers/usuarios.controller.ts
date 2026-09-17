@@ -60,6 +60,75 @@ export const listar = async (_req: Request, res: Response, next: NextFunction) =
   }
 };
 
+// ── Organigrama (P4-11) ────────────────────────────────────────────────────
+// Jerarquía pedida por Jesse: Administradores > Mesa de Ayuda > Responsables
+// de área > Técnicos > el resto (gestores). Se usan los usuarios reales de la
+// DB (activo=true) agrupados por este orden de rol, no un mockup estático.
+// EMPLEADO no aparece aquí: los empleados de estructura no tienen fila en
+// Usuario (se autentican por RFC directo contra el modelo Empleado del SIRH),
+// así que ese nivel del organigrama queda naturalmente vacío para el personal
+// de base y solo se pobla si algún día se crea un Usuario con ese rol.
+const NIVEL_ROL: Record<string, number> = {
+  ADMIN: 1,
+  MESA_AYUDA: 2,
+  RESPONSABLE_TI: 3,
+  RESPONSABLE_REDES: 3,
+  RESPONSABLE_MANTENIMIENTO: 3,
+  RESPONSABLE_RECURSOS_MATERIALES: 3,
+  RESPONSABLE_SISTEMAS: 3,
+  TECNICO_TI: 4,
+  TECNICO_REDES: 4,
+  TECNICO_SERVICIOS: 4, // deprecated — se mantiene por si hay filas existentes
+  TECNICO_ELECTRICISTA: 4,
+  TECNICO_PLOMERO: 4,
+  TECNICO_MOVILIDAD: 4,
+  TECNICO_SISTEMAS: 4,
+  GESTOR_RECURSOS_MATERIALES: 5,
+  GESTOR_SALAS_JUNTA: 5,
+  GESTOR_RECURSOS: 5,
+  GESTOR_INVENTARIO: 5,
+  EMPLEADO: 5,
+};
+
+const NOMBRE_NIVEL: Record<number, string> = {
+  1: "Administradores",
+  2: "Mesa de Ayuda",
+  3: "Responsables de Área",
+  4: "Técnicos",
+  5: "Gestores y otros",
+};
+
+export const organigrama = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      where: { activo: true },
+      select: {
+        id: true,
+        nombre: true,
+        apellidos: true,
+        rol: true,
+        email: true,
+        areaSoporte: { select: { nombre: true } },
+      },
+      orderBy: [{ nombre: "asc" }, { apellidos: "asc" }],
+    });
+
+    const niveles = new Map<number, { nivel: number; nombre: string; usuarios: typeof usuarios }>();
+    for (const usuario of usuarios) {
+      const nivel = NIVEL_ROL[usuario.rol] ?? 5;
+      if (!niveles.has(nivel)) {
+        niveles.set(nivel, { nivel, nombre: NOMBRE_NIVEL[nivel] ?? "Otros", usuarios: [] });
+      }
+      niveles.get(nivel)!.usuarios.push(usuario);
+    }
+
+    const data = Array.from(niveles.values()).sort((a, b) => a.nivel - b.nivel);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const crear = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { password, usuario, esEmpleadoEstructura, empleadoId, rfc, permisos, ...rest } =

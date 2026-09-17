@@ -20,6 +20,7 @@ import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import BadgeIcon from "@mui/icons-material/Badge";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import { useAuthStore } from "../../store/auth.js";
 
 const DRAWER_W = 220;
@@ -122,6 +123,31 @@ const menuItems = (rol) => {
       roles: ["ADMIN", "MESA_AYUDA"],
     },
     { label: "Administración", icon: <AdminPanelSettingsIcon />, to: "/admin", roles: ["ADMIN"] },
+    {
+      label: "Organigrama",
+      icon: <AccountTreeIcon />,
+      to: "/organigrama",
+      roles: [
+        "ADMIN",
+        "TECNICO_TI",
+        "TECNICO_SISTEMAS",
+        "TECNICO_REDES",
+        "TECNICO_SERVICIOS",
+        "MESA_AYUDA",
+        "GESTOR_RECURSOS_MATERIALES",
+        "GESTOR_SALAS_JUNTA",
+        "GESTOR_RECURSOS",
+        "GESTOR_INVENTARIO",
+        "RESPONSABLE_RECURSOS_MATERIALES",
+        "RESPONSABLE_TI",
+        "RESPONSABLE_SISTEMAS",
+        "RESPONSABLE_REDES",
+        "RESPONSABLE_MANTENIMIENTO",
+        "TECNICO_ELECTRICISTA",
+        "TECNICO_PLOMERO",
+        "TECNICO_MOVILIDAD",
+      ],
+    },
     {
       label: "Perfil",
       icon: <PersonIcon />,

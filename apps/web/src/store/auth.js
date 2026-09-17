@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { api } from "../api/client.js";
 
-// Header RateLimit (IETF draft-8): '"5-in-15min"; r=4; t=900' — r = intentos restantes.
+// Header RateLimit: '"auth-progresivo"; r=4' — r = intentos restantes antes del bloqueo.
 // Emitido por authRateLimiter (rate-limit.middleware.ts) en /api/auth/*.
 const parseIntentosRestantes = (headers) => {
   const raw = headers?.["ratelimit"];

@@ -35,7 +35,7 @@ const corsOrigins = process.env.CORS_ORIGINS.split(",")
 // ─────────────────────────────────────────────────────────────────────────────
 
 const app = express();
-app.set("trust proxy", 1); // necesario para express-rate-limit detrás de proxy/reverse proxy
+app.set("trust proxy", 1); // necesario para req.ip correcto detrás de proxy/reverse proxy (authRateLimiter)
 const httpServer = createServer(app);
 const port = Number(process.env.PORT ?? 5101);
 
@@ -58,9 +58,9 @@ app.use(
   cors({
     origin: corsOrigins,
     credentials: true,
-    // El header RateLimit (draft-8) no está en la safelist del navegador — hay
-    // que exponerlo explícito para que el frontend avise intentos restantes antes
-    // del bloqueo por IP (rate-limit.middleware.ts).
+    // El header RateLimit no está en la safelist del navegador — hay que
+    // exponerlo explícito para que el frontend avise intentos restantes antes
+    // del bloqueo progresivo por IP (rate-limit.middleware.ts).
     exposedHeaders: ["RateLimit"],
   }),
 );

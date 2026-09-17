@@ -165,12 +165,13 @@ export const LoginPage = () => {
   const [error, setError] = useState("");
   const [avisoIntentos, setAvisoIntentos] = useState("");
 
-  // authRateLimiter permite 5 intentos por IP cada 15 min en /api/auth/* — avisar
-  // antes de que se bloquee (solicitar-otp, verificar-otp y login comparten el bucket).
+  // authRateLimiter bloquea la IP tras 5 intentos fallidos en /api/auth/* (bloqueo
+  // progresivo: 3 min la primera vez, +2 min cada reincidencia) — avisar antes de
+  // que se bloquee (solicitar-otp, verificar-otp y login comparten el contador).
   const checkIntentos = (n) => {
     if (n != null && n > 0 && n <= 2) {
       setAvisoIntentos(
-        `Quedan ${n} intento${n === 1 ? "" : "s"} antes de bloqueo temporal por 15 minutos.`,
+        `Quedan ${n} intento${n === 1 ? "" : "s"} antes de un bloqueo temporal de tu IP.`,
       );
     } else {
       setAvisoIntentos("");
