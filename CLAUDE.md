@@ -1,7 +1,5 @@
 # SIAST — Secretaría de Finanzas del Estado de Oaxaca
 
-> Contexto global de Jesse cargado automáticamente desde `~/.claude/CLAUDE.md`
-
 ## Stack
 
 Express + TypeScript + Prisma + Socket.IO (API) + Vite + React + MUI v6 (Web) + Three.js (3D)
@@ -20,7 +18,7 @@ Monorepo: npm workspaces (`apps/web`, `apps/api`, `apps/modelado-3d`, `packages/
 
 - Empleados se autentican solo con RFC (sin contraseña).
 - Staff (Admin, Técnicos, Mesa Ayuda) usan usuario + contraseña.
-- Máximo 2 tickets activos por empleado simultáneamente.
+- Máximo 4 tickets activos por empleado simultáneamente (constante `MAX_TICKETS_ACTIVOS_EMPLEADO` en `@stf/shared`).
 - Soft delete en tickets: `activo = false` en lugar de borrado físico.
 - Los packages se referencian: `@stf/shared`, `@stf/ui`, `@stf/database`.
 
@@ -109,31 +107,33 @@ Repo remoto: `https://github.com/IlescasJesse/SIAST.git`, rama `main`.
 4. Requiere lo mismo que la CLI: MySQL/XAMPP corriendo antes de `npm run dev` (ver [Requisito: MySQL](#requisito-mysql)) y `packages/database/.env` con `DATABASE_URL`.
 5. Mismos comandos, mismos hooks, mismos slash commands — solo cambia la interfaz (diff viewer, árbol de archivos, terminal integrada visible en vez de manejarla tú).
 
-## Estado Actual (actualizado 2026-09-14)
+## Estado Actual (actualizado 2026-09-17)
 
-- Backend 100% en Prisma + MySQL (la migración desde mock data ya se completó)
+- Backend 100% en Prisma + MySQL (mock data ya migrado)
 - SIRH implementado (`sirh.service.ts`) — activar con `SIRH_ENABLED=true` en `.env` del API
-- Enum `Rol`: **20 valores** (no 14 — ver `packages/database/prisma/schema.prisma`)
-- Fase actual del roadmap: **Phase 5 — Reportes Exportables**, no iniciada.
-  Hubo ~24 commits de feedback de staff (jun-ago 2026) hechos fuera del
-  flujo de fases GSD — ver `.planning/STATE.md` para el detalle.
+- Enum `Rol`: **19 valores** — ver `packages/database/prisma/schema.prisma`
+- Fase actual del roadmap: **Phase 5 — Reportes Exportables**, no iniciada
+- Deploy: VPS con PM2 en `/opt/siast`, sin Docker
 
 ### Feedback staff (reunión 2026-08-12) — seguimiento
 
-9 de 13 puntos cerrados. Ver memoria del proyecto para detalle de cada uno.
+11 de 13 puntos cerrados. Ver memoria del proyecto para detalle de cada uno.
 
 **Hechos:**
 
 - P1 — reasignación entre áreas, prioridad manual, bloqueo de solicitudes repetitivas
-- P2 — fórmula de productividad + responsables resuelven directo, aviso de intentos antes de bloqueo IP, verificación por correo
+- P2 — fórmula de productividad + responsables resuelven directo, verificación por correo
+- P2 — bloqueo de IP progresivo: 5 intentos fallidos → 3 min bloqueo, +2 min por reincidencia (reset a los 24h sin bloqueos); aviso de intentos restantes en `LoginPage`
 - P3-7 — conteo de tickets activos por técnico al asignar
 - P3-9 — perfil obligatorio (correo institucional `@finanzasoaxaca.gob.mx` o personal + ubicación), con redirect correcto tras guardar
+- P4-11 — organigrama (`/organigrama`): Admin → Mesa de Ayuda → Responsables por área → Técnicos por área → Gestores/otros, con usuarios reales de DB (nivel EMPLEADO vacío, se autentican por RFC/SIRH y no tienen fila en `Usuario`)
 - P4-12 — registro de personal por honorarios (invitados), autenticación por RFC igual que empleado
-- _(extra, fuera de la lista del staff)_ sistema unificado de alertas/confirmación (`apps/web/src/store/dialogs.js`) — reemplaza `window.confirm`/`alert`
+- _(extra)_ sistema unificado de alertas/confirmación (`apps/web/src/store/dialogs.js`) — reemplaza `window.confirm`/`alert`
+- _(extra)_ fix: 401 de login/OTP disparaba `forceLogout()` (reload de página) antes de mostrar el aviso de intentos restantes
+- _(extra)_ fix: sync SIRH truena por RFC duplicado entre empleados (`empleados_rfc_key`) — ahora actualiza todo menos el RFC y loguea para revisión manual
 
 **Pendientes:**
 
 - P3-8 (categoría telefonía + Osticket) — bloqueado, requiere definición con equipo de redes
 - P4-10 (formato de registro redes/dominio) — bloqueado, espera formato de Ramiro
-- P4-11 (organigrama de encargados/técnicos) — en pausa, Jesse decide si usa los datos actuales de DB o espera definir fuente
 - P4-13 (nuevo teléfono de Mesa de Ayuda) — trivial, falta el número

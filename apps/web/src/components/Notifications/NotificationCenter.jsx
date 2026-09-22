@@ -16,6 +16,7 @@ import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useNotifStore } from "../../store/notificaciones.js";
+import { rutaSolicitud } from "../../api/solicitudes.js";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -39,7 +40,8 @@ export const NotificationCenter = () => {
     const ticketId = n.data?.ticketId ?? n.data?.id;
     if (ticketId) {
       setOpen(false);
-      navigate(`/solicitudes/${ticketId}`);
+      // Si el evento trae folio se usa directo; si solo trae id, el detalle redirige id -> folio.
+      navigate(rutaSolicitud({ id: ticketId, folio: n.data?.folio }));
     }
   };
 

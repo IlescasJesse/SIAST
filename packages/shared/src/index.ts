@@ -289,6 +289,17 @@ export type UsuarioPublico = z.infer<typeof UsuarioPublicoSchema>;
 export type Notificacion = z.infer<typeof NotificacionSchema>;
 
 // ============================================================
+// REGLAS DE NEGOCIO
+// ============================================================
+
+/**
+ * Máximo de solicitudes activas (fuera de RESUELTO/CANCELADO) que un EMPLEADO
+ * (incluye honorarios) puede tener al mismo tiempo. Fuente única: el backend lo
+ * valida en tickets.service.ts y el frontend lo usa solo para UX.
+ */
+export const MAX_TICKETS_ACTIVOS_EMPLEADO = 4;
+
+// ============================================================
 // CONSTANTES — CATÁLOGO DE SUBCATEGORÍAS POR CATEGORÍA
 // ============================================================
 

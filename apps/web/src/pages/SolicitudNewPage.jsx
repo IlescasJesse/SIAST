@@ -49,7 +49,7 @@ import ChairIcon from "@mui/icons-material/Chair";
 import DescriptionIcon from "@mui/icons-material/Description";
 import SearchIcon from "@mui/icons-material/Search";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import { createSolicitud } from "../api/solicitudes.js";
+import { createSolicitud, rutaSolicitud } from "../api/solicitudes.js";
 import { getAreas } from "../api/catalogos.js";
 import { useAuthStore } from "../store/auth.js";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
@@ -63,6 +63,7 @@ import {
   SUB_TIPO_SISTEMAS,
   SUB_TIPO_RED,
   SUB_TIPO_CUENTAS,
+  MAX_TICKETS_ACTIVOS_EMPLEADO,
 } from "@stf/shared";
 
 const CATEGORIA_STYLE = {
@@ -151,7 +152,13 @@ export const SolicitudNewPage = () => {
   // ciclo de render en deshabilitar el botón, tiempo suficiente para que un
   // doble clic rápido dispare handleSubmit dos veces y cree la solicitud duplicada.
   const submittingRef = useRef(false);
-  const [highlight, setHighlight] = useState(null);
+  // areaId del área a enfocar en el visor 3D (zoom real vía FLY_TO_AREA, no
+  // solo HIGHLIGHT_ROOM) — arranca con el área del empleado y cambia al
+  // seleccionar otra ubicación en el formulario.
+  const [focusAreaId, setFocusAreaId] = useState(null);
+  // user.area viene como string desde login/OTP, pero por robustez se acepta
+  // también el formato objeto ({ label }) que devuelven otros endpoints.
+  const userAreaLabel = typeof user?.area === "string" ? user.area : (user?.area?.label ?? "");
 
   // Estado para campos adicionales por subcategoría
   const [salaJuntasEquipo, setSalaJuntasEquipo] = useState({});
@@ -180,9 +187,9 @@ export const SolicitudNewPage = () => {
     getAreas()
       .then((r) => setAreas(r.data ?? []))
       .finally(() => setLoadingAreas(false));
-    // Mostrar ubicación del empleado en el mapa al cargar
+    // Zoom automático al área del empleado al cargar (si ya tiene una asignada)
     if (user?.areaId) {
-      setHighlight({ floor: user.floor ?? 0, roomId: user.areaId });
+      setFocusAreaId(user.areaId);
     }
   }, []);
 
@@ -210,7 +217,8 @@ export const SolicitudNewPage = () => {
     form.subcategoria !== "";
   const { ConfirmDialog } = useUnsavedChanges(isDirty);
 
-  const puedeCrear = user?.rol !== "EMPLEADO" || (user?.ticketsActivos ?? 0) < 2;
+  const puedeCrear =
+    user?.rol !== "EMPLEADO" || (user?.ticketsActivos ?? 0) < MAX_TICKETS_ACTIVOS_EMPLEADO;
 
   // Serializar campos adicionales a JSON
   const buildRecursosAdicionales = () => {
@@ -297,7 +305,7 @@ export const SolicitudNewPage = () => {
         recursosAdicionales,
         subTipo: form.subTipo || undefined,
       });
-      navigate(`/solicitudes/${result.ticket?.id ?? result.id}`);
+      navigate(rutaSolicitud(result.ticket ?? result));
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al crear la solicitud");
     } finally {
@@ -308,10 +316,9 @@ export const SolicitudNewPage = () => {
 
   const onAreaChange = (areaId) => {
     set("ubicacionAreaId", areaId);
-    const area = areas.find((a) => a.id === areaId);
-    if (area) {
-      setHighlight({ floor: area.floor, roomId: area.id });
-    }
+    // Zoom al área elegida en el selector — mismo mecanismo FLY_TO_AREA que
+    // el zoom automático al área del empleado.
+    if (areaId) setFocusAreaId(areaId);
   };
 
   return (
@@ -345,12 +352,12 @@ export const SolicitudNewPage = () => {
                   </Typography>
                 )}
                 <Typography variant="body2" color="text.secondary">
-                  Ubicación: {user.area} · {LABEL_PISO[user.piso] ?? user.piso}
+                  Ubicación: {userAreaLabel} · {LABEL_PISO[user.piso] ?? user.piso}
                 </Typography>
-                {user.ticketsActivos >= 2 && (
+                {user.ticketsActivos >= MAX_TICKETS_ACTIVOS_EMPLEADO && (
                   <Alert severity="warning" sx={{ mt: 1 }}>
-                    Tienes 2 solicitudes activas. Solo puedes crear una nueva cuando alguna sea
-                    resuelta.
+                    Tienes {MAX_TICKETS_ACTIVOS_EMPLEADO} solicitudes activas. Solo puedes crear una
+                    nueva cuando alguna sea resuelta.
                   </Alert>
                 )}
               </CardContent>
@@ -860,11 +867,17 @@ export const SolicitudNewPage = () => {
 
         {/* Mapa 3D */}
         <Grid item xs={12} md={6} sx={{ height: "100%", position: "relative" }}>
-          <BuildingViewer autoHighlight={highlight} sx={{ height: "100%", borderRadius: 2 }} />
+          <BuildingViewer focusAreaId={focusAreaId} sx={{ height: "100%", borderRadius: 2 }} />
           {user?.areaId && (
             <Chip
-              label={`📍 ${user.nombreCompleto ?? user.nombre} — ${user.area}`}
-              sx={{ position: "absolute", bottom: 16, left: 16, bgcolor: "primary.dark" }}
+              label={`📍 ${user.nombreCompleto ?? user.nombre} — ${userAreaLabel}`}
+              sx={{
+                position: "absolute",
+                bottom: 16,
+                left: 16,
+                bgcolor: "primary.dark",
+                color: "primary.contrastText",
+              }}
             />
           )}
         </Grid>

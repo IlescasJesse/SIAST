@@ -37,6 +37,17 @@ export const obtener = async (req: AuthRequest, res: Response, next: NextFunctio
   }
 };
 
+export const obtenerPorFolio = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const param = req.params.folio;
+    const folio = Array.isArray(param) ? param[0] : param;
+    const ticket = await ticketsService.obtenerTicketPorFolio(folio, req.user!);
+    res.json(ticket);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const asignar = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const ticket = await ticketsService.asignarTicket(

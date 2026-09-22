@@ -34,7 +34,7 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useAuthStore } from "../store/auth.js";
 import { useNotifStore } from "../store/notificaciones.js";
-import { getSolicitudes, getMisPasos } from "../api/solicitudes.js";
+import { getSolicitudes, getMisPasos, rutaSolicitud } from "../api/solicitudes.js";
 import { getCatalogos, getAsignaciones } from "../api/recursos.js";
 import { TICKET_ESTADO_COLOR, TICKET_PRIORIDAD_COLOR } from "../theme/index.js";
 import { LABEL_SUBCATEGORIA } from "@stf/shared";
@@ -463,7 +463,9 @@ function MetricasTecnico({ tickets, user, misPasos = [], navigate }) {
                   {misPasos.map((p) => (
                     <Box
                       key={p.id}
-                      onClick={() => navigate(`/solicitudes/${p.ticketId}`)}
+                      onClick={() =>
+                        navigate(rutaSolicitud({ id: p.ticketId, folio: p.ticket?.folio }))
+                      }
                       sx={{
                         p: 1.5,
                         borderRadius: 1,
@@ -711,7 +713,7 @@ function MetricasEmpleado({ tickets, navigate }) {
                     key={t.id}
                     hover
                     sx={{ cursor: "pointer" }}
-                    onClick={() => navigate(`/solicitudes/${t.id}`)}
+                    onClick={() => navigate(rutaSolicitud(t))}
                   >
                     <TableCell sx={{ fontFamily: "monospace", fontWeight: 700, fontSize: 12 }}>
                       {t.folio ?? "—"}
@@ -747,7 +749,7 @@ function MetricasEmpleado({ tickets, navigate }) {
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Tooltip title="Ver detalle">
-                        <IconButton size="small" onClick={() => navigate(`/solicitudes/${t.id}`)}>
+                        <IconButton size="small" onClick={() => navigate(rutaSolicitud(t))}>
                           <OpenInNewIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>

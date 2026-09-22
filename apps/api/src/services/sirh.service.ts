@@ -9,7 +9,7 @@
  *   fetchEmpleadoByRfc()  — búsqueda/upsert individual al hacer login-rfc
  */
 
-import { PisoEdificio, Prisma } from "@prisma/client";
+import { PisoEdificio } from "@prisma/client";
 import { prisma } from "../config/database.js";
 import { sirhFetch } from "./sirhAuth.service.js";
 
@@ -72,6 +72,12 @@ interface SirhEmpleado {
   FECHA_NOMBRAMIENTO?: string;
   SANGRE?: string;
   SEXO?: string;
+  // Único campo que el sync de SIRH → SIAST tiene permitido escribir sobre un
+  // empleado ya existente (regla de negocio confirmada por el dueño del proyecto,
+  // 2026-09-22): área, piso, puesto, departamento, etc. son decisiones que se
+  // definen y cambian ÚNICAMENTE dentro de SIAST (ej. al editar perfil), nunca
+  // desde SIRH.
+  TEL_PERSONAL?: string;
   VACACIONES?: {
     PERIODO?: number;
     FECHA_VACACIONES?: string;
@@ -446,6 +452,7 @@ function buildEmpleadoData(emp: SirhEmpleado) {
   const vacacionesFecha = emp.VACACIONES?.FECHA_VACACIONES
     ? emp.VACACIONES.FECHA_VACACIONES.trim().slice(0, 20) || undefined
     : undefined;
+  const telefono = emp.TEL_PERSONAL ? emp.TEL_PERSONAL.trim() || undefined : undefined;
 
   return {
     rfc,
@@ -468,6 +475,7 @@ function buildEmpleadoData(emp: SirhEmpleado) {
     sexo,
     vacacionesPeriodo,
     vacacionesFecha,
+    telefono,
   };
 }
 
@@ -479,10 +487,28 @@ async function resolveAreaId(areaId: string): Promise<AreaMapping> {
   return FALLBACK;
 }
 
+// Datos que el sync de SIRH → SIAST tiene permitido escribir sobre un empleado
+// YA EXISTENTE. Regla de negocio confirmada por el dueño del proyecto
+// (2026-09-22): SIRH solo actualiza el teléfono. Nombre, puesto, departamento,
+// adscripción, área, piso, etc. son decisiones que se definen y cambian
+// ÚNICAMENTE dentro de SIAST (ej. al editar perfil) y jamás deben pisarse desde
+// SIRH. `sirhId` se incluye solo para completar el enlace de identidad cuando
+// el empleado se encontró por RFC y aún no lo tenía.
+function buildUpdateData(safeData: ReturnType<typeof buildEmpleadoData>, incluirSirhId: boolean) {
+  const update: Record<string, unknown> = {
+    sincronizadoSIRH: true,
+    activo: true,
+  };
+  if (safeData.telefono) update.telefono = safeData.telefono;
+  if (incluirSirhId && safeData.sirhId) update.sirhId = safeData.sirhId;
+  return update;
+}
+
 async function upsertEmpleado(
   data: ReturnType<typeof buildEmpleadoData>,
 ): Promise<"created" | "updated"> {
   // Verificar que el areaId mapeado existe; si no, degradar a fallback
+  // (solo relevante para el alta inicial — un empleado existente no se toca).
   const resolved = await resolveAreaId(data.areaId);
   const safeData = { ...data, areaId: resolved.areaId, piso: resolved.piso };
 
@@ -490,37 +516,17 @@ async function upsertEmpleado(
     ? await prisma.empleado.findUnique({ where: { sirhId: safeData.sirhId } })
     : null;
   if (porSirhId) {
-    try {
-      await prisma.empleado.update({
-        where: { id: porSirhId.id },
-        data: { ...safeData, sincronizadoSIRH: true, activo: true },
-      });
-      return "updated";
-    } catch (err) {
-      // RFC que manda SIRH ya pertenece a otro empleado en DB (dato duplicado o
-      // desincronizado del lado de SIRH) — actualizar todo menos el RFC para no
-      // perder el resto de la sync ni pisar el RFC de otro registro.
-      const esConflictoRfc =
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002" &&
-        (err.meta?.target as string[] | undefined)?.includes("rfc");
-      if (!esConflictoRfc) throw err;
-      console.warn(
-        `[SIRH] RFC ${safeData.rfc} de sirhId=${safeData.sirhId} ya usado por otro empleado — se actualiza sin tocar el RFC (revisar duplicado)`,
-      );
-      const { rfc: _rfcEnConflicto, ...sinRfc } = safeData;
-      await prisma.empleado.update({
-        where: { id: porSirhId.id },
-        data: { ...sinRfc, sincronizadoSIRH: true, activo: true },
-      });
-      return "updated";
-    }
+    await prisma.empleado.update({
+      where: { id: porSirhId.id },
+      data: buildUpdateData(safeData, false),
+    });
+    return "updated";
   }
   const porRfc = await prisma.empleado.findUnique({ where: { rfc: safeData.rfc } });
   if (porRfc) {
     await prisma.empleado.update({
       where: { id: porRfc.id },
-      data: { ...safeData, sincronizadoSIRH: true, activo: true },
+      data: buildUpdateData(safeData, true),
     });
     return "updated";
   }

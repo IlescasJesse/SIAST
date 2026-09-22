@@ -236,8 +236,9 @@ export const completarPerfil = async (req: AuthRequest, res: Response, next: Nex
       return;
     }
 
+    let area = null as Awaited<ReturnType<typeof prisma.areaEdificio.findUnique>>;
     if (areaId) {
-      const area = await prisma.areaEdificio.findUnique({ where: { id: areaId } });
+      area = await prisma.areaEdificio.findUnique({ where: { id: areaId } });
       if (!area || !area.activo) {
         res.status(400).json({ error: "Ubicación inválida" });
         return;
@@ -250,7 +251,10 @@ export const completarPerfil = async (req: AuthRequest, res: Response, next: Nex
         correoInstitucional: ci,
         emailPersonal: ep,
         extension: extension?.trim() || null,
-        ...(areaId ? { areaId } : {}),
+        // `piso` (enum) es una copia denormalizada de area.piso — debe
+        // mantenerse en sync cada vez que cambia areaId (mismo patrón que
+        // empleados.controller.ts al crear honorarios).
+        ...(area ? { areaId: area.id, piso: area.piso } : {}),
         perfilCompleto: true,
       },
       include: { area: true },
@@ -288,10 +292,19 @@ export const me = async (req: AuthRequest, res: Response, next: NextFunction) =>
           areaId: true,
           piso: true,
           activo: true,
-          area: true,
+          area: { select: { label: true, floor: true } },
         },
       });
-      res.json(empleado);
+      // Homogeneizar con la forma de /api/auth/login: `area` como string (label),
+      // no como objeto. Evita que el frontend tenga que distinguir el formato
+      // según el endpoint que le dio los datos del usuario.
+      res.json(
+        empleado && {
+          ...empleado,
+          area: empleado.area?.label ?? null,
+          floor: empleado.area?.floor ?? null,
+        },
+      );
     } else {
       const u = await prisma.usuario.findUnique({
         where: { id: user.id },

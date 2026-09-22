@@ -4,6 +4,11 @@ import { prisma } from "../config/database.js";
 import { SUBCATEGORIAS_POR_CATEGORIA, validarGeometriaArea } from "@stf/shared";
 import { sirhFetch } from "../services/sirhAuth.service.js";
 import type { AuthRequest } from "../types/index.js";
+import {
+  esResponsable,
+  esStaffGlobal,
+  obtenerAreaSoporteUsuario,
+} from "../services/alcance.service.js";
 
 export const categorias = (_req: Request, res: Response) => {
   res.json({
@@ -29,9 +34,18 @@ const CATEGORIA_ROLES: Record<string, string[]> = {
   ],
 };
 
-export const tecnicos = async (req: Request, res: Response, next: NextFunction) => {
+export const tecnicos = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const user = req.user!;
     const categoria = req.query["categoria"] as string | undefined;
+
+    // Solo quien asigna técnicos (ADMIN, MESA_AYUDA, RESPONSABLE_*) necesita este
+    // catálogo. Para el resto se devuelve lista vacía (no 403) porque
+    // SolicitudDetailPage lo pide para cualquier rol junto con la solicitud.
+    if (!esStaffGlobal(user.rol) && !esResponsable(user.rol)) {
+      res.json({ data: [] });
+      return;
+    }
 
     // Si se pasa ?categoria=, filtrar solo los roles correspondientes;
     // si no, devolver técnicos y gestores (excluye ADMIN, MESA_AYUDA, EMPLEADO)
@@ -51,10 +65,23 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
             "GESTOR_INVENTARIO",
           ] as import("@prisma/client").Rol[]);
 
+    // RESPONSABLE_*: solo técnicos de su área de soporte (rolesIncluidos). Antes un
+    // RESPONSABLE_SISTEMAS veía también a los técnicos de TI y Redes.
+    let rolesVisibles = rolesPermitidos;
+    if (esResponsable(user.rol)) {
+      const area = await obtenerAreaSoporteUsuario(user.id);
+      const rolesArea = area?.rolesIncluidos ?? [];
+      rolesVisibles = rolesPermitidos.filter((r) => rolesArea.includes(r));
+      if (rolesVisibles.length === 0) {
+        res.json({ data: [] });
+        return;
+      }
+    }
+
     const data = await prisma.usuario.findMany({
       where: {
         activo: true,
-        rol: { in: rolesPermitidos },
+        rol: { in: rolesVisibles },
       },
       select: {
         id: true,
@@ -73,6 +100,7 @@ export const tecnicos = async (req: Request, res: Response, next: NextFunction) 
       by: ["tecnicoId"],
       where: {
         tecnicoId: { in: data.map((t) => t.id) },
+        activo: true,
         estado: { in: ["ABIERTO", "ASIGNADO", "EN_PROGRESO"] },
       },
       _count: { _all: true },

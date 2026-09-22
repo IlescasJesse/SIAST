@@ -3,6 +3,12 @@ import { api } from "./client.js";
 export const getSolicitudes = (params) =>
   api.get("/api/solicitudes", { params }).then((r) => r.data);
 export const getSolicitud = (id) => api.get(`/api/solicitudes/${id}`).then((r) => r.data);
+export const getSolicitudPorFolio = (folio) =>
+  api.get(`/api/solicitudes/folio/${encodeURIComponent(folio)}`).then((r) => r.data);
+
+/** Ruta del detalle en la app: usa el folio legible; cae al id solo si no hubiera folio. */
+export const rutaSolicitud = (t) =>
+  t?.folio ? `/solicitudes/${encodeURIComponent(t.folio)}` : `/solicitudes/${t?.id}`;
 export const createSolicitud = (body) => api.post("/api/solicitudes", body).then((r) => r.data);
 export const asignarSolicitud = (id, tecnicoId) =>
   api.patch(`/api/solicitudes/${id}/asignar`, { tecnicoId }).then((r) => r.data);

@@ -21,6 +21,8 @@ router.get(
   ),
   ctrl.misPasos,
 );
+// Detalle por folio legible (TEC-SIS-0023) — debe ir antes de "/:id".
+router.get("/folio/:folio", ctrl.obtenerPorFolio);
 router.get("/:id", ctrl.obtener);
 router.delete("/:id", requireRol("ADMIN", "MESA_AYUDA"), ctrl.eliminar);
 

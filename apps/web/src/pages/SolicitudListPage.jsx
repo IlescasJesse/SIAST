@@ -10,7 +10,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { useNavigate } from "react-router-dom";
-import { getSolicitudes } from "../api/solicitudes.js";
+import { getSolicitudes, rutaSolicitud } from "../api/solicitudes.js";
 import { StatusChip } from "../components/common/StatusChip.jsx";
 import { PriorityChip } from "../components/common/PriorityChip.jsx";
 import { useAuthStore } from "../store/auth.js";
@@ -167,7 +167,7 @@ export const SolicitudListPage = () => {
                       key={solicitud.id}
                       hover
                       sx={{ cursor: "pointer", opacity: esFinal ? 0.75 : 1 }}
-                      onClick={() => navigate(`/solicitudes/${solicitud.id}`)}
+                      onClick={() => navigate(rutaSolicitud(solicitud))}
                     >
                       <TableCell>
                         <Chip
@@ -213,7 +213,7 @@ export const SolicitudListPage = () => {
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Tooltip title="Ver detalle">
-                          <IconButton size="small" onClick={() => navigate(`/solicitudes/${solicitud.id}`)}>
+                          <IconButton size="small" onClick={() => navigate(rutaSolicitud(solicitud))}>
                             <OpenInNewIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>

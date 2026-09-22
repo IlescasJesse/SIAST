@@ -21,6 +21,7 @@ import {
 import { getAreas } from "../api/catalogos.js";
 import { getHonorarios, createHonorarios } from "../api/empleados.js";
 import { avisar } from "../store/dialogs.js";
+import { MAX_TICKETS_ACTIVOS_EMPLEADO } from "@stf/shared";
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -36,7 +37,7 @@ const FORM_VACIO = {
 
 // Registro de personal por honorarios (invitados) — feedback staff P4-12.
 // Solo ADMIN y Mesa de Ayuda. El honorario se autentica por RFC e interactúa
-// igual que un empleado normal (máx. 2 tickets activos).
+// igual que un empleado normal (máx. MAX_TICKETS_ACTIVOS_EMPLEADO tickets activos, @stf/shared).
 export const HonorariosPage = () => {
   const [areas, setAreas] = useState([]);
   const [lista, setLista] = useState([]);
@@ -112,7 +113,8 @@ export const HonorariosPage = () => {
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Registra personal por honorarios (invitados) que no proviene del SIRH. Accede con su RFC
-        (código por WhatsApp o correo) y opera igual que un empleado: máximo 2 solicitudes activas.
+        (código por WhatsApp o correo) y opera igual que un empleado: máximo{" "}
+        {MAX_TICKETS_ACTIVOS_EMPLEADO} solicitudes activas.
       </Typography>
 
       <Card sx={{ mb: 3 }}>

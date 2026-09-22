@@ -10,10 +10,12 @@ import {
   Alert,
   CircularProgress,
   Autocomplete,
+  Grid,
 } from "@mui/material";
 import { useAuthStore } from "../store/auth.js";
 import { completarPerfil } from "../api/usuarios.js";
 import { getAreasSugeridas } from "../api/catalogos.js";
+import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Dominio institucional fijo de la Secretaría de Finanzas de Oaxaca.
@@ -80,6 +82,9 @@ export const CompletarPerfilPage = () => {
         areaId: empleado.areaId,
         area: empleado.area?.label,
         piso: empleado.piso,
+        // `floor` (int 0=PB..3) es lo que consumen BuildingViewer/SolicitudNewPage
+        // con fallback `floor ?? 0` — distinto del enum `piso`, no derivable de él.
+        floor: empleado.area?.floor,
       });
       // updateUser no navega por sí solo — sin esto la página se queda montada
       // en /completar-perfil y parece que "no pasó nada" al guardar.
@@ -92,91 +97,102 @@ export const CompletarPerfilPage = () => {
   };
 
   return (
-    <Box sx={{ maxWidth: 560, mx: "auto", mt: { xs: 2, sm: 6 } }}>
-      <Card>
-        <CardContent>
-          <Typography variant="h5" fontWeight={700} gutterBottom>
-            Completa tu perfil
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Hola {user?.nombre ?? ""}, antes de continuar necesitamos algunos datos de contacto y tu
-            ubicación en el edificio.
-          </Typography>
+    <Box sx={{ maxWidth: 1100, mx: "auto", mt: { xs: 2, sm: 6 } }}>
+      <Grid container spacing={2} alignItems="stretch">
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h5" fontWeight={700} gutterBottom>
+                Completa tu perfil
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Hola {user?.nombre ?? ""}, antes de continuar necesitamos algunos datos de contacto
+                y tu ubicación en el edificio.
+              </Typography>
 
-          <Box
-            component="form"
-            onSubmit={handleSubmit}
-            sx={{ display: "flex", flexDirection: "column", gap: 2 }}
-          >
-            {err && <Alert severity="error">{err}</Alert>}
+              <Box
+                component="form"
+                onSubmit={handleSubmit}
+                sx={{ display: "flex", flexDirection: "column", gap: 2 }}
+              >
+                {err && <Alert severity="error">{err}</Alert>}
 
-            <TextField
-              label="Correo institucional"
-              type="email"
-              value={form.correoInstitucional}
-              onChange={(e) => set("correoInstitucional", e.target.value)}
-              error={!institucionalValido(form.correoInstitucional)}
-              helperText={
-                !institucionalValido(form.correoInstitucional)
-                  ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
-                  : `Termina en ${DOMINIO_INSTITUCIONAL}. Si no tienes uno asignado, captura tu correo personal abajo`
-              }
-              fullWidth
-            />
-            <TextField
-              label="Correo personal"
-              type="email"
-              value={form.emailPersonal}
-              onChange={(e) => set("emailPersonal", e.target.value)}
-              error={!correoValido(form.emailPersonal.trim())}
-              helperText="Requerido solo si no tienes correo institucional"
-              fullWidth
-            />
-            <TextField
-              label="Extensión telefónica"
-              value={form.extension}
-              onChange={(e) => set("extension", e.target.value.replace(/\D/g, "").slice(0, 10))}
-              fullWidth
-            />
-
-            <Autocomplete
-              options={areas}
-              loading={areasLoading}
-              value={areaSeleccionada}
-              onChange={(_e, val) => set("areaId", val?.id ?? null)}
-              getOptionLabel={(a) => a.label}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              renderOption={(props, a) => (
-                <li {...props} key={a.id}>
-                  {a.label}
-                  {a.score > 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                      (sugerida)
-                    </Typography>
-                  )}
-                </li>
-              )}
-              renderInput={(params) => (
                 <TextField
-                  {...params}
-                  label="Tu ubicación en el edificio"
-                  helperText="Sugerida según tu adscripción — confírmala o cámbiala si no es correcta"
+                  label="Correo institucional"
+                  type="email"
+                  value={form.correoInstitucional}
+                  onChange={(e) => set("correoInstitucional", e.target.value)}
+                  error={!institucionalValido(form.correoInstitucional)}
+                  helperText={
+                    !institucionalValido(form.correoInstitucional)
+                      ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
+                      : `Termina en ${DOMINIO_INSTITUCIONAL}. Si no tienes uno asignado, captura tu correo personal abajo`
+                  }
+                  fullWidth
                 />
-              )}
-            />
+                <TextField
+                  label="Correo personal"
+                  type="email"
+                  value={form.emailPersonal}
+                  onChange={(e) => set("emailPersonal", e.target.value)}
+                  error={!correoValido(form.emailPersonal.trim())}
+                  helperText="Requerido solo si no tienes correo institucional"
+                  fullWidth
+                />
+                <TextField
+                  label="Extensión telefónica"
+                  value={form.extension}
+                  onChange={(e) => set("extension", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  fullWidth
+                />
 
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={!puedeGuardar || saving}
-              sx={{ mt: 1 }}
-            >
-              {saving ? <CircularProgress size={20} color="inherit" /> : "Guardar y continuar"}
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
+                <Autocomplete
+                  options={areas}
+                  loading={areasLoading}
+                  value={areaSeleccionada}
+                  onChange={(_e, val) => set("areaId", val?.id ?? null)}
+                  getOptionLabel={(a) => a.label}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  renderOption={(props, a) => (
+                    <li {...props} key={a.id}>
+                      {a.label}
+                      {a.score > 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                          (sugerida)
+                        </Typography>
+                      )}
+                    </li>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Tu ubicación en el edificio"
+                      helperText="Sugerida según tu adscripción — confírmala o cámbiala si no es correcta"
+                    />
+                  )}
+                />
+
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  disabled={!puedeGuardar || saving}
+                  sx={{ mt: 1 }}
+                >
+                  {saving ? <CircularProgress size={20} color="inherit" /> : "Guardar y continuar"}
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Visor 3D — zoom automático al área seleccionada en el Autocomplete de arriba */}
+        <Grid item xs={12} md={6} sx={{ minHeight: { xs: 320, md: "auto" } }}>
+          <Card sx={{ height: "100%", minHeight: { xs: 320, md: 480 } }}>
+            <BuildingViewer focusAreaId={form.areaId} sx={{ height: "100%", borderRadius: 1 }} />
+          </Card>
+        </Grid>
+      </Grid>
     </Box>
   );
 };

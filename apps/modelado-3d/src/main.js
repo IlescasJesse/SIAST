@@ -159,6 +159,21 @@ const apiAreaToRoom = (area) => ({
   color: hexStrToInt(area.colorHex) ?? FLOOR_COLORS[area.floor ?? 0] ?? 0x78909c,
 });
 
+// ── Señal de disponibilidad hacia el parent (React) ──────────────────────────
+// liveRoomMap arranca poblado con ALL_ROOMS (rooms.js) de forma síncrona, pero
+// áreas creadas solo en DB (editor de áreas) no existen ahí — llegan recién
+// cuando la carga async de /api/catalogos/areas termina. Si React manda un
+// comando de zoom (FLY_TO_AREA/HIGHLIGHT_ROOM) antes de ese punto, showArea
+// puede fallar silenciosamente para esas áreas. VIEWER_READY se emite una sola
+// vez, al resolver (éxito o error) esa carga inicial, para que React sepa que
+// ya es seguro mandar comandos de zoom.
+let _viewerReadySent = false;
+const _notifyViewerReady = () => {
+  if (_viewerReadySent) return;
+  _viewerReadySent = true;
+  parent?.postMessage({ type: "VIEWER_READY" }, "*");
+};
+
 fetch(`${API_BASE}/api/catalogos/areas`)
   .then((r) => r.json())
   .then((json) => {
@@ -213,7 +228,8 @@ fetch(`${API_BASE}/api/catalogos/areas`)
     // Cargar muebles de las áreas ya posicionadas (coords reales en liveRoomMap)
     refreshMuebles(areas.map((a) => ({ id: a.id })));
   })
-  .catch((err) => console.warn("[SIAST3D] No se pudo cargar áreas desde API:", err.message));
+  .catch((err) => console.warn("[SIAST3D] No se pudo cargar áreas desde API:", err.message))
+  .finally(() => _notifyViewerReady());
 
 // Lista de rooms actualmente en memoria para labels e info panel
 const allRoomsLive = () => Object.values(liveRoomMap);
@@ -324,10 +340,11 @@ const EDITOR_MODE = new URLSearchParams(window.location.search).has("editor");
 
 const showInfoPanel = ({ roomId, label, floor, x1, y1, x2, y2 }) => {
   if (EDITOR_MODE) return; // suprimido en el editor de áreas
-  document.getElementById("panel-area-name").textContent = label;
-  document.getElementById("panel-floor").textContent = FLOOR_LABELS[floor] ?? floor;
-  document.getElementById("panel-id").textContent = roomId;
-  document.getElementById("panel-grid").textContent = `(${x1},${y1}) → (${x2},${y2})`;
+  document.getElementById("panel-area-name").textContent = label ?? "—";
+  document.getElementById("panel-floor").textContent = FLOOR_LABELS[floor] ?? floor ?? "—";
+  document.getElementById("panel-id").textContent = roomId ?? "—";
+  document.getElementById("panel-grid").textContent =
+    x1 != null && y1 != null && x2 != null && y2 != null ? `(${x1},${y1}) → (${x2},${y2})` : "—";
 
   const ticketsEl = document.getElementById("panel-tickets");
   const pin = ticketPins.get(roomId);
@@ -655,16 +672,29 @@ window.addEventListener("message", (e) => {
     case "HIGHLIGHT_ROOM":
       window.SIAST3D.highlightRoom(payload.floor, payload.roomId);
       break;
-    case "SHOW_EMPLOYEE":
-      window.SIAST3D.highlightRoom(payload.floor, payload.area);
-      flyToFloor(camera, controls, payload.floor);
+    case "SHOW_EMPLOYEE": {
+      // payload: { rfc?, nombre, area (roomId), floor }
+      // El panel del visor solo tiene campos de ÁREA (nombre/piso/ID/cuadrícula);
+      // no hay un campo dedicado al nombre del empleado, así que se antepone al
+      // label del área. Todo con fallback explícito — nunca "undefined".
+      const room = liveRoomMap[payload?.area];
+      const areaLabel = room?.label ?? payload?.area ?? "Área desconocida";
+      const empleadoNombre = payload?.nombre ?? "";
+      const floor = payload?.floor ?? room?.floor ?? 0;
+
+      window.SIAST3D.highlightRoom(floor, payload?.area);
+      flyToFloor(camera, controls, floor);
       showInfoPanel({
-        roomId: payload.area,
-        label: payload.nombre,
-        floor: payload.floor,
-        ...liveRoomMap[payload.area],
+        roomId: payload?.area,
+        label: empleadoNombre ? `${empleadoNombre} — ${areaLabel}` : areaLabel,
+        floor,
+        x1: room?.x1,
+        y1: room?.y1,
+        x2: room?.x2,
+        y2: room?.y2,
       });
       break;
+    }
     case "SET_LOGIN_MODE":
       window.SIAST3D.setLoginMode(payload.enabled);
       break;

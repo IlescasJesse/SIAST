@@ -88,7 +88,13 @@ async function main() {
         "MOBILIARIO",
         "PAPELERIA",
       ],
-      rolesIncluidos: ["RESPONSABLE_RECURSOS_MATERIALES", "GESTOR_RECURSOS_MATERIALES"],
+      rolesIncluidos: [
+        "RESPONSABLE_RECURSOS_MATERIALES",
+        "GESTOR_RECURSOS_MATERIALES",
+        "GESTOR_SALAS_JUNTA",
+        "GESTOR_RECURSOS",
+        "GESTOR_INVENTARIO",
+      ],
     },
   ];
 

@@ -72,7 +72,7 @@ import {
   updateAsignacion,
   getOrdenSalida,
 } from "../api/recursos.js";
-import { getSolicitudes } from "../api/solicitudes.js";
+import { getSolicitudes, rutaSolicitud } from "../api/solicitudes.js";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarcodeScanner } from "../components/BarcodeScanner.jsx";
@@ -868,7 +868,7 @@ export const RecursosPage = () => {
                         key={t.id}
                         hover
                         sx={{ cursor: "pointer" }}
-                        onClick={() => navigate(`/solicitudes/${t.id}`)}
+                        onClick={() => navigate(rutaSolicitud(t))}
                       >
                         <TableCell>
                           <Typography

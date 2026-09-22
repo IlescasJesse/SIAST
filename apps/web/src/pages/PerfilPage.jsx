@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
   Box,
@@ -14,6 +14,7 @@ import {
   Grid,
   Switch,
   FormControlLabel,
+  Autocomplete,
 } from "@mui/material";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { useAuthStore } from "../store/auth.js";
@@ -23,6 +24,8 @@ import {
   getPerfil,
   completarPerfil,
 } from "../api/usuarios.js";
+import { getAreasSugeridas } from "../api/catalogos.js";
+import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
 
 const TEL_REGEX = /^\d{10}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,7 +33,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DOMINIO_INSTITUCIONAL = "@finanzasoaxaca.gob.mx";
 
 export const PerfilPage = () => {
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
   const [passwordForm, setPasswordForm] = useState({ actual: "", nueva: "", confirmar: "" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null); // {type, text}
@@ -71,11 +74,17 @@ export const PerfilPage = () => {
   const [notifSaving, setNotifSaving] = useState(false);
   const [telForm, setTelForm] = useState(null); // null = cerrado; { paso: 1|2, tel1, tel2 }
 
-  // Datos de contacto editables (correo institucional/personal, extensión) —
-  // feedback staff P3-9, mismos campos que el onboarding de completar perfil.
+  // Datos de contacto editables (correo institucional/personal, extensión,
+  // área) — feedback staff P3-9, mismos campos que el onboarding de completar
+  // perfil. El área se reusa aquí sobre el mismo endpoint PATCH
+  // /api/auth/completar-perfil en vez de crear uno dedicado: el form ya trae
+  // precargado el correo vigente del empleado, así que el requisito de "al
+  // menos un correo" del endpoint se satisface solo, sin pedirlo de nuevo.
   const [contactoForm, setContactoForm] = useState(null);
   const [contactoMsg, setContactoMsg] = useState(null);
   const [contactoSaving, setContactoSaving] = useState(false);
+  const [areas, setAreas] = useState([]);
+  const [areasLoading, setAreasLoading] = useState(false);
 
   useEffect(() => {
     if (!isEmpleado) return;
@@ -87,11 +96,23 @@ export const PerfilPage = () => {
           correoInstitucional: p.correoInstitucional ?? "",
           emailPersonal: p.emailPersonal ?? "",
           extension: p.extension ?? "",
+          areaId: p.areaId ?? null,
         });
       })
       .catch(() => {})
       .finally(() => setPerfilLoading(false));
+
+    setAreasLoading(true);
+    getAreasSugeridas()
+      .then((res) => setAreas(res.data ?? []))
+      .catch(() => {})
+      .finally(() => setAreasLoading(false));
   }, [isEmpleado]);
+
+  const areaSeleccionada = useMemo(
+    () => areas.find((a) => a.id === contactoForm?.areaId) ?? null,
+    [areas, contactoForm?.areaId],
+  );
 
   const correoValido = (v) => !v || EMAIL_REGEX.test(v);
   const institucionalValido = (v) => {
@@ -114,8 +135,23 @@ export const PerfilPage = () => {
         correoInstitucional: contactoForm.correoInstitucional.trim() || null,
         emailPersonal: contactoForm.emailPersonal.trim() || null,
         extension: contactoForm.extension.trim() || null,
+        areaId: contactoForm.areaId || undefined,
       });
-      setPerfil((p) => ({ ...p, ...actualizado }));
+      setPerfil((p) => ({
+        ...p,
+        ...actualizado,
+        area: actualizado.area?.label ?? p?.area,
+        floor: actualizado.area?.floor ?? p?.floor,
+      }));
+      // Refresca el snapshot local del store (header, chips de ubicación en
+      // otras páginas) sin requerir un nuevo login — mismo patrón que
+      // CompletarPerfilPage.
+      updateUser({
+        area: actualizado.area?.label,
+        areaId: actualizado.areaId,
+        piso: actualizado.piso,
+        floor: actualizado.area?.floor,
+      });
       setContactoMsg({ type: "success", text: "Datos de contacto actualizados" });
     } catch (err) {
       setContactoMsg({
@@ -192,7 +228,7 @@ export const PerfilPage = () => {
   const { ConfirmDialog } = useUnsavedChanges(isDirty && !isEmpleado);
 
   return (
-    <Box sx={{ maxWidth: 600 }}>
+    <Box sx={{ maxWidth: 900 }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>
         Mi Perfil
       </Typography>
@@ -238,13 +274,39 @@ export const PerfilPage = () => {
                   <Typography variant="caption" color="text.secondary">
                     Área
                   </Typography>
-                  <Typography variant="body2">{user?.area ?? "—"}</Typography>
+                  <Typography variant="body2">
+                    {areaSeleccionada?.label ?? perfil?.area ?? user?.area ?? "—"}
+                  </Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption" color="text.secondary">
                     Piso
                   </Typography>
-                  <Typography variant="body2">{user?.piso ?? "—"}</Typography>
+                  <Typography variant="body2">{perfil?.piso ?? user?.piso ?? "—"}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Puesto
+                  </Typography>
+                  <Typography variant="body2">{perfil?.puesto ?? "—"}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Adscripción
+                  </Typography>
+                  <Typography variant="body2">{perfil?.adscripcion ?? "—"}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Departamento
+                  </Typography>
+                  <Typography variant="body2">{perfil?.departamento ?? "—"}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Extensión
+                  </Typography>
+                  <Typography variant="body2">{perfil?.extension ?? "—"}</Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption" color="text.secondary">
@@ -275,63 +337,97 @@ export const PerfilPage = () => {
         </CardContent>
       </Card>
 
-      {/* Datos de contacto — correo institucional/personal, extensión — solo empleados */}
+      {/* Datos de contacto y ubicación — correo institucional/personal, extensión,
+          área — solo empleados. Reusa PATCH /api/auth/completar-perfil (mismo
+          endpoint del onboarding); el visor 3D acompaña el Autocomplete de área
+          con zoom automático (focusAreaId), igual patrón que SolicitudNewPage. */}
       {isEmpleado && contactoForm && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-              Datos de contacto
+              Datos de contacto y ubicación
             </Typography>
-            <Box
-              component="form"
-              onSubmit={handleGuardarContacto}
-              sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
-            >
-              {contactoMsg && <Alert severity={contactoMsg.type}>{contactoMsg.text}</Alert>}
-              <TextField
-                label="Correo institucional"
-                type="email"
-                value={contactoForm.correoInstitucional}
-                onChange={(e) =>
-                  setContactoForm((f) => ({ ...f, correoInstitucional: e.target.value }))
-                }
-                error={!institucionalValido(contactoForm.correoInstitucional)}
-                helperText={
-                  !institucionalValido(contactoForm.correoInstitucional)
-                    ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
-                    : `Termina en ${DOMINIO_INSTITUCIONAL}`
-                }
-                fullWidth
-              />
-              <TextField
-                label="Correo personal"
-                type="email"
-                value={contactoForm.emailPersonal}
-                onChange={(e) => setContactoForm((f) => ({ ...f, emailPersonal: e.target.value }))}
-                error={!correoValido(contactoForm.emailPersonal.trim())}
-                helperText="Requerido solo si no tienes correo institucional"
-                fullWidth
-              />
-              <TextField
-                label="Extensión telefónica"
-                value={contactoForm.extension}
-                onChange={(e) =>
-                  setContactoForm((f) => ({
-                    ...f,
-                    extension: e.target.value.replace(/\D/g, "").slice(0, 10),
-                  }))
-                }
-                fullWidth
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={!puedeGuardarContacto || contactoSaving}
-                sx={{ alignSelf: "flex-start" }}
-              >
-                {contactoSaving ? <CircularProgress size={20} color="inherit" /> : "Guardar"}
-              </Button>
-            </Box>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Box
+                  component="form"
+                  onSubmit={handleGuardarContacto}
+                  sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
+                >
+                  {contactoMsg && <Alert severity={contactoMsg.type}>{contactoMsg.text}</Alert>}
+                  <TextField
+                    label="Correo institucional"
+                    type="email"
+                    value={contactoForm.correoInstitucional}
+                    onChange={(e) =>
+                      setContactoForm((f) => ({ ...f, correoInstitucional: e.target.value }))
+                    }
+                    error={!institucionalValido(contactoForm.correoInstitucional)}
+                    helperText={
+                      !institucionalValido(contactoForm.correoInstitucional)
+                        ? `Debe terminar en ${DOMINIO_INSTITUCIONAL}`
+                        : `Termina en ${DOMINIO_INSTITUCIONAL}`
+                    }
+                    fullWidth
+                  />
+                  <TextField
+                    label="Correo personal"
+                    type="email"
+                    value={contactoForm.emailPersonal}
+                    onChange={(e) =>
+                      setContactoForm((f) => ({ ...f, emailPersonal: e.target.value }))
+                    }
+                    error={!correoValido(contactoForm.emailPersonal.trim())}
+                    helperText="Requerido solo si no tienes correo institucional"
+                    fullWidth
+                  />
+                  <TextField
+                    label="Extensión telefónica"
+                    value={contactoForm.extension}
+                    onChange={(e) =>
+                      setContactoForm((f) => ({
+                        ...f,
+                        extension: e.target.value.replace(/\D/g, "").slice(0, 10),
+                      }))
+                    }
+                    fullWidth
+                  />
+                  <Autocomplete
+                    options={areas}
+                    loading={areasLoading}
+                    value={areaSeleccionada}
+                    onChange={(_e, val) =>
+                      setContactoForm((f) => ({ ...f, areaId: val?.id ?? null }))
+                    }
+                    getOptionLabel={(a) => a.label}
+                    isOptionEqualToValue={(a, b) => a.id === b.id}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Tu ubicación en el edificio"
+                        helperText="Cambia tu área si te reubicaste"
+                      />
+                    )}
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={!puedeGuardarContacto || contactoSaving}
+                    sx={{ alignSelf: "flex-start" }}
+                  >
+                    {contactoSaving ? <CircularProgress size={20} color="inherit" /> : "Guardar"}
+                  </Button>
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={6} sx={{ minHeight: { xs: 280, md: "auto" } }}>
+                <Box sx={{ height: "100%", minHeight: { xs: 280, md: 360 }, mt: 1 }}>
+                  <BuildingViewer
+                    focusAreaId={contactoForm.areaId}
+                    sx={{ height: "100%", borderRadius: 1 }}
+                  />
+                </Box>
+              </Grid>
+            </Grid>
           </CardContent>
         </Card>
       )}

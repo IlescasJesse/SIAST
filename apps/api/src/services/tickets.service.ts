@@ -3,7 +3,17 @@ import { SubcategoriaTicket, CategoriaTicket } from "@prisma/client";
 import type { JwtPayload } from "../types/index.js";
 import * as notif from "./notificaciones.service.js";
 import { enviarNotifTicketCreado } from "./whatsapp.service.js";
-import { FOLIO_PREFIX } from "@stf/shared";
+import { FOLIO_PREFIX, MAX_TICKETS_ACTIVOS_EMPLEADO } from "@stf/shared";
+import {
+  esResponsable,
+  esTecnico,
+  esGestor,
+  esStaffGlobal,
+  obtenerAreaSoporteUsuario,
+  alcanceLecturaTickets,
+  verificarLecturaTicket,
+  subcategoriasGestor,
+} from "./alcance.service.js";
 
 const SUBCATEGORIAS_VALIDAS = new Set(Object.values(SubcategoriaTicket));
 const CATEGORIAS_VALIDAS = new Set(Object.values(CategoriaTicket));
@@ -38,14 +48,58 @@ const ROLES_PRIORIDAD_MANUAL = [
 
 const PRIORIDAD_ORDER: Record<string, number> = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAJA: 3 };
 
+/**
+ * Siguiente folio de la categoría: MAX(consecutivo) + 1 del prefijo (no COUNT, que
+ * repetiría folios si alguna vez faltara una fila). Incluye tickets con activo=false
+ * porque el folio es único a nivel tabla. No es atómico por sí solo — la unicidad la
+ * garantiza el índice único + reintento en `crearConFolioUnico`.
+ */
 async function generarFolio(categoria: string, subcategoria: string): Promise<string> {
   const key = `${categoria}-${subcategoria}`;
   const prefix = FOLIO_PREFIX[key] ?? "TIC";
-  const count = await prisma.ticket.count({
-    where: { folio: { startsWith: prefix } },
-  });
-  const num = String(count + 1).padStart(4, "0");
+  const patron = `${prefix}-%`;
+  const inicioConsecutivo = prefix.length + 2; // SUBSTRING es 1-based; salta "PREFIX-"
+  const rows = await prisma.$queryRaw<{ maximo: bigint | number | null }[]>`
+    SELECT MAX(CAST(SUBSTRING(folio, ${inicioConsecutivo}) AS UNSIGNED)) AS maximo
+    FROM tickets
+    WHERE folio LIKE ${patron}
+  `;
+  const maximo = Number(rows[0]?.maximo ?? 0);
+  const num = String(maximo + 1).padStart(4, "0");
   return `${prefix}-${num}`;
+}
+
+const esChoqueFolio = (err: unknown): boolean => {
+  const e = err as { code?: string; meta?: { target?: unknown } };
+  if (e?.code !== "P2002") return false;
+  const target = e.meta?.target;
+  const texto = Array.isArray(target) ? target.join(",") : String(target ?? "");
+  // Sin target conocido se asume folio: es el único unique que puede chocar en un alta.
+  return texto === "" || texto.includes("folio");
+};
+
+const MAX_REINTENTOS_FOLIO = 5;
+
+/**
+ * Crea el registro generando el folio justo antes del INSERT. Si dos altas simultáneas
+ * de la misma categoría calculan el mismo consecutivo, el índice único `folio` rechaza
+ * la segunda (P2002) y aquí se recalcula el folio y se reintenta con backoff corto.
+ */
+async function crearConFolioUnico<T>(
+  categoria: string,
+  subcategoria: string,
+  crear: (folio: string) => Promise<T>,
+): Promise<T> {
+  for (let intento = 1; ; intento++) {
+    const folio = await generarFolio(categoria, subcategoria);
+    try {
+      return await crear(folio);
+    } catch (err) {
+      if (!esChoqueFolio(err) || intento >= MAX_REINTENTOS_FOLIO) throw err;
+      const espera = 20 * intento + Math.floor(Math.random() * 30);
+      await new Promise((r) => setTimeout(r, espera));
+    }
+  }
 }
 
 async function generarPasosParaTicket(
@@ -84,6 +138,13 @@ const TRANSICIONES: Record<string, string[]> = {
   CANCELADO: [],
 };
 
+const ESTADOS_FINALES: string[] = ["RESUELTO", "CANCELADO"];
+
+// Estado de un PasoTicket que no llegó a completarse porque la solicitud se cerró
+// antes (cancelación o resolución directa por Mesa de Ayuda/Responsable).
+const PASO_OMITIDO = "OMITIDO";
+const PASO_CERRADO = ["COMPLETADO", PASO_OMITIDO];
+
 const ticketInclude = {
   area: true,
   empleado: { select: { rfc: true, nombreCompleto: true, areaId: true } },
@@ -116,45 +177,18 @@ export const listarTickets = async (
   const limit = Math.min(50, Math.max(1, parseInt(query.limit ?? "20", 10)));
   const skip = (page - 1) * limit;
 
-  const where: Record<string, unknown> = { activo: true };
+  // El alcance por rol va en un AND separado de los filtros de query: así un filtro
+  // (?categoria=, ?rfc=) solo puede ACOTAR el resultado, nunca ampliarlo fuera del
+  // alcance del rol (antes ?categoria= sobrescribía el filtro de los GESTOR_*).
+  const alcance = await alcanceLecturaTickets(user);
+  const filtros: Record<string, unknown> = { activo: true };
 
-  if (user.rol === "EMPLEADO") {
-    where.empleadoRfc = user.rfc;
-  } else if (
-    user.rol === "TECNICO_TI" ||
-    user.rol === "TECNICO_REDES" ||
-    user.rol === "TECNICO_ELECTRICISTA" ||
-    user.rol === "TECNICO_PLOMERO" ||
-    user.rol === "TECNICO_MOVILIDAD"
-  ) {
-    where.tecnicoId = user.id;
-  } else if (
-    user.rol === "GESTOR_RECURSOS_MATERIALES" ||
-    user.rol === "GESTOR_SALAS_JUNTA" ||
-    user.rol === "GESTOR_RECURSOS" ||
-    user.rol === "GESTOR_INVENTARIO" ||
-    user.rol === "RESPONSABLE_RECURSOS_MATERIALES"
-  ) {
-    where.categoria = "RECURSOS_MATERIALES";
-  } else if (ROLES_RESPONSABLE.includes(user.rol as any)) {
-    const usuarioDb = await prisma.usuario.findUnique({
-      where: { id: user.id },
-      select: { areaSoporteId: true },
-    });
-    if (usuarioDb?.areaSoporteId) {
-      const areaSoporte = await prisma.areaSoporte.findUnique({
-        where: { id: usuarioDb.areaSoporteId },
-      });
-      if (areaSoporte) {
-        where.subcategoria = { in: areaSoporte.subcategorias as string[] };
-      }
-    }
-  }
+  if (query.estado) filtros.estado = query.estado;
+  if (query.categoria) filtros.categoria = query.categoria;
+  if (query.tecnicoId && user.rol === "ADMIN") filtros.tecnicoId = parseInt(query.tecnicoId, 10);
+  if (query.rfc && user.rol !== "EMPLEADO") filtros.empleadoRfc = query.rfc;
 
-  if (query.estado) where.estado = query.estado;
-  if (query.categoria) where.categoria = query.categoria;
-  if (query.tecnicoId && user.rol === "ADMIN") where.tecnicoId = parseInt(query.tecnicoId, 10);
-  if (query.rfc && user.rol !== "EMPLEADO") where.empleadoRfc = query.rfc;
+  const where = { AND: [filtros, alcance] };
 
   const [tickets, total] = await Promise.all([
     prisma.ticket.findMany({
@@ -173,8 +207,6 @@ export const listarTickets = async (
     ...t,
     prioridad: resolvePrioridad(t) as typeof t.prioridad,
   }));
-
-  const ESTADOS_FINALES = ["RESUELTO", "CANCELADO"];
 
   // Separar activos de finales
   const activos = ticketsConPrioridad.filter((t) => !ESTADOS_FINALES.includes(t.estado));
@@ -230,10 +262,13 @@ export const crearTicket = async (
         estado: { notIn: ["RESUELTO", "CANCELADO"] },
       },
     });
-    if (activos >= 2) {
-      throw Object.assign(new Error("Límite de solicitudes activas alcanzado (máximo 2)"), {
-        status: 403,
-      });
+    if (activos >= MAX_TICKETS_ACTIVOS_EMPLEADO) {
+      throw Object.assign(
+        new Error(
+          `Límite de solicitudes activas alcanzado (máximo ${MAX_TICKETS_ACTIVOS_EMPLEADO})`,
+        ),
+        { status: 403 },
+      );
     }
   }
 
@@ -269,8 +304,6 @@ export const crearTicket = async (
     );
   }
 
-  const folio = await generarFolio(categoriaVal, subcategoriaVal);
-
   // Verificar que el usuario staff existe en DB (JWT puede ser stale si se re-seeded)
   let creadoPorId: number | undefined;
   if (user.rol !== "EMPLEADO") {
@@ -295,25 +328,27 @@ export const crearTicket = async (
         ? body.recursosAdicionales
         : JSON.stringify(body.recursosAdicionales);
 
-  const ticket = await prisma.ticket.create({
-    data: {
-      folio,
-      asunto: body.asunto,
-      descripcion: body.descripcion,
-      categoria: categoriaVal as never,
-      subcategoria: subcategoriaVal as never,
-      categoriaOriginal: categoriaVal as never,
-      subcategoriaOriginal: subcategoriaVal as never,
-      prioridad: "MEDIA" as never,
-      empleadoRfc,
-      areaId: areaIdResuelto,
-      piso: pisoResuelto,
-      creadoPorId,
-      recursosAdicionales,
-      subTipo: body.subTipo ?? null,
-    },
-    include: ticketInclude,
-  });
+  const ticket = await crearConFolioUnico(categoriaVal, subcategoriaVal, (folio) =>
+    prisma.ticket.create({
+      data: {
+        folio,
+        asunto: body.asunto,
+        descripcion: body.descripcion,
+        categoria: categoriaVal as never,
+        subcategoria: subcategoriaVal as never,
+        categoriaOriginal: categoriaVal as never,
+        subcategoriaOriginal: subcategoriaVal as never,
+        prioridad: "MEDIA" as never,
+        empleadoRfc,
+        areaId: areaIdResuelto,
+        piso: pisoResuelto,
+        creadoPorId,
+        recursosAdicionales,
+        subTipo: body.subTipo ?? null,
+      },
+      include: ticketInclude,
+    }),
+  );
 
   // Generar pasos del flujo de trabajo según el proceso definido
   await generarPasosParaTicket(ticket.id, categoriaVal, subcategoriaVal, body.subTipo ?? null);
@@ -349,7 +384,7 @@ export const crearTicket = async (
         folio: ticket.folio,
         asunto: ticket.asunto,
         prioridad: ticket.prioridad,
-        url: `${frontendUrl}/solicitudes/${ticket.id}`,
+        url: `${frontendUrl}/solicitudes/${encodeURIComponent(ticket.folio)}`,
       });
     })
     .catch((err) => console.error("[WhatsApp] Error al notificar ticket creado:", err));
@@ -365,14 +400,34 @@ export const obtenerTicket = async (id: number, user: JwtPayload) => {
 
   if (!ticket) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
 
-  if (user.rol === "EMPLEADO" && ticket.empleadoRfc !== user.rfc) {
-    throw Object.assign(new Error("Sin acceso a esta solicitud"), { status: 403 });
-  }
+  // Scoping por rol (antes solo se restringía a EMPLEADO; cualquier staff leía cualquier id)
+  await verificarLecturaTicket(id, user);
 
   return {
     ...ticket,
     prioridad: resolvePrioridad(ticket) as typeof ticket.prioridad,
   };
+};
+
+// Formato de folio: PREFIJO(S) en mayúsculas separados por guion + consecutivo numérico
+// (TEC-SIS-0023, TIC-0001). Se valida antes de tocar Prisma para responder 400 limpio.
+const FOLIO_REGEX = /^[A-Z]{2,5}(-[A-Z]{2,5})*-\d{1,10}$/;
+
+/**
+ * Detalle por folio (URL legible /solicitudes/TEC-SIS-0023). Mismo scoping de alcance
+ * por rol que `obtenerTicket`: resuelve el id y delega, así ambas vías comparten reglas.
+ */
+export const obtenerTicketPorFolio = async (folioParam: string, user: JwtPayload) => {
+  const folio = (folioParam ?? "").trim().toUpperCase();
+  if (!FOLIO_REGEX.test(folio) || folio.length > 20) {
+    throw Object.assign(new Error("Folio inválido"), { status: 400 });
+  }
+  const encontrado = await prisma.ticket.findFirst({
+    where: { folio, activo: true },
+    select: { id: true },
+  });
+  if (!encontrado) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
+  return obtenerTicket(encontrado.id, user);
 };
 
 /** Override manual de prioridad — Mesa de Ayuda y Responsables de área (feedback de staff 2026-08-12). */
@@ -420,14 +475,6 @@ const CATEGORIA_ROL_MAP: Record<string, string[]> = {
   ],
 };
 
-const ROLES_RESPONSABLE = [
-  "RESPONSABLE_TI",
-  "RESPONSABLE_REDES",
-  "RESPONSABLE_MANTENIMIENTO",
-  "RESPONSABLE_RECURSOS_MATERIALES",
-  "RESPONSABLE_SISTEMAS",
-] as const;
-
 // Deriva la categoría a partir de una subcategoría (para reasignaciones de área)
 const CATEGORIA_POR_SUBCATEGORIA: Record<string, string> = {
   SISTEMAS_INSTITUCIONALES: "TECNOLOGIAS",
@@ -448,22 +495,15 @@ const CATEGORIA_POR_SUBCATEGORIA: Record<string, string> = {
 // Verifica que el usuario pueda actuar (aceptar/reasignar) sobre el área actual del ticket:
 // ADMIN/MESA_AYUDA sin restricción; RESPONSABLE_* solo si el ticket pertenece a su área.
 async function verificarAccesoAreaTicket(ticketSubcategoria: string, user: JwtPayload) {
-  if (user.rol === "ADMIN" || user.rol === "MESA_AYUDA") return;
-  if (!ROLES_RESPONSABLE.includes(user.rol as any)) {
+  if (esStaffGlobal(user.rol)) return;
+  if (!esResponsable(user.rol)) {
     throw Object.assign(new Error("Sin permisos para esta acción"), { status: 403 });
   }
-  const usuarioDb = await prisma.usuario.findUnique({
-    where: { id: user.id },
-    select: { areaSoporteId: true },
-  });
-  const areaSoporte = usuarioDb?.areaSoporteId
-    ? await prisma.areaSoporte.findUnique({ where: { id: usuarioDb.areaSoporteId } })
-    : null;
+  const areaSoporte = await obtenerAreaSoporteUsuario(user.id);
   if (!areaSoporte) {
     throw Object.assign(new Error("Responsable sin área asignada"), { status: 403 });
   }
-  const subcategorias = areaSoporte.subcategorias as string[];
-  if (!subcategorias.includes(ticketSubcategoria)) {
+  if (!areaSoporte.subcategorias.includes(ticketSubcategoria)) {
     throw Object.assign(new Error("Solicitud fuera del área de soporte asignada"), {
       status: 403,
     });
@@ -587,6 +627,16 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
   const ticket = await prisma.ticket.findFirst({ where: { id, activo: true } });
   if (!ticket) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
 
+  // Guard de alcance: un RESPONSABLE_* solo asigna tickets de su área (antes solo se
+  // validaba que el técnico fuera de su área, no que el ticket lo fuera).
+  await verificarAccesoAreaTicket(ticket.subcategoria, user);
+
+  if (ESTADOS_FINALES.includes(ticket.estado)) {
+    throw Object.assign(new Error(`No se puede asignar una solicitud ${ticket.estado}`), {
+      status: 400,
+    });
+  }
+
   // Guard: el área receptora debe aceptar el ticket antes de poder asignar técnico
   if (!ticket.aceptadoEn) {
     throw Object.assign(new Error("Debe aceptar el ticket antes de asignar técnico"), {
@@ -621,19 +671,12 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
   }
 
   // Guard: si el usuario es RESPONSABLE_*, verificar que el técnico pertenece a su área
-  if (ROLES_RESPONSABLE.includes(user.rol as any)) {
-    const usuarioDb = await prisma.usuario.findUnique({
-      where: { id: user.id },
-      select: { areaSoporteId: true },
-    });
-    const areaSoporte = usuarioDb?.areaSoporteId
-      ? await prisma.areaSoporte.findUnique({ where: { id: usuarioDb.areaSoporteId } })
-      : null;
+  if (esResponsable(user.rol)) {
+    const areaSoporte = await obtenerAreaSoporteUsuario(user.id);
     if (!areaSoporte) {
       throw Object.assign(new Error("Responsable sin área asignada"), { status: 403 });
     }
-    const rolesArea = areaSoporte.rolesIncluidos as string[];
-    if (!rolesArea.includes(tecnico.rol)) {
+    if (!areaSoporte.rolesIncluidos.includes(tecnico.rol)) {
       throw Object.assign(new Error("El técnico no pertenece al área de soporte del responsable"), {
         status: 403,
       });
@@ -686,6 +729,46 @@ export const cambiarEstado = async (
   const ticket = await prisma.ticket.findFirst({ where: { id, activo: true } });
   if (!ticket) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
 
+  // ── Guards de propiedad / alcance (IDOR) ─────────────────────────────────
+  if (user.rol === "EMPLEADO") {
+    // El empleado solo puede cancelar SU solicitud mientras sigue ABIERTA (mismo
+    // criterio que muestra la UI); cualquier otra transición es del staff.
+    if (ticket.empleadoRfc !== user.rfc) {
+      throw Object.assign(new Error("Sin acceso a esta solicitud"), { status: 403 });
+    }
+    if (body.estado !== "CANCELADO" || ticket.estado !== "ABIERTO") {
+      throw Object.assign(
+        new Error("Solo puedes cancelar tu solicitud mientras está en estado ABIERTO"),
+        { status: 403 },
+      );
+    }
+  } else if (esTecnico(user.rol)) {
+    // El técnico solo opera solicitudes asignadas a él (no las de otros técnicos
+    // ni las de su área sin asignar).
+    if (ticket.tecnicoId !== user.id) {
+      throw Object.assign(new Error("Solo el técnico asignado puede cambiar el estado"), {
+        status: 403,
+      });
+    }
+  } else if (esGestor(user.rol)) {
+    if (ticket.categoria !== "RECURSOS_MATERIALES") {
+      throw Object.assign(new Error("Solicitud fuera del alcance de Recursos Materiales"), {
+        status: 403,
+      });
+    }
+    const subcats = subcategoriasGestor(user.rol);
+    if (subcats && !subcats.includes(ticket.subcategoria)) {
+      throw Object.assign(
+        new Error("Solicitud fuera del alcance de tu área de Recursos Materiales"),
+        { status: 403 },
+      );
+    }
+  } else {
+    // ADMIN / MESA_AYUDA sin restricción; RESPONSABLE_* solo su área (por subcategoría).
+    // Cualquier otro rol → 403 dentro de verificarAccesoAreaTicket.
+    await verificarAccesoAreaTicket(ticket.subcategoria, user);
+  }
+
   const permitidos = TRANSICIONES[ticket.estado] ?? [];
   if (!permitidos.includes(body.estado)) {
     throw Object.assign(new Error(`Transición no permitida: ${ticket.estado} → ${body.estado}`), {
@@ -693,51 +776,54 @@ export const cambiarEstado = async (
     });
   }
 
-  // Guard: si el usuario es RESPONSABLE_*, verificar que el ticket pertenece a su área
-  if (ROLES_RESPONSABLE.includes(user.rol as any)) {
-    const usuarioDb = await prisma.usuario.findUnique({
-      where: { id: user.id },
-      select: { areaSoporteId: true },
-    });
-    const areaSoporte = usuarioDb?.areaSoporteId
-      ? await prisma.areaSoporte.findUnique({ where: { id: usuarioDb.areaSoporteId } })
-      : null;
-    const subcategorias = (areaSoporte?.subcategorias as string[]) ?? [];
-    if (!subcategorias.includes(ticket.subcategoria)) {
-      throw Object.assign(new Error("Solicitud fuera del área de soporte asignada"), {
-        status: 403,
-      });
-    }
-  }
+  const puedeResolverDirecto = esStaffGlobal(user.rol) || esResponsable(user.rol);
 
   // Guard: resolver saltando EN_PROGRESO (sin pasar por técnico) es solo para
   // Mesa de Ayuda / Responsables — los técnicos siguen el flujo normal.
-  if (body.estado === "RESUELTO" && ticket.estado !== "EN_PROGRESO") {
-    const puedeResolverDirecto =
-      user.rol === "ADMIN" ||
-      user.rol === "MESA_AYUDA" ||
-      ROLES_RESPONSABLE.includes(user.rol as any);
-    if (!puedeResolverDirecto) {
-      throw Object.assign(
-        new Error(
-          "Solo Mesa de Ayuda o el Responsable del área pueden resolver sin pasar por técnico",
-        ),
-        { status: 403 },
-      );
-    }
+  if (body.estado === "RESUELTO" && ticket.estado !== "EN_PROGRESO" && !puedeResolverDirecto) {
+    throw Object.assign(
+      new Error(
+        "Solo Mesa de Ayuda o el Responsable del área pueden resolver sin pasar por técnico",
+      ),
+      { status: 403 },
+    );
   }
 
-  // Guard: no resolver ticket con pasos pendientes (D-10)
-  if (body.estado === "RESUELTO") {
-    const pasosPendientes = await prisma.pasoTicket.findMany({
-      where: { ticketId: id, estado: { not: "COMPLETADO" } },
+  // ── Solicitudes con flujo de pasos (ProcesoDefinicion) ────────────────────
+  // ASIGNADO / EN_PROGRESO los fija asignarPaso (con técnico real). Moverlos a mano
+  // dejaba el ticket "Asignado"/"En progreso" sin técnico y con pasos PENDIENTE, y
+  // después RESUELTO tronaba por "pasos pendientes" (bug reportado con SISTEMAS).
+  const pasosAbiertos = await prisma.pasoTicket.findMany({
+    where: { ticketId: id, estado: { notIn: PASO_CERRADO } },
+  });
+  const tieneFlujoPasos = (await prisma.pasoTicket.count({ where: { ticketId: id } })) > 0;
+
+  if (tieneFlujoPasos && (body.estado === "ASIGNADO" || body.estado === "EN_PROGRESO")) {
+    throw Object.assign(
+      new Error(
+        "Esta solicitud usa flujo de pasos: asigna técnico desde el panel «Flujo de atención».",
+      ),
+      { status: 400 },
+    );
+  }
+
+  // Guard: no resolver ticket con pasos pendientes (D-10) — salvo resolución directa
+  // de Mesa de Ayuda / Responsable (feedback staff 2026-08-12), que cierra los pasos
+  // abiertos como OMITIDO para dejar rastro de que no los completó un técnico.
+  if (body.estado === "RESUELTO" && pasosAbiertos.length > 0 && !puedeResolverDirecto) {
+    throw Object.assign(
+      new Error("El ticket tiene pasos pendientes. Completa todos los pasos para resolver."),
+      { status: 400 },
+    );
+  }
+  if ((body.estado === "RESUELTO" || body.estado === "CANCELADO") && pasosAbiertos.length > 0) {
+    await prisma.pasoTicket.updateMany({
+      where: { ticketId: id, estado: { notIn: PASO_CERRADO } },
+      data: {
+        estado: PASO_OMITIDO,
+        notas: `Solicitud ${body.estado === "RESUELTO" ? "resuelta" : "cancelada"} por ${user.nombre} antes de completar el paso`,
+      },
     });
-    if (pasosPendientes.length > 0) {
-      throw Object.assign(
-        new Error("El ticket tiene pasos pendientes. Completa todos los pasos para resolver."),
-        { status: 400 },
-      );
-    }
   }
 
   const fechas: Record<string, Date> = {};
@@ -780,6 +866,9 @@ export const agregarComentario = async (
   const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, activo: true } });
   if (!ticket) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
 
+  // Mismo alcance que la lectura: no se comenta en solicitudes que el rol no puede ver.
+  await verificarLecturaTicket(ticketId, user);
+
   return prisma.comentario.create({
     data: {
       ticketId,
@@ -813,20 +902,29 @@ export const completarPaso = async (
     where: { id: pasoId, ticketId },
   });
   if (!paso) throw Object.assign(new Error("Paso no encontrado"), { status: 404 });
-  const ticketActual = await prisma.ticket.findUnique({
-    where: { id: ticketId },
+  const ticketActual = await prisma.ticket.findFirst({
+    where: { id: ticketId, activo: true },
     select: { estado: true },
   });
-  if (ticketActual?.estado === "CANCELADO") {
-    throw Object.assign(new Error("No se puede completar un paso de una solicitud cancelada"), {
-      status: 400,
-    });
+  if (!ticketActual) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
+  if (ESTADOS_FINALES.includes(ticketActual.estado)) {
+    throw Object.assign(
+      new Error(`No se puede completar un paso de una solicitud ${ticketActual.estado}`),
+      { status: 400 },
+    );
   }
   if (paso.estado === "COMPLETADO") {
     throw Object.assign(new Error("El paso ya fue completado"), { status: 400 });
   }
+  // Solo pasos ya asignados (EN_PROGRESO) — antes un paso PENDIENTE sin técnico
+  // podía completarlo cualquier usuario con el rol, saltándose la asignación y el orden.
+  if (paso.estado !== "EN_PROGRESO" || paso.tecnicoId === null) {
+    throw Object.assign(new Error("El paso aún no ha sido asignado a un técnico"), {
+      status: 400,
+    });
+  }
   // Validar identidad del técnico, no solo el rol (D-09)
-  if (paso.tecnicoId !== null && paso.tecnicoId !== user.id) {
+  if (paso.tecnicoId !== user.id) {
     throw Object.assign(new Error("Solo el técnico asignado puede completar este paso"), {
       status: 403,
     });
@@ -911,26 +1009,68 @@ export const asignarPaso = async (
   const paso = await prisma.pasoTicket.findFirst({ where: { id: pasoId, ticketId } });
   if (!paso) throw Object.assign(new Error("Paso no encontrado"), { status: 404 });
 
-  // Guard: el área receptora debe aceptar el ticket antes de asignar el primer paso
-  const ticketPrevio = await prisma.ticket.findUnique({
-    where: { id: ticketId },
-    select: { aceptadoEn: true },
+  const ticketPrevio = await prisma.ticket.findFirst({
+    where: { id: ticketId, activo: true },
+    select: { aceptadoEn: true, estado: true, subcategoria: true },
   });
-  if (!ticketPrevio?.aceptadoEn) {
+  if (!ticketPrevio) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
+
+  // Guard de área: ADMIN/MESA sin restricción. Un RESPONSABLE_* solo asigna pasos
+  // que requieren un rol de SU área (rolesIncluidos) — así en flujos multi-área
+  // (p. ej. EQUIPOS_DISPOSITIVOS: TI → Redes) cada responsable asigna a su gente.
+  if (!esStaffGlobal(user.rol)) {
+    if (!esResponsable(user.rol)) {
+      throw Object.assign(new Error("Sin permisos para esta acción"), { status: 403 });
+    }
+    const areaSoporte = await obtenerAreaSoporteUsuario(user.id);
+    if (!areaSoporte) {
+      throw Object.assign(new Error("Responsable sin área asignada"), { status: 403 });
+    }
+    if (!areaSoporte.rolesIncluidos.includes(paso.rolRequerido)) {
+      throw Object.assign(
+        new Error("Este paso corresponde a otra área de soporte; lo asigna su responsable"),
+        { status: 403 },
+      );
+    }
+  }
+
+  if (ESTADOS_FINALES.includes(ticketPrevio.estado)) {
+    throw Object.assign(
+      new Error(`No se puede asignar un paso de una solicitud ${ticketPrevio.estado}`),
+      { status: 400 },
+    );
+  }
+
+  // Guard: el área receptora debe aceptar el ticket antes de asignar el primer paso
+  if (!ticketPrevio.aceptadoEn) {
     throw Object.assign(new Error("Debe aceptar el ticket antes de asignar técnico"), {
       status: 400,
     });
   }
 
-  const tecnico = await prisma.usuario.findUnique({ where: { id: tecnicoId } });
+  if (paso.estado !== "PENDIENTE" || paso.tecnicoId !== null) {
+    throw Object.assign(new Error("El paso ya fue asignado o cerrado"), { status: 400 });
+  }
+
+  // Guard de orden: los flujos son DIRECTO (1 paso) o SECUENCIAL. Asignar un paso
+  // posterior con uno anterior abierto hacía que completarPaso resolviera el ticket
+  // con pasos previos sin atender (busca solo pasos con orden mayor).
+  const anteriorAbierto = await prisma.pasoTicket.findFirst({
+    where: { ticketId, orden: { lt: paso.orden }, estado: { notIn: PASO_CERRADO } },
+  });
+  if (anteriorAbierto) {
+    throw Object.assign(new Error(`Primero debe completarse el paso ${anteriorAbierto.orden}`), {
+      status: 400,
+    });
+  }
+
+  const tecnico = await prisma.usuario.findFirst({ where: { id: tecnicoId, activo: true } });
   if (!tecnico) throw Object.assign(new Error("Técnico no encontrado"), { status: 404 });
   if (tecnico.rol !== paso.rolRequerido) {
     throw Object.assign(new Error(`Este paso requiere un ${paso.rolRequerido}`), { status: 400 });
   }
 
-  const estadoAnteriorTicket =
-    (await prisma.ticket.findUnique({ where: { id: ticketId }, select: { estado: true } }))
-      ?.estado ?? "ASIGNADO";
+  const estadoAnteriorTicket = ticketPrevio.estado;
 
   await prisma.pasoTicket.update({
     where: { id: pasoId },

@@ -40,7 +40,7 @@ export const ubicacion = async (req: Request, res: Response, next: NextFunction)
 // ── Honorarios (invitados) — feedback staff P4-12 ──────────────────────────────
 // Personal por honorarios que NO está en el SIRH. Un ADMIN o Mesa de Ayuda lo
 // registra manualmente; luego se autentica por RFC e interactúa igual que un
-// EMPLEADO (máx. 2 tickets activos, ve su historial propio). Necesita teléfono o
+// EMPLEADO (máx. MAX_TICKETS_ACTIVOS_EMPLEADO de @stf/shared, ve su historial propio). Necesita teléfono o
 // correo para poder recibir el OTP de acceso.
 
 export const listarHonorarios = async (_req: Request, res: Response, next: NextFunction) => {

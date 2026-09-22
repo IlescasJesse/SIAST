@@ -203,7 +203,7 @@ export const App = () => {
                 }
               />
               <Route
-                path="/solicitudes/:id"
+                path="/solicitudes/:folio"
                 element={
                   <PageErrorBoundary>
                     <SolicitudDetailPage />

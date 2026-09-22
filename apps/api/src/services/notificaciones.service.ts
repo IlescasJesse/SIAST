@@ -117,7 +117,7 @@ export const emitirTicketAsignado = async (params: {
         prioridad: params.prioridad,
         empleadoNombre: params.empleadoNombre,
         areaLabel: params.areaLabel,
-        url: `${frontendUrl}/solicitudes/${params.ticketId}`,
+        url: `${frontendUrl}/solicitudes/${encodeURIComponent(params.folio)}`,
       });
     })
     .catch((err) => console.error("[WhatsApp] Error al notificar técnico:", err));

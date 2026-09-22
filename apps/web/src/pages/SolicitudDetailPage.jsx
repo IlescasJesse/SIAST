@@ -28,6 +28,8 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
   getSolicitud,
+  getSolicitudPorFolio,
+  rutaSolicitud,
   cambiarEstado,
   asignarSolicitud,
   aceptarSolicitud,
@@ -140,7 +142,10 @@ function getTransicionLabel(estadoActual, estadoSiguiente, categoria) {
 }
 
 export const SolicitudDetailPage = () => {
-  const { id } = useParams();
+  // El parámetro de la URL es el folio legible (TEC-SIS-0023). Links viejos con id
+  // numérico (/solicitudes/10, ya enviados por WhatsApp/correo) se resuelven por id y se
+  // redirigen con replace a la URL por folio.
+  const { folio: folioParam } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const ticketsVersion = useNotifStore((s) => s.ticketsVersion);
@@ -163,10 +168,20 @@ export const SolicitudDetailPage = () => {
   const [dialogReasignar, setDialogReasignar] = useState(false);
   const [subcategoriaSel, setSubcategoriaSel] = useState("");
 
+  // Las mutaciones siguen usando el id interno (la API de acciones es por id).
+  const id = solicitud?.id;
+
   const load = async () => {
     setLoading(true);
     try {
-      const s = await getSolicitud(id);
+      const esIdLegacy = /^\d+$/.test(folioParam ?? "");
+      const s = esIdLegacy
+        ? await getSolicitud(folioParam)
+        : await getSolicitudPorFolio(folioParam);
+      if (esIdLegacy && s?.folio) {
+        navigate(rutaSolicitud(s), { replace: true });
+      }
+      setError("");
       setSolicitud(s);
       // Cargar técnicos filtrados por la categoría de la solicitud
       const tec = await getTecnicos(s.categoria);
@@ -180,7 +195,7 @@ export const SolicitudDetailPage = () => {
 
   useEffect(() => {
     load();
-  }, [id, ticketsVersion]);
+  }, [folioParam, ticketsVersion]);
 
   const handleEstado = async () => {
     setSaving(true);
@@ -330,9 +345,19 @@ export const SolicitudDetailPage = () => {
   // El atajo directo a RESUELTO (saltando EN_PROGRESO) es solo para Mesa de Ayuda/
   // Responsables — coincide con el guard de tickets.service.ts. Los técnicos solo
   // ven RESUELTO cuando el ticket ya está EN_PROGRESO (flujo normal).
-  const transiciones = (TRANSICIONES[solicitud.estado] ?? []).filter(
-    (estado) => estado !== "RESUELTO" || solicitud.estado === "EN_PROGRESO" || puedeTriage,
-  );
+  // Con flujo de pasos (ProcesoDefinicion), ASIGNADO/EN_PROGRESO los fija la
+  // asignación de cada paso y el técnico cierra con "Completar paso": aquí solo
+  // quedan Cancelar y, para Mesa/Responsables, Resolver directo (el backend marca
+  // los pasos abiertos como OMITIDO). Mismo criterio que cambiarEstado en el API.
+  const tieneFlujoPasos = (solicitud.pasos?.length ?? 0) > 0;
+  const transiciones = (TRANSICIONES[solicitud.estado] ?? []).filter((estado) => {
+    if (tieneFlujoPasos) {
+      if (estado === "ASIGNADO" || estado === "EN_PROGRESO") return false;
+      if (estado === "RESUELTO") return puedeTriage;
+    }
+    return estado !== "RESUELTO" || solicitud.estado === "EN_PROGRESO" || puedeTriage;
+  });
+  const solicitudCerrada = ["RESUELTO", "CANCELADO"].includes(solicitud.estado);
   const { pasos, labels } = getPasosYLabels(solicitud.categoria);
   const activeStep = getActiveStep(solicitud.estado, pasos);
   const tecnicosFiltradosPaso = dialogAsignarPaso
@@ -573,7 +598,12 @@ export const SolicitudDetailPage = () => {
                       const esActivo = paso.estado === "EN_PROGRESO";
                       const esCompletado = paso.estado === "COMPLETADO";
                       const esPendiente = paso.estado === "PENDIENTE";
+                      const esOmitido = paso.estado === "OMITIDO";
                       const esMiPaso = esActivo && paso.tecnicoId === user?.id;
+                      // Flujo secuencial: solo se asigna cuando los pasos previos ya cerraron
+                      const anterioresCerrados = solicitud.pasos
+                        .filter((p) => p.orden < paso.orden)
+                        .every((p) => p.estado === "COMPLETADO" || p.estado === "OMITIDO");
 
                       return (
                         <Box
@@ -592,7 +622,7 @@ export const SolicitudDetailPage = () => {
                               : esCompletado
                                 ? "success.50"
                                 : "background.paper",
-                            opacity: esPendiente ? 0.7 : 1,
+                            opacity: esPendiente || esOmitido ? 0.7 : 1,
                           }}
                         >
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
@@ -630,7 +660,9 @@ export const SolicitudDetailPage = () => {
                                   ? "En progreso"
                                   : paso.estado === "COMPLETADO"
                                     ? "Completado"
-                                    : "Pendiente"
+                                    : esOmitido
+                                      ? "Omitido"
+                                      : "Pendiente"
                               }
                               size="small"
                               color={
@@ -688,6 +720,8 @@ export const SolicitudDetailPage = () => {
                           {/* Botón asignar técnico — Admin/Mesa para pasos PENDIENTE */}
                           {puedeAsignarPaso &&
                             !pendienteAceptacion &&
+                            !solicitudCerrada &&
+                            anterioresCerrados &&
                             paso.estado === "PENDIENTE" &&
                             !paso.tecnicoId && (
                               <Button
@@ -749,11 +783,17 @@ export const SolicitudDetailPage = () => {
               {/* Acciones */}
               {canActuar && !pendienteAceptacion && (
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
-                  {ROLES_RESPONSABLE_O_STAFF.includes(user?.rol) && (
-                    <Button size="small" variant="outlined" onClick={() => setDialogTecnico(true)}>
-                      Asignar técnico
-                    </Button>
-                  )}
+                  {ROLES_RESPONSABLE_O_STAFF.includes(user?.rol) &&
+                    !tieneFlujoPasos &&
+                    !solicitudCerrada && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setDialogTecnico(true)}
+                      >
+                        Asignar técnico
+                      </Button>
+                    )}
                   {transiciones.map((estado) => (
                     <Button
                       key={estado}
@@ -1037,7 +1077,9 @@ export const SolicitudDetailPage = () => {
         <DialogContent sx={{ minWidth: 340 }}>
           {tecnicosFiltradosPaso.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              No hay técnicos disponibles con el rol requerido ({dialogAsignarPaso?.rolRequerido}).
+              {`No hay técnicos disponibles con el rol requerido (${dialogAsignarPaso?.rolRequerido}).`}{" "}
+              Si el paso corresponde a otra área de soporte, lo asigna su responsable o Mesa de
+              Ayuda.
             </Typography>
           ) : (
             <FormControl fullWidth sx={{ mt: 1 }}>
