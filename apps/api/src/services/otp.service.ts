@@ -25,6 +25,16 @@ export interface SolicitarOtpResult {
   ok: true;
   hint: string;
   canal: CanalOtp;
+  /** Solo con OTP_DEV_VISIBLE=true (pruebas). Nunca activar de forma permanente. */
+  devCodigo?: string;
+}
+
+/** SEC: exponer el OTP en la respuesta anula la autenticación por RFC. Solo pruebas, opt-in explícito. */
+const OTP_DEV_VISIBLE = process.env.OTP_DEV_VISIBLE === "true";
+if (OTP_DEV_VISIBLE) {
+  console.warn(
+    "[OTP] OTP_DEV_VISIBLE=true — los códigos se devuelven en la respuesta. NO dejar activo.",
+  );
 }
 
 /** Primer acceso: empleado SÍ tiene correo en DB → pedir confirmación (prioridad sobre teléfono) */
@@ -68,13 +78,18 @@ async function generarYEnviarOtp(
   const codigoHash = await bcrypt.hash(codigo, OTP_BCRYPT_ROUNDS);
   await prisma.otpToken.create({ data: { rfc, codigo: codigoHash, expiresAt } });
 
-  if (canal === "email") {
-    await enviarOtpEmail(destino, codigo, nombreCompleto);
-    return { ok: true, hint: maskEmail(destino), canal };
+  const hint = canal === "email" ? maskEmail(destino) : maskTelefono(destino);
+
+  try {
+    if (canal === "email") await enviarOtpEmail(destino, codigo, nombreCompleto);
+    else await enviarOtp(destino, codigo, nombreCompleto);
+  } catch (err) {
+    // En modo pruebas el envío puede fallar (p.ej. WhatsApp caído en prod): el código visible basta
+    if (!OTP_DEV_VISIBLE) throw err;
+    console.warn(`[OTP] Falló el envío por ${canal}, se devuelve devCodigo`);
   }
 
-  await enviarOtp(destino, codigo, nombreCompleto);
-  return { ok: true, hint: maskTelefono(destino), canal };
+  return { ok: true, hint, canal, ...(OTP_DEV_VISIBLE && { devCodigo: codigo }) };
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
