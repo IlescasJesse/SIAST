@@ -757,7 +757,7 @@ export const LoginPage = () => {
               {devCodigo && (
                 <Chip
                   icon={<LockIcon />}
-                  label={`DEV — codigo: ${devCodigo}`}
+                  label={`PRUEBAS — código: ${devCodigo}`}
                   color="warning"
                   variant="outlined"
                   size="small"

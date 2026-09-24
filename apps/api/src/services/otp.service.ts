@@ -8,6 +8,12 @@ import { fetchEmpleadoByRfc, updateTelefonoEnSirh, updateEmailEnSirh } from "./s
 const OTP_TTL_MINUTOS = 10;
 const OTP_BCRYPT_ROUNDS = 10;
 
+/** SEC: SOLO fase de pruebas. Expone el código en la respuesta HTTP. Apagar antes de producción. */
+const OTP_MOSTRAR_EN_UI = process.env.OTP_MOSTRAR_EN_UI === "true";
+if (OTP_MOSTRAR_EN_UI) {
+  console.warn("[OTP] ⚠️ OTP_MOSTRAR_EN_UI activo: los códigos se devuelven en la respuesta HTTP");
+}
+
 /** Canal de entrega del OTP — "email" es alternativa cuando WhatsApp no es viable (feedback staff 2026-08-12) */
 export type CanalOtp = "whatsapp" | "email";
 
@@ -25,6 +31,8 @@ export interface SolicitarOtpResult {
   ok: true;
   hint: string;
   canal: CanalOtp;
+  /** Solo con OTP_MOSTRAR_EN_UI=true (fase de pruebas) */
+  devCodigo?: string;
 }
 
 /** Primer acceso: empleado SÍ tiene correo en DB → pedir confirmación (prioridad sobre teléfono) */
@@ -68,13 +76,29 @@ async function generarYEnviarOtp(
   const codigoHash = await bcrypt.hash(codigo, OTP_BCRYPT_ROUNDS);
   await prisma.otpToken.create({ data: { rfc, codigo: codigoHash, expiresAt } });
 
+  // Fase de pruebas: el código viaja en la respuesta y el envío real no bloquea el flujo
+  // (si el proveedor de correo/WhatsApp falla, el tester igual ve el código en la UI).
+  const extra = OTP_MOSTRAR_EN_UI ? { devCodigo: codigo } : {};
+
   if (canal === "email") {
-    await enviarOtpEmail(destino, codigo, nombreCompleto);
-    return { ok: true, hint: maskEmail(destino), canal };
+    if (OTP_MOSTRAR_EN_UI) {
+      await enviarOtpEmail(destino, codigo, nombreCompleto).catch((e) =>
+        console.warn("[OTP] Envío de correo falló (modo prueba):", e.message),
+      );
+    } else {
+      await enviarOtpEmail(destino, codigo, nombreCompleto);
+    }
+    return { ok: true, hint: maskEmail(destino), canal, ...extra };
   }
 
-  await enviarOtp(destino, codigo, nombreCompleto);
-  return { ok: true, hint: maskTelefono(destino), canal };
+  if (OTP_MOSTRAR_EN_UI) {
+    await enviarOtp(destino, codigo, nombreCompleto).catch((e) =>
+      console.warn("[OTP] Envío de WhatsApp falló (modo prueba):", e.message),
+    );
+  } else {
+    await enviarOtp(destino, codigo, nombreCompleto);
+  }
+  return { ok: true, hint: maskTelefono(destino), canal, ...extra };
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
