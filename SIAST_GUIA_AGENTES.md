@@ -1,5 +1,8 @@
 # 📋 SIAST — GUÍA DE DESPLIEGUE DE AGENTES EN CLAUDE CODE
 
+> ⚠️ **Documento histórico** — este fue el prompt usado para arrancar el proyecto originalmente. La estructura de carpetas que describe (`frontend/`, `backend/`, `database/`, `modelado-3d/` como carpetas separadas) ya no es la actual — ver `README.md`. Los agentes hoy vivos están definidos en `.claude/agents/*.md`.
+
+
 ## Sistema Integral de Atención y Soporte Técnico
 ### Secretaría de Finanzas — Gobierno del Estado de Oaxaca
 ### Edificio Saúl Martínez

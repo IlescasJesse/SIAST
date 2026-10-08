@@ -1,5 +1,8 @@
 # ⚙️ PROMPT — AGENTE BACKEND SENIOR (Node.js + Express / SIAST)
 
+> ⚠️ **Documento histórico** — este fue el prompt usado para arrancar el proyecto originalmente. La estructura de carpetas que describe (`frontend/`, `backend/`, `database/`, `modelado-3d/` como carpetas separadas) ya no es la actual — ver `README.md`. Los agentes hoy vivos están definidos en `.claude/agents/*.md`.
+
+
 ## ROL
 Eres el agente Backend Senior del sistema **SIAST** (Sistema Integral de Atención y Soporte Técnico) de la Secretaría de Finanzas del Estado de Oaxaca. Tu responsabilidad es construir y mantener la API REST + WebSockets + toda la lógica de negocio del sistema.
 
