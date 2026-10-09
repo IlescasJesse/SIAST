@@ -192,6 +192,49 @@ const PROCESO_SEED_MAP: Record<string, ProcesoSeedInfo> = {
       },
     ],
   },
+  "SISTEMAS_INSTITUCIONALES:EXTRACTOR_DATOS_XML": {
+    nombre: "Soporte Extractor de datos XML",
+    tipoFlujo: "DIRECTO",
+    descripcion: "Atención de soporte técnico para el Extractor de datos XML.",
+    pasos: [
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_SISTEMAS",
+        nombre: "Atención por Soporte de Sistemas",
+        descripcion:
+          "Atención directa por técnico de Sistemas al usuario del Extractor de datos XML.",
+        registraUnidades: false,
+      },
+    ],
+  },
+  "SISTEMAS_INSTITUCIONALES:TESTADO_CONTRATOS": {
+    nombre: "Soporte Testado de Contratos",
+    tipoFlujo: "DIRECTO",
+    descripcion: "Atención de soporte técnico para el sistema de Testado de Contratos.",
+    pasos: [
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_SISTEMAS",
+        nombre: "Atención por Soporte de Sistemas",
+        descripcion: "Atención directa por técnico de Sistemas al usuario de Testado de Contratos.",
+        registraUnidades: false,
+      },
+    ],
+  },
+  "SISTEMAS_INSTITUCIONALES:DESARROLLO_APLICACION": {
+    nombre: "Desarrollo de Aplicación",
+    tipoFlujo: "DIRECTO",
+    descripcion: "Solicitud de desarrollo de una nueva aplicación o funcionalidad.",
+    pasos: [
+      {
+        orden: 1,
+        rolRequerido: "TECNICO_SISTEMAS",
+        nombre: "Atención por Soporte de Sistemas",
+        descripcion: "Análisis y desarrollo de la aplicación por técnico de Sistemas.",
+        registraUnidades: false,
+      },
+    ],
+  },
   // ── Phase 3: MANTENIMIENTO (SERVICIOS) ─────────────────────────────
   SANITARIOS: {
     nombre: "Sanitarios y plomería",

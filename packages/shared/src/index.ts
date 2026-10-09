@@ -349,7 +349,7 @@ export const LABEL_SUBCATEGORIA: Record<SubcategoriaTicket, string> = {
 export const DESCRIPCION_SUBCATEGORIA: Record<SubcategoriaTicket, string> = {
   // Tecnologías
   SISTEMAS_INSTITUCIONALES:
-    "Problemas o dudas con los sistemas internos de la Secretaría de Finanzas (SIRH, SIAST u otros).",
+    "Problemas o dudas con los sistemas internos de la Secretaría de Finanzas (SIRH, SIAST, Extractor de datos XML, Testado de Contratos u otros) y solicitudes de desarrollo de aplicaciones.",
   EQUIPOS_DISPOSITIVOS:
     "Solicitudes relacionadas con el equipo de cómputo, impresoras y dispositivos asignados: configuración, mantenimiento preventivo/correctivo, reinstalación y formateo.",
   RED_INTERNET:
@@ -557,12 +557,18 @@ export const SUBTIPO_CUENTAS = {
 export const SUBTIPO_SISTEMAS = {
   SIRH: "SIRH",
   SIAST: "SIAST",
+  EXTRACTOR_DATOS_XML: "EXTRACTOR_DATOS_XML",
+  TESTADO_CONTRATOS: "TESTADO_CONTRATOS",
+  DESARROLLO_APLICACION: "DESARROLLO_APLICACION",
 } as const;
 
 // Arrays con labels para el formulario de nueva solicitud
 export const SUB_TIPO_SISTEMAS = [
   { value: "SIRH", label: "SIRH — Sistema Integral de Recursos Humanos" },
   { value: "SIAST", label: "SIAST — Sistema de Atención y Seguimiento de Tickets" },
+  { value: "EXTRACTOR_DATOS_XML", label: "Extractor de datos XML" },
+  { value: "TESTADO_CONTRATOS", label: "Testado de Contratos" },
+  { value: "DESARROLLO_APLICACION", label: "Desarrollo de Aplicación" },
 ];
 
 export const SUB_TIPO_RED = [

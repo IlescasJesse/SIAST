@@ -282,7 +282,7 @@ export const SolicitudNewPage = () => {
       return;
     }
     if (form.subcategoria === "SISTEMAS_INSTITUCIONALES" && !form.subTipo) {
-      setError("Selecciona el sistema institucional (SIRH o SIAST)");
+      setError("Selecciona el sistema institucional");
       return;
     }
     if (
