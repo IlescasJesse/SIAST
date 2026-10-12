@@ -328,6 +328,8 @@ export const AreasPage = () => {
         esComun: editForm.esComun ?? false,
         tipoComun: editForm.tipoComun ?? null,
         nombrePropio: editForm.nombrePropio ?? null,
+        adscripcionNombre: editForm.adscripcionNombre ?? null,
+        adscripcionNivel: editForm.adscripcionNivel ?? null,
       },
     });
   }, [editForm]);
@@ -745,6 +747,8 @@ export const AreasPage = () => {
           esComun: ch.esComun ?? false,
           tipoComun: ch.tipoComun ?? null,
           nombrePropio: ch.nombrePropio ?? null,
+          adscripcionNombre: ch.adscripcionNombre ?? null,
+          adscripcionNivel: ch.adscripcionNivel ?? null,
         });
       }
       if (invalidas.length > 0) {
@@ -935,6 +939,9 @@ export const AreasPage = () => {
   // tablets (>= breakpoint "sm") ya usan el visor 3D con controles táctiles.
   const muiTheme = useTheme();
   const isMobileView = useMediaQuery(muiTheme.breakpoints.down("sm"));
+  // Tablet (< md, ~900px): no caben a la vez panel de áreas + panel de edición +
+  // minimapa; se oculta el minimapa y el panel de áreas mientras se edita.
+  const isTabletView = useMediaQuery(muiTheme.breakpoints.down("md"));
 
   // Número de áreas válidas (sin solape) en el piso activo
   const areasValidasPiso = areasDelPiso.filter((a) => !conflictIds.has(a.id)).length;
@@ -951,7 +958,9 @@ export const AreasPage = () => {
       sx={{
         position: "relative",
         width: "100%",
-        height: "calc(100vh - 64px)", // 64px = altura AppShell header
+        // 64px = altura AppShell header. dvh descuenta la barra del navegador en tablets.
+        height: "calc(100vh - 64px)",
+        "@supports (height: 100dvh)": { height: "calc(100dvh - 64px)" },
         overflow: "hidden",
       }}
     >
@@ -1445,8 +1454,8 @@ export const AreasPage = () => {
           top: 64,
           zIndex: 15,
           width: 220,
-          maxHeight: "calc(100vh - 160px)",
-          display: "flex",
+          maxHeight: "calc(100% - 96px)",
+          display: isTabletView && editForm ? "none" : "flex",
           flexDirection: "column",
           ...glassSx,
           overflow: "hidden",
@@ -1615,8 +1624,8 @@ export const AreasPage = () => {
             right: 12,
             top: 64,
             zIndex: 15,
-            width: 340,
-            maxHeight: "calc(100vh - 140px)",
+            width: { xs: "calc(100% - 24px)", sm: 340 },
+            maxHeight: "calc(100% - 80px)",
             display: "flex",
             flexDirection: "column",
             ...glassSx,
@@ -1716,7 +1725,7 @@ export const AreasPage = () => {
 
       {/* ── OVERLAY z=12: Minimapa 2D en tiempo real (solo desktop) ── */}
       {/* Reactivo al state `areas`: los eventos live del visor lo mueven en vivo. */}
-      {!isMobileView &&
+      {!isTabletView &&
         (miniMapOpen ? (
           <Box
             sx={{
@@ -2039,7 +2048,11 @@ function EditPanel({
   onMueblesChange,
   glass = false,
 }) {
-  const [adscripcion, setAdscripcion] = useState(null);
+  const [adscripcion, setAdscripcion] = useState(
+    form?.adscripcionNombre
+      ? { nombre: form.adscripcionNombre, nivel: form.adscripcionNivel ?? null }
+      : null,
+  );
   const [modulosExpanded, setModulosExpanded] = useState(false);
   const [addingModulo, setAddingModulo] = useState(false);
   const [muebleForm, setMuebleForm] = useState(MUEBLE_EMPTY);
@@ -2055,6 +2068,8 @@ function EditPanel({
   const handleAdscripcionChange = (_, val) => {
     setAdscripcion(val);
     if (val) setEdit("label", val.nombre);
+    setEdit("adscripcionNombre", val?.nombre ?? null);
+    setEdit("adscripcionNivel", val?.nivel ?? null);
   };
 
   const handleGuardarModulo = async () => {
