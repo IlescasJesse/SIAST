@@ -137,3 +137,13 @@ Repo remoto: `https://github.com/IlescasJesse/SIAST.git`, rama `main`.
 - P3-8 (categoría telefonía + Osticket) — bloqueado, requiere definición con equipo de redes
 - P4-10 (formato de registro redes/dominio) — bloqueado, espera formato de Ramiro
 - P4-13 (nuevo teléfono de Mesa de Ayuda) — trivial, falta el número
+
+## Commits y versionado
+
+Sigue `VERSIONADO.md` al crear commits:
+
+- Sin etiqueta = ARREGLO (correcciones y ajustes pequeños).
+- `[nueva]` = MENOR (funcionalidad nueva dentro de un módulo existente).
+- `[modulo]` = MAYOR (módulo nuevo o cambio que integra/modifica 3+ pantallas).
+- Mensaje en español: `[etiqueta] Verbo + qué + dónde (TICKET)`, un tema por commit.
+- La versión la sube la CI al hacer push (`scripts/release.mjs`): nunca cambies la versión a mano ni edites `CHANGELOG.md`. Corre `git pull --rebase` antes de `git push`.
