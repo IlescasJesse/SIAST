@@ -16,7 +16,8 @@
     "dev:web": "npm run dev -w ./apps/web",
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prepare": "git config pull.rebase true || exit 0"
   },
   "keywords": [
     "nextjs",
