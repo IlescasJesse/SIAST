@@ -25,6 +25,7 @@ import { useNotifStore } from "../store/notificaciones.js";
 import backgroundImg from "../img/background-img.jpg";
 import logoOaxaca from "../img/logo-oaxaca.png";
 import siastLogo from "../img/siast-logo.png";
+import { APP_VERSION } from "../config/version";
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/i;
 
@@ -986,6 +987,10 @@ export const LoginPage = () => {
           }}
         >
           {FormularioLogin}
+          {/* Versión del sistema: discreta, al pie del formulario */}
+          <Typography sx={{ mt: 3, fontSize: 11, color: "text.disabled", letterSpacing: 0.5 }}>
+            SIAST v{APP_VERSION}
+          </Typography>
         </Box>
       </Box>
     </Box>
