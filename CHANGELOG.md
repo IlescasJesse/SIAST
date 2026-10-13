@@ -2,6 +2,10 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.0.1 — 2026-10-13 · ARREGLO
+
+- Corregir Mapa de Áreas: mostrar en el visor 3D las áreas agregadas o dibujadas — Jesse Ilescas (`9184ad0`)
+
 ## v1.0.0 — 2026-10-12
 
 Primera versión numerada (180 commits desde el 2026-03-25):
