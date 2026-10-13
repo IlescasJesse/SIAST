@@ -2,6 +2,10 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.0.2 — 2026-10-13 · ARREGLO
+
+- Corregir visor 3D en el servidor: pedir las áreas por el mismo dominio en vez del puerto 5101 — Jesse Ilescas (`d99838a`)
+
 ## v1.0.1 — 2026-10-13 · ARREGLO
 
 - Corregir Mapa de Áreas: mostrar en el visor 3D las áreas agregadas o dibujadas — Jesse Ilescas (`9184ad0`)

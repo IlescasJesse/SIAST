@@ -1,6 +1,6 @@
 {
   "name": "sistema-tickets-finanzas",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Monorepo MVP para sistema de tickets de finanzas",
   "workspaces": [
