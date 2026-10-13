@@ -22,6 +22,7 @@
  *     HIGHLIGHT_ROOM { roomId }  — al seleccionar área (fallback)
  *     SET_CAMERA_MODE { mode }   — toggle órbita/cenital
  *     SET_EDIT_TOOL { tool }     — toolbar: select | move | draw | resize | delete
+ *     RELOAD_AREAS               — tras cada loadAreas(): el visor relee las áreas de la API
  *   Visor → React (listeners):
  *     ROOM_CLICKED { roomId, floor }    — selección desde el visor
  *     AREA_MOVED   { areaId, gridX1..gridY2, floor, live } — live:true durante el drag
@@ -102,6 +103,7 @@ import {
   deleteMueble,
 } from "../api/catalogos.js";
 import { FloorPlanMobile } from "../components/areas/FloorPlanMobile.jsx";
+import { VIEWER_URL } from "../components/Building3D/BuildingViewer.jsx";
 import { dentroDelEdificio, seSolapan, validarGeometriaArea } from "@stf/shared";
 
 /** AreaEdificio (gridX1..gridY2) → rect { x1, y1, x2, y2 } para la validación compartida */
@@ -345,6 +347,9 @@ export const AreasPage = () => {
       const res = await getAreas();
       const fetched = res.data ?? [];
       setAreas(fetched);
+      // El visor solo lee las áreas al arrancar: avisarle para que muestre las
+      // altas/bajas/cambios recién guardados sin recargar el iframe.
+      sendToVisor("RELOAD_AREAS");
       setPendingChanges((prev) => {
         const cleaned = { ...prev };
         let changed = false;
@@ -380,7 +385,7 @@ export const AreasPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sendToVisor]);
 
   const loadSirh = useCallback(async () => {
     setSirhLoading(true);
@@ -980,7 +985,7 @@ export const AreasPage = () => {
       ) : (
         <iframe
           ref={visor3DRef}
-          src={`${import.meta.env.VITE_VIEWER_URL ?? `http://${window.location.hostname}:5174`}?editor=1`}
+          src={`${VIEWER_URL}?editor=1`}
           title="Visor 3D Edificio"
           onLoad={() => {
             sendToVisor("SET_THEME", { theme: "light" });

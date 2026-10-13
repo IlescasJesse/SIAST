@@ -22,7 +22,13 @@ import {
   setLoginMode as setCameraLoginMode,
   updateLoginCamera,
 } from "./camera.js";
-import { addLabels, updateLabelVisibility, updateRoomLabel, ensureRoomLabel } from "./labels.js";
+import {
+  addLabels,
+  updateLabelVisibility,
+  updateRoomLabel,
+  ensureRoomLabel,
+  removeRoomLabel,
+} from "./labels.js";
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
 import { createComposer, resizeComposer } from "./postprocessing.js";
@@ -174,62 +180,97 @@ const _notifyViewerReady = () => {
   parent?.postMessage({ type: "VIEWER_READY" }, "*");
 };
 
-fetch(`${API_BASE}/api/catalogos/areas`)
-  .then((r) => r.json())
-  .then((json) => {
-    const areas = (json.data ?? []).filter(
-      (a) =>
-        a.activo !== false &&
-        a.gridX1 != null &&
-        a.gridY1 != null &&
-        a.gridX2 != null &&
-        a.gridY2 != null,
-    );
-    if (areas.length === 0) return;
+/** Quita de la escena un área que ya no existe en la API (desactivada o sin mapear). */
+const removeRoom = (areaId) => {
+  const mesh = roomMeshes.get(areaId);
+  if (mesh) {
+    mesh.parent?.remove(mesh);
+    mesh.geometry?.dispose();
+    if (Array.isArray(mesh.material)) mesh.material.forEach((m) => m.dispose());
+    else mesh.material?.dispose();
+    roomMeshes.delete(areaId);
+  }
+  removeRoomLabel(scene, areaId);
+  delete liveRoomMap[areaId];
+};
 
-    console.info(`[SIAST3D] Actualizando ${areas.length} áreas desde API`);
+/**
+ * Sincroniza la escena con /api/catalogos/areas: crea las áreas nuevas,
+ * reconstruye las que cambiaron y quita las que ya no vienen. Corre al
+ * arrancar y cada vez que React manda RELOAD_AREAS (alta/baja/guardado en
+ * el editor de áreas), para no depender de recargar el iframe.
+ */
+const syncAreasFromApi = () =>
+  fetch(`${API_BASE}/api/catalogos/areas`)
+    .then((r) => r.json())
+    .then((json) => {
+      // Respuesta de error (sin data): no tocar la escena
+      if (!Array.isArray(json.data)) return;
+      const areas = json.data.filter(
+        (a) =>
+          a.activo !== false &&
+          a.gridX1 != null &&
+          a.gridY1 != null &&
+          a.gridX2 != null &&
+          a.gridY2 != null,
+      );
 
-    for (const area of areas) {
-      const room = apiAreaToRoom(area);
-      // Actualizar label en el mapa
-      if (liveRoomMap[room.id]) {
-        liveRoomMap[room.id].label = room.label;
+      console.info(`[SIAST3D] Actualizando ${areas.length} áreas desde API`);
+
+      const idsApi = new Set(areas.map((a) => a.id));
+      for (const id of Object.keys(liveRoomMap)) {
+        if (!idsApi.has(id)) removeRoom(id);
       }
-      // Si las coordenadas difieren del rooms.js, reconstruir el mesh
-      const existing = liveRoomMap[room.id];
-      const coordsChanged =
-        !existing ||
-        existing.x1 !== room.x1 ||
-        existing.y1 !== room.y1 ||
-        existing.x2 !== room.x2 ||
-        existing.y2 !== room.y2;
 
-      if (coordsChanged) {
-        rebuildRoomGeometry({
-          areaId: room.id,
-          gridX1: room.x1,
-          gridY1: room.y1,
-          gridX2: room.x2,
-          gridY2: room.y2,
-          floor: room.floor,
-          color: room.color, // color desde la API
-          roomMeshes,
-          floorGroups,
-          roomMap: liveRoomMap,
-        });
-        liveRoomMap[room.id] = { ...room };
+      for (const area of areas) {
+        const room = apiAreaToRoom(area);
+        // Actualizar label en el mapa
+        if (liveRoomMap[room.id]) {
+          liveRoomMap[room.id].label = room.label;
+        }
+        // Si la geometría, el piso o el color difieren de lo que hay en escena,
+        // reconstruir el mesh
+        const existing = liveRoomMap[room.id];
+        const coordsChanged =
+          !existing ||
+          existing.x1 !== room.x1 ||
+          existing.y1 !== room.y1 ||
+          existing.x2 !== room.x2 ||
+          existing.y2 !== room.y2 ||
+          existing.floor !== room.floor ||
+          existing.color !== room.color;
+
+        if (coordsChanged) {
+          rebuildRoomGeometry({
+            areaId: room.id,
+            gridX1: room.x1,
+            gridY1: room.y1,
+            gridX2: room.x2,
+            gridY2: room.y2,
+            floor: room.floor,
+            color: room.color, // color desde la API
+            roomMeshes,
+            floorGroups,
+            roomMap: liveRoomMap,
+          });
+          liveRoomMap[room.id] = { ...room };
+        }
+        // Crear o actualizar la etiqueta flotante del cuarto
+        const mesh = roomMeshes.get(room.id);
+        if (mesh) {
+          // Un área recién creada nace con su id como label (rebuildRoomGeometry)
+          mesh.userData.label = room.label;
+          ensureRoomLabel(scene, room.id, room.label, mesh);
+        } else updateRoomLabel(room.id, room.label);
       }
-      // Crear o actualizar la etiqueta flotante del cuarto
-      const mesh = roomMeshes.get(room.id);
-      if (mesh) ensureRoomLabel(scene, room.id, room.label, mesh);
-      else updateRoomLabel(room.id, room.label);
-    }
 
-    // Cargar muebles de las áreas ya posicionadas (coords reales en liveRoomMap)
-    refreshMuebles(areas.map((a) => ({ id: a.id })));
-  })
-  .catch((err) => console.warn("[SIAST3D] No se pudo cargar áreas desde API:", err.message))
-  .finally(() => _notifyViewerReady());
+      // Cargar muebles de las áreas ya posicionadas (coords reales en liveRoomMap)
+      refreshMuebles(areas.map((a) => ({ id: a.id })));
+    })
+    .catch((err) => console.warn("[SIAST3D] No se pudo cargar áreas desde API:", err.message))
+    .finally(() => _notifyViewerReady());
+
+syncAreasFromApi();
 
 // Lista de rooms actualmente en memoria para labels e info panel
 const allRoomsLive = () => Object.values(liveRoomMap);
@@ -656,9 +697,20 @@ if (EDITOR_MODE) {
 // ════════════════════════════════════════════════════════════
 // postMessage listener (integración con frontend React)
 // ════════════════════════════════════════════════════════════
+// Orígenes aceptados: el propio (build bajo /visor3d/) o cualquier puerto del
+// mismo host (dev: React en <host>:5173 embebe el visor de <host>:5174, sea
+// localhost, siast.local o la IP de la máquina en la red).
+const isAllowedOrigin = (origin) => {
+  if (origin === window.location.origin) return true;
+  try {
+    return new URL(origin).hostname === window.location.hostname;
+  } catch {
+    return false;
+  }
+};
+
 window.addEventListener("message", (e) => {
-  const allowed = ["http://localhost:5173", "http://localhost:5101", window.location.origin];
-  if (!allowed.includes(e.origin)) return;
+  if (!isAllowedOrigin(e.origin)) return;
   const { type, payload } = e.data ?? {};
   if (!type) return;
 
@@ -730,6 +782,10 @@ window.addEventListener("message", (e) => {
         setEditTool(payload.tool);
       }
       break;
+    case "RELOAD_AREAS":
+      // El editor de áreas creó/guardó/desactivó áreas: releer de la API.
+      syncAreasFromApi();
+      break;
     case "FLY_TO_AREA":
       // Transición de cámara suave desde cualquier nivel hasta el área indicada.
       // Payload: { areaId: string }
@@ -746,8 +802,7 @@ window.addEventListener("message", (e) => {
 //   { type: 'siast:updateAreaLabel',    areaId, label }
 //   { type: 'siast:updateAreaGeometry', areaId, gridX1, gridY1, gridX2, gridY2, floor }
 window.addEventListener("message", (event) => {
-  const allowedOrigins = ["http://localhost:5173", "http://localhost:5101", window.location.origin];
-  if (!allowedOrigins.includes(event.origin)) return;
+  if (!isAllowedOrigin(event.origin)) return;
   const msg = event.data ?? {};
 
   if (msg.type === "siast:updateAreaLabel" && msg.areaId && msg.label) {

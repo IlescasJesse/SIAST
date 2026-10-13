@@ -101,8 +101,11 @@ export const updateRoomLabel = (roomId, newLabel) => {
  */
 export const ensureRoomLabel = (scene, roomId, label, mesh) => {
   if (_labels.has(roomId)) {
-    // Solo actualizar el texto
-    redrawSpriteText(_labels.get(roomId), label);
+    // Actualizar el texto y reanclar al mesh (pudo moverse o cambiar de piso)
+    const existing = _labels.get(roomId);
+    redrawSpriteText(existing, label);
+    existing.position.copy(mesh.position);
+    existing.position.y += 2.2;
     return;
   }
   const { sprite } = makeSprite(label, 0);
@@ -113,6 +116,16 @@ export const ensureRoomLabel = (scene, roomId, label, mesh) => {
   sprite.renderOrder = 10;
   scene.add(sprite);
   _labels.set(roomId, sprite);
+};
+
+/** Quita y libera la etiqueta flotante de un cuarto eliminado. */
+export const removeRoomLabel = (scene, roomId) => {
+  const sprite = _labels.get(roomId);
+  if (!sprite) return;
+  scene.remove(sprite);
+  sprite.material.map?.dispose();
+  sprite.material.dispose();
+  _labels.delete(roomId);
 };
 
 export const updateLabelVisibility = (camera, floorGroups, activeFloor) => {

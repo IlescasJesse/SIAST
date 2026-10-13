@@ -2,11 +2,13 @@ import { useEffect, useRef } from "react";
 import { Box } from "@mui/material";
 import { useAuthStore } from "../../store/auth.js";
 
-const VIEWER_URL = (() => {
+export const VIEWER_URL = (() => {
   const envUrl = import.meta.env.VITE_VIEWER_URL;
   // Acepta URL absoluta (http://...) o ruta relativa same-origin (/visor3d/)
   if (envUrl && typeof envUrl === "string" && envUrl.length > 0) return envUrl;
-  return `http://${window.location.hostname}:5174`;
+  // Sin configurar: en dev el visor corre aparte en :5174; en el build se sirve
+  // bajo /visor3d/ del mismo dominio (siast.local o cualquier IP).
+  return import.meta.env.DEV ? `http://${window.location.hostname}:5174` : "/visor3d/";
 })();
 
 /**
