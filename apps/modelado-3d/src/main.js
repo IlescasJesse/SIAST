@@ -34,7 +34,11 @@ import { FurnitureManager, loadMuebles } from "./furniture.js";
 import { createComposer, resizeComposer } from "./postprocessing.js";
 import { initEditor3D, setEditTool, isEditToolIntercepting } from "./editor3d.js";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:5101`;
+// Sin configurar: en dev la API corre aparte en :5101; en el build se usa el
+// mismo dominio (nginx hace proxy de /api/ y el 5101 no está abierto en la red).
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? `http://${window.location.hostname}:5101` : window.location.origin);
 
 // Color fallback por piso cuando la API no trae colorHex
 const FLOOR_COLORS = {
