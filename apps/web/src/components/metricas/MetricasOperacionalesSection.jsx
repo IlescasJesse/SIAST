@@ -115,7 +115,19 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
       })
       .catch(() => {});
     getUsuarios()
-      .then((all) => setTecnicos(all.filter((u) => ROLES_TECNICO.includes(u.rol) && u.activo)))
+      // Además de técnicos: Admin, Mesa de Ayuda y Responsables, que también resuelven.
+      .then((all) =>
+        setTecnicos(
+          all.filter(
+            (u) =>
+              u.activo &&
+              (ROLES_TECNICO.includes(u.rol) ||
+                ROLES_RESPONSABLE.includes(u.rol) ||
+                u.rol === "ADMIN" ||
+                u.rol === "MESA_AYUDA"),
+          ),
+        ),
+      )
       .catch(() => {});
   }, [showGlobal, areaSoporteId]);
 
@@ -174,6 +186,12 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
   ]);
 
   const handleResponsableClick = (row) => {
+    // Filas personales (Admin / Mesa de Ayuda) no tienen área → ir a su detalle.
+    if (row.personal) {
+      setSelectedTecnicoId(row.id);
+      setActiveTab(2);
+      return;
+    }
     setSelectedAreaId(row.areaSoporteId);
     setActiveTab(1);
   };

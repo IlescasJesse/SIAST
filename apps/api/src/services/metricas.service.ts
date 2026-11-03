@@ -352,6 +352,39 @@ export async function obtenerMetricasGlobal(
     }),
   );
 
+  // Admin / Mesa de Ayuda que resolvieron solicitudes ellos mismos en el período:
+  // se listan junto a los responsables, con sus métricas personales (no de área).
+  const staffGlobal = await prisma.usuario.findMany({
+    where: {
+      activo: true,
+      rol: { in: [Rol.ADMIN, Rol.MESA_AYUDA] },
+      ticketsAsignados: { some: { activo: true, estado: "RESUELTO", ...resolucionWhere } },
+    },
+    select: { id: true, nombre: true, apellidos: true, rol: true },
+  });
+  const eficienciaStaff: EficienciaResponsable[] = await Promise.all(
+    staffGlobal.map(async (u) => {
+      const propioWhere = { activo: true, tecnicoId: u.id, ...resolucionWhere };
+      const [resueltos, sla, tiempo] = await Promise.all([
+        prisma.ticket.count({ where: { ...propioWhere, estado: "RESUELTO" } }),
+        calcularSLA(propioWhere),
+        calcularTiempoPromedio(propioWhere),
+      ]);
+      return {
+        id: u.id,
+        nombre: u.nombre,
+        apellidos: u.apellidos,
+        areaNombre: u.rol === Rol.ADMIN ? "Administración" : "Mesa de Ayuda",
+        areaSoporteId: null,
+        personal: true,
+        ticketsResueltos: resueltos,
+        tiempoPromedioHoras: tiempo,
+        slaGlobal: sla,
+      };
+    }),
+  );
+  eficienciaResponsables.push(...eficienciaStaff);
+
   return {
     tipo: "area",
     totalTickets,
@@ -469,8 +502,14 @@ export async function obtenerMetricasPorArea(
     Rol.GESTOR_RECURSOS,
     Rol.GESTOR_INVENTARIO,
   ];
+  // Además de los técnicos, entra cualquier persona del área que tenga solicitudes
+  // a su nombre (ej. el Responsable o Admin que resuelve directo).
   const tecnicos = await prisma.usuario.findMany({
-    where: { activo: true, areaSoporteId: areaId, rol: { notIn: rolesNoTecnico } },
+    where: {
+      activo: true,
+      areaSoporteId: areaId,
+      OR: [{ rol: { notIn: rolesNoTecnico } }, { ticketsAsignados: { some: { activo: true } } }],
+    },
     select: { id: true, nombre: true, apellidos: true, rol: true },
   });
 
@@ -566,14 +605,6 @@ export async function obtenerMetricasPorTecnico(
     return d;
   })();
 
-  const ROLES_TECNICOS_VALIDOS = [
-    "TECNICO_TI",
-    "TECNICO_REDES",
-    "TECNICO_ELECTRICISTA",
-    "TECNICO_PLOMERO",
-    "TECNICO_MOVILIDAD",
-  ];
-
   const tecnico = await prisma.usuario.findUnique({
     where: { id: tecnicoId },
     select: { nombre: true, apellidos: true, areaSoporteId: true, activo: true, rol: true },
@@ -582,8 +613,10 @@ export async function obtenerMetricasPorTecnico(
   if (!tecnico || !tecnico.activo) {
     throw Object.assign(new Error("Técnico no encontrado"), { status: 404 });
   }
-  if (!ROLES_TECNICOS_VALIDOS.includes(tecnico.rol)) {
-    throw Object.assign(new Error("El usuario no es un técnico"), { status: 400 });
+  // Cualquier miembro del staff puede tener métricas: técnicos, y también Admin,
+  // Mesa de Ayuda o Responsables por las solicitudes que resuelven directo.
+  if (tecnico.rol === "EMPLEADO") {
+    throw Object.assign(new Error("El usuario no es personal de soporte"), { status: 400 });
   }
 
   const [

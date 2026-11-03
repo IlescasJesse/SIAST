@@ -833,9 +833,16 @@ export const cambiarEstado = async (
   if (body.estado === "EN_PROGRESO") fechas.fechaInicio = new Date();
   if (body.estado === "RESUELTO") fechas.fechaResolucion = new Date();
 
+  // Resolución directa sin técnico (Admin / Mesa de Ayuda / Responsable): quien la
+  // resuelve queda como técnico, para que cuente en métricas como cualquier técnico.
+  const resolvidoPor =
+    body.estado === "RESUELTO" && !ticket.tecnicoId && user.rol !== "EMPLEADO"
+      ? { tecnicoId: user.id, fechaAsignacion: ticket.fechaAsignacion ?? new Date() }
+      : {};
+
   const updated = await prisma.ticket.update({
     where: { id },
-    data: { estado: body.estado as never, ...fechas },
+    data: { estado: body.estado as never, ...fechas, ...resolvidoPor },
     include: ticketInclude,
   });
 

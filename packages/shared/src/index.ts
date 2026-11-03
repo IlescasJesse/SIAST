@@ -775,7 +775,10 @@ export interface EficienciaResponsable {
   nombre: string;
   apellidos: string;
   areaNombre: string;
-  areaSoporteId: number;
+  /** null en filas personales (Admin / Mesa de Ayuda sin área) */
+  areaSoporteId: number | null;
+  /** true = métricas de la persona (lo que resolvió ella), no de un área */
+  personal?: boolean;
   ticketsResueltos: number;
   tiempoPromedioHoras: number | null;
   slaGlobal: number | null; // porcentaje 0-100, null = sin datos en el período
