@@ -143,6 +143,65 @@ function getTransicionLabel(estadoActual, estadoSiguiente, categoria) {
   return estadoSiguiente;
 }
 
+/** Datos del solicitante en cuatro secciones: nombre, extensión, ubicación y contacto. */
+function DatosSolicitante({ solicitud }) {
+  const emp = solicitud.empleado ?? {};
+  // Correos sin repetir (el del SIRH suele coincidir con el institucional)
+  const correos = [...new Set([emp.correoInstitucional, emp.emailPersonal, emp.email])].filter(
+    Boolean,
+  );
+  const secciones = [
+    {
+      titulo: "Nombre",
+      lineas: [emp.nombreCompleto ?? solicitud.empleadoRfc, emp.puesto],
+      detalle: `RFC ${solicitud.empleadoRfc}`,
+    },
+    { titulo: "Extensión", lineas: [emp.extension || "Sin registrar"] },
+    {
+      titulo: "Ubicación",
+      lineas: [emp.area?.label ?? "Sin registrar", emp.piso && (LABEL_PISO[emp.piso] ?? emp.piso)],
+    },
+    {
+      titulo: "Contacto",
+      lineas: [emp.telefono, ...correos].filter(Boolean).length
+        ? [emp.telefono, ...correos]
+        : ["Sin registrar"],
+    },
+  ];
+  return (
+    <Box sx={{ mb: 2, p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        fontWeight={700}
+        display="block"
+        sx={{ mb: 1, letterSpacing: 0.5 }}
+      >
+        SOLICITANTE
+      </Typography>
+      <Grid container spacing={1.5}>
+        {secciones.map(({ titulo, lineas, detalle }) => (
+          <Grid item xs={12} sm={6} key={titulo}>
+            <Typography variant="caption" color="text.secondary">
+              {titulo}
+            </Typography>
+            {lineas.filter(Boolean).map((linea) => (
+              <Typography key={linea} variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                {linea}
+              </Typography>
+            ))}
+            {detalle && (
+              <Typography variant="caption" color="text.disabled">
+                {detalle}
+              </Typography>
+            )}
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  );
+}
+
 export const SolicitudDetailPage = () => {
   // El parámetro de la URL es el folio legible (TEC-SIS-0023). Links viejos con id
   // numérico (/solicitudes/10, ya enviados por WhatsApp/correo) se resuelven por id y se
@@ -541,10 +600,10 @@ export const SolicitudDetailPage = () => {
                   );
                 })()}
 
+              <DatosSolicitante solicitud={solicitud} />
+
               <Grid container spacing={1} sx={{ mb: 2 }}>
                 {[
-                  ["Empleado", solicitud.empleado?.nombreCompleto ?? solicitud.empleadoRfc],
-                  ["RFC", solicitud.empleadoRfc],
                   ["Área", solicitud.area?.label],
                   ["Piso", LABEL_PISO[solicitud.piso] ?? solicitud.piso],
                   ["Categoría", solicitud.subcategoria?.replace("_", " ")],

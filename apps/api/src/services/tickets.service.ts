@@ -395,10 +395,32 @@ export const crearTicket = async (
   return ticket;
 };
 
+// Detalle: además trae extensión, ubicación y contacto del solicitante para el
+// bloque "Solicitante". Solo aquí (no en listados ni en respuestas de acciones)
+// para no repartir teléfonos y correos personales de más.
+const ticketDetalleInclude = {
+  ...ticketInclude,
+  empleado: {
+    select: {
+      rfc: true,
+      nombreCompleto: true,
+      areaId: true,
+      puesto: true,
+      extension: true,
+      piso: true,
+      area: { select: { label: true } },
+      telefono: true,
+      correoInstitucional: true,
+      emailPersonal: true,
+      email: true,
+    },
+  },
+};
+
 export const obtenerTicket = async (id: number, user: JwtPayload) => {
   const ticket = await prisma.ticket.findFirst({
     where: { id, activo: true },
-    include: ticketInclude,
+    include: ticketDetalleInclude,
   });
 
   if (!ticket) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
