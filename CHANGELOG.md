@@ -2,6 +2,17 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.1.0 — 2026-11-03 · MENOR
+
+- Agregar pruebas unitarias de la API con node:test — Jesse Ilescas (`5e7e72a`)
+- Validar sesión en salas de tiempo real y ocultar comentarios internos al solicitante — Jesse Ilescas (`6c9f033`)
+- Avisos de mantenimiento y ventana de novedades del sistema — Jesse Ilescas (`f87565b`)
+- Mostrar extensión, ubicación y contacto del solicitante en el detalle de la solicitud — Jesse Ilescas (`000dc41`)
+- Contar en métricas las solicitudes que resuelven Admin, Mesa de Ayuda y Responsables — Jesse Ilescas (`9b9d1ef`)
+- Dibujar áreas como polígonos en el Mapa de Áreas y el visor 3D — Jesse Ilescas (`0f24e4d`)
+- Adjuntar capturas y documentos a solicitudes y comentarios — Jesse Ilescas (`a226eb2`)
+- Corregir lectura de empleado del SIRH: elegir el registro correcto del arreglo — Jesse Ilescas (`03326cb`)
+
 ## v1.0.2 — 2026-10-13 · ARREGLO
 
 - Corregir visor 3D en el servidor: pedir las áreas por el mismo dominio en vez del puerto 5101 — Jesse Ilescas (`d99838a`)
