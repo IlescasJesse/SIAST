@@ -1,8 +1,16 @@
 import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../config/database.js";
-import { SUBCATEGORIAS_POR_CATEGORIA, validarGeometriaArea } from "@stf/shared";
+import { Prisma } from "@prisma/client";
+import {
+  SUBCATEGORIAS_POR_CATEGORIA,
+  validarGeometriaArea,
+  cajaDeVertices,
+  esRectangulo,
+  MAX_VERTICES_AREA,
+} from "@stf/shared";
 import { sirhFetch } from "../services/sirhAuth.service.js";
+import { elegirEmpleadoSirh } from "../services/sirh.service.js";
 import type { AuthRequest } from "../types/index.js";
 import {
   esResponsable,
@@ -232,6 +240,42 @@ export const sirhAdscripciones = async (_req: Request, res: Response, next: Next
 
 // ─── Área CRUD ───────────────────────────────────────────────────────────────
 
+// Polígono del área: 3 a MAX_VERTICES_AREA vértices [col, fila]. null = volver a rectángulo.
+const VerticesSchema = z
+  .array(z.tuple([z.number().int().min(0), z.number().int().min(0)]))
+  .min(3)
+  .max(MAX_VERTICES_AREA)
+  .nullable()
+  .optional();
+
+type Vertices = [number, number][];
+
+/**
+ * Normaliza la geometría que se va a guardar: con vértices, gridX1..gridY2 se
+ * recalcula como su caja envolvente (no se confía en la que mande el cliente);
+ * un polígono que resulta ser un rectángulo se guarda sin vértices.
+ */
+const normalizarGeometria = (
+  coords: { gridX1: number; gridY1: number; gridX2: number; gridY2: number },
+  vertices: Vertices | null | undefined,
+): {
+  gridX1: number;
+  gridY1: number;
+  gridX2: number;
+  gridY2: number;
+  vertices: Vertices | null;
+} => {
+  if (!vertices) return { ...coords, vertices: null };
+  const caja = cajaDeVertices(vertices);
+  return {
+    gridX1: caja.x1,
+    gridY1: caja.y1,
+    gridX2: caja.x2,
+    gridY2: caja.y2,
+    vertices: esRectangulo(vertices) ? null : vertices,
+  };
+};
+
 const CreateAreaSchema = z.object({
   id: z
     .string()
@@ -245,6 +289,7 @@ const CreateAreaSchema = z.object({
   gridY1: z.number().int().min(0).optional(),
   gridX2: z.number().int().min(0).optional(),
   gridY2: z.number().int().min(0).optional(),
+  vertices: VerticesSchema,
   esSalaJuntas: z.boolean().optional(),
   esComun: z.boolean().optional(),
   tipoComun: z
@@ -275,6 +320,7 @@ const UpdateAreaSchema = z.object({
   gridY1: z.number().int().min(0).optional(),
   gridX2: z.number().int().min(0).optional(),
   gridY2: z.number().int().min(0).optional(),
+  vertices: VerticesSchema,
   esSalaJuntas: z.boolean().optional(),
   esComun: z.boolean().optional(),
   tipoComun: z
@@ -304,7 +350,13 @@ const UpdateAreaSchema = z.object({
 const validarGeometriaContraDB = async (
   id: string,
   floor: number,
-  coords: { gridX1: number; gridY1: number; gridX2: number; gridY2: number },
+  coords: {
+    gridX1: number;
+    gridY1: number;
+    gridX2: number;
+    gridY2: number;
+    vertices?: Vertices | null;
+  },
 ): Promise<string | null> => {
   const otras = await prisma.areaEdificio.findMany({
     where: {
@@ -324,10 +376,19 @@ const validarGeometriaContraDB = async (
       gridY1: true,
       gridX2: true,
       gridY2: true,
+      vertices: true,
     },
   });
   return validarGeometriaArea(
-    { id, floor, x1: coords.gridX1, y1: coords.gridY1, x2: coords.gridX2, y2: coords.gridY2 },
+    {
+      id,
+      floor,
+      x1: coords.gridX1,
+      y1: coords.gridY1,
+      x2: coords.gridX2,
+      y2: coords.gridY2,
+      vertices: coords.vertices ?? null,
+    },
     otras.map((o) => ({
       id: o.id,
       label: o.label,
@@ -336,6 +397,7 @@ const validarGeometriaContraDB = async (
       y1: o.gridY1 as number,
       x2: o.gridX2 as number,
       y2: o.gridY2 as number,
+      vertices: o.vertices as Vertices | null,
     })),
   );
 };
@@ -361,6 +423,7 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
       gridY1,
       gridX2,
       gridY2,
+      vertices,
       esSalaJuntas,
       esComun,
       tipoComun,
@@ -375,13 +438,13 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    if (gridX1 != null && gridY1 != null && gridX2 != null && gridY2 != null) {
-      const errorGeometria = await validarGeometriaContraDB(id, floor, {
-        gridX1,
-        gridY1,
-        gridX2,
-        gridY2,
-      });
+    let geometria: ReturnType<typeof normalizarGeometria> | null = null;
+    if (vertices || (gridX1 != null && gridY1 != null && gridX2 != null && gridY2 != null)) {
+      geometria = normalizarGeometria(
+        { gridX1: gridX1 ?? 0, gridY1: gridY1 ?? 0, gridX2: gridX2 ?? 0, gridY2: gridY2 ?? 0 },
+        vertices,
+      );
+      const errorGeometria = await validarGeometriaContraDB(id, floor, geometria);
       if (errorGeometria) {
         res.status(400).json({ error: errorGeometria });
         return;
@@ -394,10 +457,11 @@ export const crearArea = async (req: Request, res: Response, next: NextFunction)
         label,
         piso: piso as import("@prisma/client").PisoEdificio,
         floor,
-        gridX1: gridX1 ?? null,
-        gridY1: gridY1 ?? null,
-        gridX2: gridX2 ?? null,
-        gridY2: gridY2 ?? null,
+        gridX1: geometria?.gridX1 ?? gridX1 ?? null,
+        gridY1: geometria?.gridY1 ?? gridY1 ?? null,
+        gridX2: geometria?.gridX2 ?? gridX2 ?? null,
+        gridY2: geometria?.gridY2 ?? gridY2 ?? null,
+        vertices: geometria?.vertices ?? Prisma.DbNull,
         esSalaJuntas: esSalaJuntas ?? false,
         esComun: esComun ?? false,
         tipoComun: (tipoComun ?? null) as import("@prisma/client").TipoAreaComun | null,
@@ -441,6 +505,7 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
       gridY1,
       gridX2,
       gridY2,
+      vertices,
       esSalaJuntas,
       esComun,
       tipoComun,
@@ -459,13 +524,25 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
     const efY2 = gridY2 ?? existente.gridY2;
     const efFloor = floor ?? existente.floor;
 
-    if (efX1 != null && efY1 != null && efX2 != null && efY2 != null) {
-      const errorGeometria = await validarGeometriaContraDB(id, efFloor, {
-        gridX1: efX1,
-        gridY1: efY1,
-        gridX2: efX2,
-        gridY2: efY2,
-      });
+    // Vértices efectivos: los que vengan; si no vienen pero cambió el rectángulo,
+    // el polígono anterior ya no aplica (se vuelve rectángulo); si no cambió
+    // nada de geometría se conservan los guardados.
+    const cambioRect = [gridX1, gridY1, gridX2, gridY2].some((v) => v !== undefined);
+    const efVertices =
+      vertices !== undefined
+        ? vertices
+        : cambioRect
+          ? null
+          : (existente.vertices as Vertices | null);
+    const tocaGeometria = vertices !== undefined || cambioRect;
+
+    let geometria: ReturnType<typeof normalizarGeometria> | null = null;
+    if (efVertices || (efX1 != null && efY1 != null && efX2 != null && efY2 != null)) {
+      geometria = normalizarGeometria(
+        { gridX1: efX1 ?? 0, gridY1: efY1 ?? 0, gridX2: efX2 ?? 0, gridY2: efY2 ?? 0 },
+        efVertices,
+      );
+      const errorGeometria = await validarGeometriaContraDB(id, efFloor, geometria);
       if (errorGeometria) {
         res.status(400).json({ error: errorGeometria });
         return;
@@ -477,10 +554,14 @@ export const actualizarArea = async (req: Request, res: Response, next: NextFunc
       data: {
         ...(label !== undefined && { label }),
         ...(floor !== undefined && { floor, piso: FLOOR_TO_PISO[floor] }),
-        ...(gridX1 !== undefined && { gridX1 }),
-        ...(gridY1 !== undefined && { gridY1 }),
-        ...(gridX2 !== undefined && { gridX2 }),
-        ...(gridY2 !== undefined && { gridY2 }),
+        ...(tocaGeometria &&
+          geometria && {
+            gridX1: geometria.gridX1,
+            gridY1: geometria.gridY1,
+            gridX2: geometria.gridX2,
+            gridY2: geometria.gridY2,
+            vertices: geometria.vertices ?? Prisma.DbNull,
+          }),
         ...(esSalaJuntas !== undefined && { esSalaJuntas }),
         ...(esComun !== undefined && { esComun }),
         // tipoComun y nombrePropio admiten null explícito para borrar el valor
@@ -569,7 +650,8 @@ export const sirhEmpleado = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const emp = (await resp.json()) as SirhEmpleado;
+    // getemployee regresa un arreglo (búsqueda por prefijo): tomar el RFC exacto
+    const emp = elegirEmpleadoSirh(await resp.json(), { rfc }) as SirhEmpleado | null;
 
     if (!emp?._id) {
       res.status(404).json({ error: "RFC no encontrado en SIRH" });

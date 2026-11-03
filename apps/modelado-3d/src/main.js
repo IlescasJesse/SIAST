@@ -28,6 +28,7 @@ import {
   updateRoomLabel,
   ensureRoomLabel,
   removeRoomLabel,
+  setLabelTheme,
 } from "./labels.js";
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
@@ -165,6 +166,8 @@ const apiAreaToRoom = (area) => ({
   y1: area.gridY1,
   x2: area.gridX2,
   y2: area.gridY2,
+  // Polígono (área con esquinas movidas o vértices agregados); null = rectángulo
+  vertices: Array.isArray(area.vertices) && area.vertices.length >= 3 ? area.vertices : null,
   // Usar colorHex de la API si está disponible; fallback a color por piso
   color: hexStrToInt(area.colorHex) ?? FLOOR_COLORS[area.floor ?? 0] ?? 0x78909c,
 });
@@ -241,6 +244,7 @@ const syncAreasFromApi = () =>
           existing.y1 !== room.y1 ||
           existing.x2 !== room.x2 ||
           existing.y2 !== room.y2 ||
+          JSON.stringify(existing.vertices ?? null) !== JSON.stringify(room.vertices) ||
           existing.floor !== room.floor ||
           existing.color !== room.color;
 
@@ -251,6 +255,7 @@ const syncAreasFromApi = () =>
             gridY1: room.y1,
             gridX2: room.x2,
             gridY2: room.y2,
+            vertices: room.vertices,
             floor: room.floor,
             color: room.color, // color desde la API
             roomMeshes,
@@ -522,6 +527,7 @@ window.SIAST3D = {
     // El visor usa tema claro por defecto para integrarse con la UI de SIAST.
     // SET_THEME vía postMessage aún funciona pero el default inicial es siempre "light".
     _currentTheme = theme;
+    setLabelTheme(theme);
 
     if (theme === "dark") {
       // Fondo oscuro: noche
@@ -598,8 +604,9 @@ window.SIAST3D = {
    * @param {number} gridX2
    * @param {number} gridY2
    * @param {number} floor
+   * @param {number[][]|null} [vertices] - polígono (3+ vértices); null/omitido = rectángulo
    */
-  updateAreaGeometry(areaId, gridX1, gridY1, gridX2, gridY2, floor) {
+  updateAreaGeometry(areaId, gridX1, gridY1, gridX2, gridY2, floor, vertices = null) {
     if (!areaId || gridX1 == null || gridY1 == null || gridX2 == null || gridY2 == null) return;
 
     const resolvedFloor = floor ?? liveRoomMap[areaId]?.floor ?? 0;
@@ -610,6 +617,7 @@ window.SIAST3D = {
       gridY1,
       gridX2,
       gridY2,
+      vertices: Array.isArray(vertices) && vertices.length >= 3 ? vertices : null,
       floor: resolvedFloor,
       roomMeshes,
       floorGroups,
@@ -690,8 +698,16 @@ if (EDITOR_MODE) {
     getActiveFloor: () => activeFloor,
     // Aplica la geometría final tras un move/resize válido: reconstruye el
     // mesh (rebuildRoomGeometry + muebles) y reancla el label flotante.
-    applyGeometry: (areaId, rect, floor) => {
-      window.SIAST3D.updateAreaGeometry(areaId, rect.x1, rect.y1, rect.x2, rect.y2, floor);
+    applyGeometry: (areaId, rect, floor, vertices = null) => {
+      window.SIAST3D.updateAreaGeometry(
+        areaId,
+        rect.x1,
+        rect.y1,
+        rect.x2,
+        rect.y2,
+        floor,
+        vertices,
+      );
       const mesh = roomMeshes.get(areaId);
       if (mesh) ensureRoomLabel(scene, areaId, mesh.userData.label, mesh);
     },
@@ -822,6 +838,7 @@ window.addEventListener("message", (event) => {
       msg.gridX2,
       msg.gridY2,
       msg.floor,
+      msg.vertices,
     );
     return;
   }

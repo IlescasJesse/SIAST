@@ -50,11 +50,72 @@ const createRoomMaterial = (color) =>
     envMapIntensity: 0.7,
   });
 
+/**
+ * Geometría del volumen de un área, centrada en el centro de su caja x1..y2.
+ * Sin vértices es la caja de siempre; con `vertices` (3+ puntos de cuadrícula,
+ * área poligonal) se extruye el polígono a la altura del cuarto.
+ */
+const createRoomGeometry = (room) => {
+  const { w, d } = gridToScene(room.x1, room.y1, room.x2, room.y2);
+  if (!room.vertices?.length) return new THREE.BoxGeometry(w - WALL_T, ROOM_H, d - WALL_T);
+
+  const gcx = (room.x1 + room.x2) / 2;
+  const gcy = (room.y1 + room.y2) / 2;
+  const shape = new THREE.Shape(
+    room.vertices.map(([gx, gy]) => new THREE.Vector2((gx - gcx) * CELL, (gy - gcy) * CELL)),
+  );
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: ROOM_H, bevelEnabled: false });
+  // El shape vive en XY y se extruye en +Z: acostarlo para que la fila de
+  // cuadrícula quede en −Z (misma convención que gridToScene) y la altura en Y.
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, -ROOM_H / 2, 0);
+  return geo;
+};
+
+const createRoomEdges = (geo) => {
+  const line = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo),
+    new THREE.LineBasicMaterial({ color: 0x5b7390, transparent: true, opacity: 0.45 }),
+  );
+  line.userData = { isEdge: true };
+  return line;
+};
+
+/**
+ * Cambia la forma de un mesh de área ya existente sin destruirlo (vista previa
+ * en vivo del editor al arrastrar un vértice o una arista).
+ *
+ * @param {THREE.Mesh} mesh
+ * @param {{x1:number,y1:number,x2:number,y2:number,vertices?:number[][]|null}} shape
+ */
+export const setRoomMeshShape = (mesh, shape) => {
+  const { px, pz } = gridToScene(shape.x1, shape.y1, shape.x2, shape.y2);
+  const geo = createRoomGeometry(shape);
+  mesh.geometry.dispose();
+  mesh.geometry = geo;
+  mesh.position.x = px;
+  mesh.position.z = pz;
+  mesh.scale.set(1, 1, 1);
+  Object.assign(mesh.userData, {
+    x1: shape.x1,
+    y1: shape.y1,
+    x2: shape.x2,
+    y2: shape.y2,
+    vertices: shape.vertices ?? null,
+  });
+  // Rehacer el borde conservando su material (opacidad/visibilidad del nivel de vista)
+  const edge = mesh.children.find((c) => c.userData?.isEdge);
+  if (edge) {
+    edge.geometry.dispose();
+    edge.geometry = new THREE.EdgesGeometry(geo);
+  }
+};
+
 export const createRoomMesh = (room) => {
-  const { w, d, px, pz } = gridToScene(room.x1, room.y1, room.x2, room.y2);
+  const { px, pz } = gridToScene(room.x1, room.y1, room.x2, room.y2);
   const yBase = FLOOR_Y(room.floor);
 
-  const geo = new THREE.BoxGeometry(w - WALL_T, ROOM_H, d - WALL_T);
+  const geo = createRoomGeometry(room);
   const mat = createRoomMaterial(room.color);
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -67,18 +128,13 @@ export const createRoomMesh = (room) => {
     y1: room.y1,
     x2: room.x2,
     y2: room.y2,
+    vertices: room.vertices ?? null,
     baseColor: room.color,
     baseOpacity: ROOM_BASE_OPACITY, // usado por setFloorVisibility para restaurar vidrio
   };
 
   // Borde sutil que define la silueta del volumen acrílico.
-  const edges = new THREE.EdgesGeometry(geo);
-  const line = new THREE.LineSegments(
-    edges,
-    new THREE.LineBasicMaterial({ color: 0x5b7390, transparent: true, opacity: 0.45 }),
-  );
-  line.userData = { isEdge: true };
-  mesh.add(line);
+  mesh.add(createRoomEdges(geo));
 
   return mesh;
 };
@@ -112,23 +168,19 @@ const createSlab = (floor) => {
   //     FRENTE (Z+): patio abierto — el usuario lo recorre para ingresar.
   //     FONDO  (Z-): conector + entrada principal del edificio.
   //
-  //   Ala izquierda : cols  0→13 (ancho 13), filas 0→27 (prof 27)
-  //                   cx = (0+13)/2  - 16 = -9.5  |  cz = 0
-  //                   Cubre X: -16 a -3   Z: -13.5 a +13.5
+  //   Misma huella que ZONAS_EDIFICIO en @stf/shared (validación de áreas),
+  //   que el exterior (exterior.js) y que el minimapa 2D:
   //
-  //   Ala derecha   : cols 19→32 (ancho 13), filas 0→27 (prof 27)
-  //                   cx = (19+32)/2 - 16 = +9.5  |  cz = 0
-  //                   Cubre X: +3 a +16   Z: -13.5 a +13.5
+  //   Ala izquierda : cols  0→14 (ancho 14), filas 0→27 (prof 27)
+  //                   cx = (0+14)/2 - 16 = -9  |  cz = 0   →  X: -16 a -2
   //
-  //   Conector+entrada : cols 13→19 (ancho 6), filas 16→27 (prof 11) — zona de FONDO
-  //                   cx = (13+19)/2 - 16 = 0  |  cz = -((16+27)/2 - 13.5) = -8
-  //                   Cubre X: -3 a +3   Z: -13.5 a -2.5
+  //   Ala derecha   : cols 18→32 (ancho 14), filas 0→27 (prof 27)
+  //                   cx = (18+32)/2 - 16 = +9  |  cz = 0  →  X: +2 a +16
   //
-  //   Vano/patio abierto de la U: cols 13→19, filas 0→16 (frente central). Sin losa.
+  //   Conector+entrada : cols 14→18 (ancho 4), filas 14→27 (prof 13) — zona de FONDO
+  //                   cx = 0  |  cz = -((14+27)/2 - 13.5) = -7  →  Z: -13.5 a -0.5
   //
-  //   Juntura ala↔conector: en X las alas cierran en col 13/19 (X=±3) donde el
-  //   conector empieza — sin hueco. En Z el conector llega hasta -13.5, igual
-  //   que las alas — sin hueco en la base del fondo.
+  //   Vano/patio abierto de la U: cols 14→18, filas 0→14 (frente central). Sin losa.
   const mat = createSlabMaterial();
   const edgeMat = new THREE.LineBasicMaterial({
     color: 0x9aa6b2,
@@ -151,9 +203,9 @@ const createSlab = (floor) => {
     group.add(mesh);
   };
 
-  addSlab(13, 27, -9.5, 0); // ala izquierda      cols  0→13, filas  0→27
-  addSlab(13, 27, 9.5, 0); // ala derecha         cols 19→32, filas  0→27
-  addSlab(6, 11, 0, -8); // conector + entrada  cols 13→19, filas 16→27 (fondo)
+  addSlab(14, 27, -9, 0); // ala izquierda      cols  0→14, filas  0→27
+  addSlab(14, 27, 9, 0); // ala derecha         cols 18→32, filas  0→27
+  addSlab(4, 13, 0, -7); // conector + entrada  cols 14→18, filas 14→27 (fondo)
 
   return group;
 };
@@ -266,6 +318,7 @@ export const buildBuildingFromData = (rooms) => {
  * @param {Map}     params.floorGroups — mapa floor → Group
  * @param {object}  params.roomMap     — ROOM_MAP en memoria (se muta in-place)
  * @param {number}  [params.color]     — color hex del nuevo mesh (usa el original si omite)
+ * @param {number[][]|null} [params.vertices] — polígono de 3+ vértices (null = rectángulo)
  */
 export const rebuildRoomGeometry = ({
   areaId,
@@ -278,6 +331,7 @@ export const rebuildRoomGeometry = ({
   floorGroups,
   roomMap,
   color,
+  vertices = null,
 }) => {
   const oldMesh = roomMeshes.get(areaId);
   const existingRoom = roomMap[areaId];
@@ -308,6 +362,7 @@ export const rebuildRoomGeometry = ({
     y1: gridY1,
     x2: gridX2,
     y2: gridY2,
+    vertices,
     color: resolvedColor,
   };
 
@@ -326,6 +381,7 @@ export const rebuildRoomGeometry = ({
       y1: gridY1,
       x2: gridX2,
       y2: gridY2,
+      vertices,
       floor,
       color: resolvedColor,
     });
@@ -607,30 +663,30 @@ const createWallSegment = (from, to, axis, yBase) => {
  *
  * Polígono de la U derivado de las coordenadas de las losas (world-space):
  *
- *   Ala izquierda : X [-16, -3]  Z [-13.5, +13.5]
- *   Ala derecha   : X [+3, +16]  Z [-13.5, +13.5]
- *   Conector      : X [-3, +3]   Z [-13.5, -2.5]
- *   Patio abierto : X [-3, +3]   Z [-2.5, +13.5]  ← sin losa, abierto al frente
+ *   Ala izquierda : X [-16, -2]  Z [-13.5, +13.5]
+ *   Ala derecha   : X [+2, +16]  Z [-13.5, +13.5]
+ *   Conector      : X [-2, +2]   Z [-13.5, -0.5]
+ *   Patio abierto : X [-2, +2]   Z [-0.5, +13.5]  ← sin losa, abierto al frente
  *
  * Se recorre el contorno EXTERIOR completo (incluye los lados del patio que
  * miran al vano abierto, pues también son exteriores con ventanas):
  *
- *   Frente ala izq   (Z+, X -16→-3)       eje X
- *   Frente patio izq (X=-3, Z -2.5→+13.5) eje Z  ← cara interior del patio
- *   Frente patio dch (X=+3, Z +13.5→-2.5) eje Z  ← cara interior del patio
- *   Frente ala dch   (Z+, X +3→+16)        eje X
+ *   Frente ala izq   (Z+, X -16→-2)       eje X
+ *   Frente patio izq (X=-2, Z -0.5→+13.5) eje Z  ← cara interior del patio
+ *   Frente patio dch (X=+2, Z +13.5→-0.5) eje Z  ← cara interior del patio
+ *   Frente ala dch   (Z+, X +2→+16)        eje X
  *   Lado dch exterior (X=+16, Z +13.5→-13.5) eje Z
- *   Fondo dch   (Z-, X +16→+3)             eje X
- *   Fondo conector dch (X=+3, Z -2.5→-13.5) eje Z
- *   Fondo conector (Z=−13.5, X +3→-3)      eje X
- *   Fondo conector izq (X=-3, Z -13.5→-2.5) eje Z
- *   Fondo izq   (Z-, X -3→-16)             eje X
+ *   Fondo dch   (Z-, X +16→+2)             eje X
+ *   Fondo conector dch (X=+2, Z -0.5→-13.5) eje Z
+ *   Fondo conector (Z=−13.5, X +2→-2)      eje X
+ *   Fondo conector izq (X=-2, Z -13.5→-0.5) eje Z
+ *   Fondo izq   (Z-, X -2→-16)             eje X
  *   Lado izq exterior (X=-16, Z -13.5→+13.5) eje Z
  *   (cierra en el punto de inicio)
  *
  * Retorna un THREE.Group con userData.isWall=true.
  *
- * @param {number} floor — índice de piso (0=PB, 1, 2, 3)
+ * @param {number} floor — índice de piso (0=PB, 1, 2, 2)
  * @returns {THREE.Group}
  */
 export const createPerimeterWalls = (floor) => {
@@ -645,28 +701,28 @@ export const createPerimeterWalls = (floor) => {
   // Los tramos cubren el perímetro EXTERIOR completo de la U,
   // incluyendo las caras que dan al patio (vano frontal abierto).
   const SEGS = [
-    // Frente del ala izquierda (Z = +13.5, de X=-16 a X=-3)
-    { x1: -16, z1: 13.5, x2: -3, z2: 13.5, axis: "x" },
-    // Cara izquierda del vano del patio (X = -3, de Z=-2.5 a Z=+13.5)
-    { x1: -3, z1: -2.5, x2: -3, z2: 13.5, axis: "z" },
-    // Cara derecha del vano del patio (X = +3, de Z=+13.5 a Z=-2.5)
-    { x1: 3, z1: 13.5, x2: 3, z2: -2.5, axis: "z" },
-    // Frente del conector (Z = -2.5, de X=-3 a X=+3) — cierra el fondo del patio
-    { x1: -3, z1: -2.5, x2: 3, z2: -2.5, axis: "x" },
-    // Frente del ala derecha (Z = +13.5, de X=+3 a X=+16)
-    { x1: 3, z1: 13.5, x2: 16, z2: 13.5, axis: "x" },
+    // Frente del ala izquierda (Z = +13.5, de X=-16 a X=-2)
+    { x1: -16, z1: 13.5, x2: -2, z2: 13.5, axis: "x" },
+    // Cara izquierda del vano del patio (X = -2, de Z=-0.5 a Z=+13.5)
+    { x1: -2, z1: -0.5, x2: -2, z2: 13.5, axis: "z" },
+    // Cara derecha del vano del patio (X = +2, de Z=+13.5 a Z=-0.5)
+    { x1: 2, z1: 13.5, x2: 2, z2: -0.5, axis: "z" },
+    // Frente del conector (Z = -0.5, de X=-2 a X=+2) — cierra el fondo del patio
+    { x1: -2, z1: -0.5, x2: 2, z2: -0.5, axis: "x" },
+    // Frente del ala derecha (Z = +13.5, de X=+2 a X=+16)
+    { x1: 2, z1: 13.5, x2: 16, z2: 13.5, axis: "x" },
     // Lado exterior derecho (X = +16, de Z=+13.5 a Z=-13.5)
     { x1: 16, z1: 13.5, x2: 16, z2: -13.5, axis: "z" },
-    // Fondo ala derecha (Z = -13.5, de X=+16 a X=+3)
-    { x1: 16, z1: -13.5, x2: 3, z2: -13.5, axis: "x" },
-    // Lado interior derecho del conector (X = +3, de Z=-2.5 a Z=-13.5)
-    { x1: 3, z1: -2.5, x2: 3, z2: -13.5, axis: "z" },
-    // Fondo del conector (Z = -13.5, de X=+3 a X=-3) — cierra el fondo del conector
-    { x1: 3, z1: -13.5, x2: -3, z2: -13.5, axis: "x" },
-    // Lado interior izquierdo del conector (X = -3, de Z=-13.5 a Z=-2.5)
-    { x1: -3, z1: -13.5, x2: -3, z2: -2.5, axis: "z" },
-    // Fondo ala izquierda (Z = -13.5, de X=-3 a X=-16)
-    { x1: -3, z1: -13.5, x2: -16, z2: -13.5, axis: "x" },
+    // Fondo ala derecha (Z = -13.5, de X=+16 a X=+2)
+    { x1: 16, z1: -13.5, x2: 2, z2: -13.5, axis: "x" },
+    // Lado interior derecho del conector (X = +2, de Z=-0.5 a Z=-13.5)
+    { x1: 2, z1: -0.5, x2: 2, z2: -13.5, axis: "z" },
+    // Fondo del conector (Z = -13.5, de X=+2 a X=-2) — cierra el fondo del conector
+    { x1: 2, z1: -13.5, x2: -2, z2: -13.5, axis: "x" },
+    // Lado interior izquierdo del conector (X = -2, de Z=-13.5 a Z=-0.5)
+    { x1: -2, z1: -13.5, x2: -2, z2: -0.5, axis: "z" },
+    // Fondo ala izquierda (Z = -13.5, de X=-2 a X=-16)
+    { x1: -2, z1: -13.5, x2: -16, z2: -13.5, axis: "x" },
     // Lado exterior izquierdo (X = -16, de Z=-13.5 a Z=+13.5)
     { x1: -16, z1: -13.5, x2: -16, z2: 13.5, axis: "z" },
   ];

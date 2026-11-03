@@ -113,6 +113,13 @@ export const AreaEdificioSchema = z.object({
   gridY1: z.number().int().nullable().optional(),
   gridX2: z.number().int().nullable().optional(),
   gridY2: z.number().int().nullable().optional(),
+  // Polígono de 3 a 12 vértices [col, fila]; null = rectángulo gridX1..gridY2
+  vertices: z
+    .array(z.tuple([z.number().int(), z.number().int()]))
+    .min(3)
+    .max(12)
+    .nullable()
+    .optional(),
   // @deprecated — usar esComun + tipoComun = "SALA_JUNTAS"
   esSalaJuntas: z.boolean().optional(),
   esComun: z.boolean().optional(),

@@ -23,26 +23,27 @@ const CELL = 14;
 const SVG_W = COLS * CELL; // 448
 const SVG_H = ROWS * CELL; // 378
 
-// Misma lógica de flip que AreaGridEditor con flipY=true
-// y=0 → fila 0 (frente/entrada), y crece hacia abajo (filas altas = posterior)
-// flipY=true ⟹ svgY = gridY1 * CELL  (sin invertir)
-const toSvgY = (gridY) => gridY * CELL;
+// Misma orientación que el visor 3D visto desde su cámara: columna 0 a la
+// izquierda y fila 0 (frente/entrada) ABAJO, con las filas altas (posterior)
+// hacia arriba. Con la fila 0 arriba la planta salía en espejo respecto al 3D.
+const toSvgY = (gridY) => (ROWS - gridY) * CELL;
 const toSvgX = (gridX) => gridX * CELL;
 
 // ── Huella U del edificio ─────────────────────────────────────────────────────
+// Misma huella que ZONAS_EDIFICIO en @stf/shared (y que el exterior del visor 3D):
 // Ala Izq: cols 0→14, filas 0→27
-// Conector: cols 14→19, filas 14→27  (fondo)
-// Ala Der:  cols 19→32, filas 0→27
-// Patio:    cols 14→19, filas 0→14  (frente — vacío)
+// Conector: cols 14→18, filas 14→27  (fondo)
+// Ala Der:  cols 18→32, filas 0→27
+// Patio:    cols 14→18, filas 0→14  (frente — vacío; queda abajo en pantalla)
 const BUILDING_PATH = (() => {
-  const c = (x, y) => `${x * CELL},${y * CELL}`;
+  const c = (x, y) => `${toSvgX(x)},${toSvgY(y)}`;
   // Recorre el perímetro exterior en U, sentido horario
   return [
     `M ${c(0, 0)}`,
     `L ${c(14, 0)}`,
     `L ${c(14, 14)}`, // bajamos hasta inicio del conector (frente del patio)
-    `L ${c(19, 14)}`,
-    `L ${c(19, 0)}`,
+    `L ${c(18, 14)}`,
+    `L ${c(18, 0)}`,
     `L ${c(32, 0)}`,
     `L ${c(32, 27)}`,
     `L ${c(0, 27)}`,
@@ -81,9 +82,9 @@ const colorForIdx = (i) => PALETTE[i % PALETTE.length];
 
 // ── Zonas para etiquetas contextuales ─────────────────────────────────────────
 const ZONE_LABELS = [
-  { label: "Ala Izquierda", x: 7 * CELL, y: 6 * CELL, color: "#3f51b5" },
-  { label: "Conector", x: 16.5 * CELL, y: 22 * CELL, color: "#7b1fa2" },
-  { label: "Ala Derecha", x: 25.5 * CELL, y: 6 * CELL, color: "#0277bd" },
+  { label: "Ala Izquierda", x: 7 * CELL, y: toSvgY(6), color: "#3f51b5" },
+  { label: "Conector", x: 16 * CELL, y: toSvgY(22), color: "#7b1fa2" },
+  { label: "Ala Derecha", x: 25 * CELL, y: toSvgY(6), color: "#0277bd" },
 ];
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -104,7 +105,13 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
     .filter((a) => a.gridX1 != null && a.gridY1 != null && a.gridX2 != null && a.gridY2 != null)
     .map((area) => {
       const x = toSvgX(area.gridX1);
-      const y = toSvgY(area.gridY1);
+      // Fila 0 abajo: el borde superior del rect en pantalla es la fila mayor
+      const y = toSvgY(area.gridY2);
+      // Área poligonal (esquinas movidas en el editor): se dibuja su contorno real
+      const puntos =
+        area.vertices?.length >= 3
+          ? area.vertices.map(([gx, gy]) => `${toSvgX(gx)},${toSvgY(gy)}`).join(" ")
+          : null;
       const w = Math.max(CELL, (area.gridX2 - area.gridX1) * CELL);
       const h = Math.max(CELL, (area.gridY2 - area.gridY1) * CELL);
       const isSelected = area.id === selectedId;
@@ -124,33 +131,56 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
           aria-pressed={isSelected}
         >
           {/* Halo de selección */}
-          {isSelected && (
+          {isSelected &&
+            (puntos ? (
+              <polygon
+                points={puntos}
+                fill="none"
+                stroke={fillColor}
+                strokeWidth={7}
+                strokeOpacity={0.45}
+                strokeLinejoin="round"
+                style={{ pointerEvents: "none" }}
+              />
+            ) : (
+              <rect
+                x={x - 2}
+                y={y - 2}
+                width={w + 4}
+                height={h + 4}
+                rx={5}
+                fill="none"
+                stroke={fillColor}
+                strokeWidth={3}
+                strokeOpacity={0.45}
+                style={{ pointerEvents: "none" }}
+              />
+            ))}
+
+          {puntos ? (
+            <polygon
+              points={puntos}
+              fill={fillColor}
+              fillOpacity={fillOpacity}
+              stroke={isSelected ? fillColor : isCommon ? "#00838f" : fillColor}
+              strokeWidth={isSelected ? 2.5 : 1.5}
+              strokeLinejoin="round"
+              style={{ touchAction: "manipulation" }}
+            />
+          ) : (
             <rect
-              x={x - 2}
-              y={y - 2}
-              width={w + 4}
-              height={h + 4}
-              rx={5}
-              fill="none"
-              stroke={fillColor}
-              strokeWidth={3}
-              strokeOpacity={0.45}
-              style={{ pointerEvents: "none" }}
+              x={x}
+              y={y}
+              width={w}
+              height={h}
+              fill={fillColor}
+              fillOpacity={fillOpacity}
+              stroke={isSelected ? fillColor : isCommon ? "#00838f" : fillColor}
+              strokeWidth={isSelected ? 2.5 : 1.5}
+              rx={2}
+              style={{ touchAction: "manipulation" }}
             />
           )}
-
-          <rect
-            x={x}
-            y={y}
-            width={w}
-            height={h}
-            fill={fillColor}
-            fillOpacity={fillOpacity}
-            stroke={isSelected ? fillColor : isCommon ? "#00838f" : fillColor}
-            strokeWidth={isSelected ? 2.5 : 1.5}
-            rx={2}
-            style={{ touchAction: "manipulation" }}
-          />
 
           {/* Label — solo si hay espacio */}
           {w > 18 && h > 10 && fontSize > 4 && (
@@ -241,8 +271,8 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
       {/* Patio abierto — relleno diferenciado */}
       <rect
         x={14 * CELL}
-        y={0}
-        width={5 * CELL}
+        y={toSvgY(14)}
+        width={4 * CELL}
         height={14 * CELL}
         fill="rgba(180,220,180,0.25)"
         stroke="rgba(80,140,80,0.30)"
@@ -250,8 +280,8 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         strokeDasharray="4,3"
       />
       <text
-        x={16.5 * CELL}
-        y={7 * CELL}
+        x={16 * CELL}
+        y={toSvgY(7)}
         fontSize={7}
         textAnchor="middle"
         dominantBaseline="middle"
@@ -259,7 +289,7 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         fontWeight={700}
         letterSpacing={1}
         style={{ userSelect: "none", pointerEvents: "none" }}
-        transform={`rotate(-90 ${16.5 * CELL} ${7 * CELL})`}
+        transform={`rotate(-90 ${16 * CELL} ${toSvgY(7)})`}
       >
         PATIO
       </text>
@@ -297,7 +327,7 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         letterSpacing={1}
         style={{ userSelect: "none", pointerEvents: "none" }}
       >
-        ▲ FRENTE / ENTRADA
+        ▲ POSTERIOR
       </text>
       <text
         x={SVG_W / 2}
@@ -310,7 +340,7 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         letterSpacing={1}
         style={{ userSelect: "none", pointerEvents: "none" }}
       >
-        ▼ POSTERIOR
+        ▼ FRENTE / ENTRADA
       </text>
     </svg>
   );

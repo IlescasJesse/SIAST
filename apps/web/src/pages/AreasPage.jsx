@@ -25,10 +25,14 @@
  *     RELOAD_AREAS               — tras cada loadAreas(): el visor relee las áreas de la API
  *   Visor → React (listeners):
  *     ROOM_CLICKED { roomId, floor }    — selección desde el visor
- *     AREA_MOVED   { areaId, gridX1..gridY2, floor, live } — live:true durante el drag
+ *     AREA_MOVED   { areaId, gridX1..gridY2, vertices, floor, live } — live:true durante el drag
  *                    (solo actualiza state para el minimapa); live:false al soltar
  *                    (valida solape + entra a pendingChanges vía handleMove)
- *     AREA_RESIZED { areaId, gridX1..gridY2, floor, live } — igual que AREA_MOVED
+ *     AREA_RESIZED { areaId, gridX1..gridY2, vertices, floor, live } — igual que AREA_MOVED.
+ *                    `vertices` = polígono (3–12 puntos) cuando se movió una sola esquina
+ *                    (las demás quedan ancladas) o se agregó/quitó un vértice; null si
+ *                    el área sigue rectangular.
+ *                    Con vértices, gridX1..gridY2 es su caja envolvente.
  *     AREA_DRAWN   { gridX1..gridY2, floor } — abre el modal "Nueva Área" con coords
  *                    prellenadas; el visor NO crea el área
  *     AREA_DELETE_REQUEST { areaId, label, floor } — abre confirmación de desactivar
@@ -36,7 +40,7 @@
  *   El visor solo valida la huella del edificio; el solape entre áreas se valida
  *   aquí. Si el rect final (live:false) solapa otra área del piso se revierte a
  *   las coords originales y se re-sincroniza el visor con
- *   SIAST3D.updateAreaGeometry(areaId, x1, y1, x2, y2, floor).
+ *   SIAST3D.updateAreaGeometry(areaId, x1, y1, x2, y2, floor, vertices).
  */
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -115,7 +119,11 @@ const areaToRect = (a) => ({
   y1: a.gridY1,
   x2: a.gridX2,
   y2: a.gridY2,
+  vertices: a.vertices ?? null,
 });
+
+/** Los vértices de dos áreas son iguales (null = rectángulo). */
+const mismosVertices = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -325,6 +333,7 @@ export const AreasPage = () => {
         gridY1: Number(editForm.gridY1),
         gridX2: Number(editForm.gridX2),
         gridY2: Number(editForm.gridY2),
+        vertices: editForm.vertices ?? null,
         floor: editForm.floor,
         esSalaJuntas: editForm.esSalaJuntas ?? false,
         esComun: editForm.esComun ?? false,
@@ -362,6 +371,7 @@ export const AreasPage = () => {
             p.gridY1 === area.gridY1 &&
             p.gridX2 === area.gridX2 &&
             p.gridY2 === area.gridY2 &&
+            mismosVertices(p.vertices, area.vertices) &&
             p.floor === area.floor &&
             (p.esSalaJuntas ?? false) === (area.esSalaJuntas ?? false) &&
             (p.esComun ?? false) === (area.esComun ?? false) &&
@@ -459,6 +469,7 @@ export const AreasPage = () => {
         y1: coords.gridY1,
         x2: coords.gridX2,
         y2: coords.gridY2,
+        vertices: coords.vertices ?? null,
       })
     )
       return;
@@ -473,6 +484,7 @@ export const AreasPage = () => {
         y1: coords.gridY1,
         x2: coords.gridX2,
         y2: coords.gridY2,
+        vertices: coords.vertices ?? null,
       })
     )
       return;
@@ -492,6 +504,7 @@ export const AreasPage = () => {
         original.gridX2,
         original.gridY2,
         floor,
+        original.vertices ?? null,
       );
     } catch {
       // cross-origin: el visor se re-sincroniza en el próximo fetch/rebuild
@@ -546,7 +559,8 @@ export const AreasPage = () => {
       if (type === "AREA_MOVED" || type === "AREA_RESIZED") {
         const { areaId, gridX1, gridY1, gridX2, gridY2, floor, live } = payload ?? {};
         if (!areaId) return;
-        const coords = { gridX1, gridY1, gridX2, gridY2 };
+        const vertices = payload.vertices ?? null;
+        const coords = { gridX1, gridY1, gridX2, gridY2, vertices };
         const areaState = areasRef.current.find((a) => a.id === areaId);
         if (!areaState) return;
         const areaFloor = areaState.floor ?? floor ?? 0;
@@ -559,6 +573,7 @@ export const AreasPage = () => {
               gridY1: areaState.gridY1,
               gridX2: areaState.gridX2,
               gridY2: areaState.gridY2,
+              vertices: areaState.vertices ?? null,
             };
           }
           // Solo state → el minimapa 2D se mueve en tiempo real; sin pendingChanges
@@ -576,7 +591,8 @@ export const AreasPage = () => {
           original.gridX1 === gridX1 &&
           original.gridY1 === gridY1 &&
           original.gridX2 === gridX2 &&
-          original.gridY2 === gridY2
+          original.gridY2 === gridY2 &&
+          mismosVertices(original.vertices, vertices)
         ) {
           revertGeometry(areaId, original, areaFloor);
           return;
@@ -589,7 +605,8 @@ export const AreasPage = () => {
           areaState.gridX1 === gridX1 &&
           areaState.gridY1 === gridY1 &&
           areaState.gridX2 === gridX2 &&
-          areaState.gridY2 === gridY2
+          areaState.gridY2 === gridY2 &&
+          mismosVertices(areaState.vertices, vertices)
         )
           return;
 
@@ -601,6 +618,7 @@ export const AreasPage = () => {
           y1: gridY1,
           x2: gridX2,
           y2: gridY2,
+          vertices,
         };
         const overlaps = areasRef.current.some(
           (a) =>
@@ -610,12 +628,7 @@ export const AreasPage = () => {
             a.gridX1 != null &&
             seSolapan(rect, areaToRect(a)),
         );
-        const fueraDeHuella = !dentroDelEdificio({
-          x1: gridX1,
-          y1: gridY1,
-          x2: gridX2,
-          y2: gridY2,
-        });
+        const fueraDeHuella = !dentroDelEdificio(rect);
 
         if ((overlaps || fueraDeHuella) && original) {
           revertGeometry(areaId, original, areaFloor);
@@ -747,6 +760,7 @@ export const AreasPage = () => {
           gridY1: ch.gridY1,
           gridX2: ch.gridX2,
           gridY2: ch.gridY2,
+          vertices: ch.vertices ?? null,
           floor: ch.floor,
           esSalaJuntas: ch.esSalaJuntas,
           esComun: ch.esComun ?? false,
@@ -926,8 +940,13 @@ export const AreasPage = () => {
   };
 
   const setNueva = (k, v) => setNuevaForm((prev) => ({ ...prev, [k]: v }));
+  // Teclear X1..Y2 a mano redefine el área como rectángulo: se descarta su polígono
   const setEdit = (k, v) =>
-    setEditForm((prev) => (prev ? { ...prev, [k]: v, _dirty: true } : prev));
+    setEditForm((prev) =>
+      prev
+        ? { ...prev, [k]: v, ...(k.startsWith("grid") && { vertices: null }), _dirty: true }
+        : prev,
+    );
 
   // ── Areas filtradas según piso activo ────────────────────────────────────
 
@@ -967,6 +986,12 @@ export const AreasPage = () => {
         height: "calc(100vh - 64px)",
         "@supports (height: 100dvh)": { height: "calc(100dvh - 64px)" },
         overflow: "hidden",
+        // Pantallas táctiles: objetivos de toque más grandes en los overlays
+        "@media (pointer: coarse)": {
+          "& .MuiButton-root": { minHeight: 40 },
+          "& .MuiIconButton-root": { minWidth: 40, minHeight: 40 },
+          "& .MuiListItem-root": { minHeight: 44 },
+        },
       }}
     >
       {/* ── FONDO: iframe visor 3D (desktop) o FloorPlanMobile (mobile) ── */}
@@ -1407,7 +1432,8 @@ export const AreasPage = () => {
           {
             tool: "resize",
             icon: <HighlightAltIcon sx={{ fontSize: 17 }} />,
-            label: "Redimensionar",
+            label:
+              "Dar forma — arrastra un vértice (los demás quedan fijos) o un lado; clic en el marcador de un lado agrega un vértice; doble clic en un vértice lo quita",
           },
           {
             tool: "delete",
@@ -1436,6 +1462,7 @@ export const AreasPage = () => {
                   borderRadius: "6px",
                   width: 34,
                   height: 34,
+                  "@media (pointer: coarse)": { width: 46, height: 46 },
                   transition: "all 0.15s ease",
                   "&:hover": {
                     bgcolor: isActive ? activeBg : hoverBg,
@@ -1456,6 +1483,7 @@ export const AreasPage = () => {
         sx={{
           position: "absolute",
           left: 60,
+          "@media (pointer: coarse)": { left: 74 },
           top: 64,
           zIndex: 15,
           width: 220,
@@ -1714,6 +1742,11 @@ export const AreasPage = () => {
         >
           TOOL: {activeTool.toUpperCase()}
         </Typography>
+        {activeTool === "resize" && (
+          <Typography variant="caption" sx={{ fontSize: 10, color: "#9d2449", fontWeight: 600 }}>
+            Clic en un marcador para ver sus acciones
+          </Typography>
+        )}
 
         {/* Contador de áreas válidas / solapes */}
         <Typography variant="caption" sx={{ fontSize: 10, color: "rgba(30,10,18,0.45)" }}>

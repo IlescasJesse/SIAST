@@ -284,6 +284,9 @@ model AreaEdificio {
   gridY1 Int? // fila inicio
   gridX2 Int? // columna fin
   gridY2 Int? // fila fin
+  // Polígono del área: 3 a 12 vértices [[col,fila],…] en orden de recorrido. null =
+  // rectángulo gridX1..gridY2. Con valor, gridX1..gridY2 es su caja envolvente.
+  vertices Json?
 
   // Vinculación con adscripción SIRH (opcional, asignada desde el editor)
   adscripcionNombre String? @db.VarChar(200)
