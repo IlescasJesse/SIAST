@@ -53,7 +53,7 @@ export const syncStatus: SyncStatus = {
 // Tipos del payload SIRH
 // ============================================================
 
-interface SirhEmpleado {
+export interface SirhEmpleado {
   _id: string;
   RFC?: string;
   NOMBRES?: string;
@@ -479,6 +479,27 @@ function buildEmpleadoData(emp: SirhEmpleado) {
   };
 }
 
+// `GET /api/personal/getemployee/:rfc` de SIRH regresa un ARREGLO, no un objeto:
+// busca por prefijo (`^RFC`) en RFC o CURP dentro de PLANTILLA, PLANTILLA_FORANEA
+// y GAFETES_TEMPO, así que puede traer varios registros. Elegimos el correcto:
+// por `_id` exacto si lo tenemos, si no por RFC exacto. Nunca "el primero".
+export function elegirEmpleadoSirh(
+  data: unknown,
+  criterio: { sirhId?: string; rfc?: string },
+): SirhEmpleado | null {
+  const lista = (Array.isArray(data) ? data : data ? [data] : []) as SirhEmpleado[];
+  const conDatos = lista.filter((e) => e && typeof e === "object" && e._id);
+
+  if (criterio.sirhId) {
+    return conDatos.find((e) => String(e._id) === criterio.sirhId) ?? null;
+  }
+  if (criterio.rfc) {
+    const rfcUp = criterio.rfc.toUpperCase().trim();
+    return conDatos.find((e) => e.RFC?.toUpperCase().trim() === rfcUp) ?? null;
+  }
+  return null;
+}
+
 async function resolveAreaId(areaId: string): Promise<AreaMapping> {
   const exists = await prisma.areaEdificio.findFirst({ where: { id: areaId, activo: true } });
   if (exists) return { areaId, piso: exists.piso };
@@ -641,8 +662,7 @@ export async function fetchEmpleadoByRfc(rfc: string): Promise<boolean> {
   try {
     const resp = await sirhFetch(`/api/personal/getemployee/${encodeURIComponent(rfcUp)}`);
     if (resp.ok) {
-      const data = (await resp.json()) as SirhEmpleado;
-      if (data?._id && data?.RFC) emp = data;
+      emp = elegirEmpleadoSirh(await resp.json(), { rfc: rfcUp });
     } else if (resp.status !== 404) {
       console.warn(
         `[SIRH] Error ${resp.status} buscando RFC ${rfcUp} — intentando con plantilla completa`,
@@ -690,114 +710,111 @@ export async function fetchEmpleadoByRfc(rfc: string): Promise<boolean> {
 // lado — no es un $set parcial seguro). Para no borrar esas 3
 // fechas en cada actualización de teléfono/correo, las leemos
 // primero y las reenviamos tal cual junto con el campo nuevo.
+//
+// Si no se pueden leer (error, 403/404, registro no encontrado),
+// regresa null y NO se debe llamar a updateEmployee: mandar el
+// update sin fechas equivale a borrarlas.
 // ============================================================
 
-async function fetchFechasParaPreservar(rfc: string): Promise<{
-  FECHA_NAC?: string;
-  FECHA_INGRESO?: string;
-  FECHA_NOMBRAMIENTO?: string;
-}> {
+interface FechasSirh {
+  FECHA_NAC: string | null;
+  FECHA_INGRESO: string | null;
+  FECHA_NOMBRAMIENTO: string | null;
+}
+
+async function fetchFechasParaPreservar(rfc: string, sirhId: string): Promise<FechasSirh | null> {
   try {
     const resp = await sirhFetch(`/api/personal/getemployee/${encodeURIComponent(rfc)}`);
-    if (!resp.ok) return {};
-    const emp = (await resp.json()) as SirhEmpleado;
+    if (!resp.ok) {
+      console.error(
+        `[SIRH] No se pudieron leer fechas a preservar para RFC ${rfc} — getemployee respondió ${resp.status}`,
+      );
+      return null;
+    }
+    const emp = elegirEmpleadoSirh(await resp.json(), { sirhId });
+    if (!emp) {
+      console.error(
+        `[SIRH] getemployee de RFC ${rfc} no trajo el registro con sirhId ${sirhId} — no se pueden preservar fechas`,
+      );
+      return null;
+    }
+    // Se mandan explícitas (también si son null) para que SIRH las deje igual.
     return {
-      FECHA_NAC: emp.FECHA_NAC,
-      FECHA_INGRESO: emp.FECHA_INGRESO,
-      FECHA_NOMBRAMIENTO: emp.FECHA_NOMBRAMIENTO,
+      FECHA_NAC: emp.FECHA_NAC ?? null,
+      FECHA_INGRESO: emp.FECHA_INGRESO ?? null,
+      FECHA_NOMBRAMIENTO: emp.FECHA_NOMBRAMIENTO ?? null,
     };
   } catch (err) {
-    console.warn(
+    console.error(
       `[SIRH] No se pudieron leer fechas a preservar para RFC ${rfc}:`,
       (err as Error).message,
     );
-    return {};
+    return null;
   }
 }
 
 // ============================================================
-// Actualizar TEL_PERSONAL en SIRH — se llama cuando el empleado
-// confirma o cambia su teléfono en el primer acceso
+// Actualiza un solo campo de contacto en SIRH (TEL_PERSONAL o
+// EMAIL) reenviando las fechas para que no se borren.
 // ============================================================
 
-export async function updateTelefonoEnSirh(
+async function actualizarCampoEnSirh(
+  rfc: string,
+  sirhId: string,
+  campo: "TEL_PERSONAL" | "EMAIL",
+  valor: string,
+): Promise<boolean> {
+  if (!SIRH_ENABLED) return false;
+
+  try {
+    const fechas = await fetchFechasParaPreservar(rfc, sirhId);
+    if (!fechas) {
+      console.error(
+        `[SIRH] ${campo} NO enviado a SIRH (sirhId ${sirhId}) — sin fechas que preservar, se cancela para no borrarlas`,
+      );
+      return false;
+    }
+
+    const resp = await sirhFetch("/api/personal/updateEmployee", {
+      method: "POST",
+      body: JSON.stringify({
+        data: {
+          _id: sirhId,
+          [campo]: valor,
+          ...fechas,
+        },
+      }),
+    });
+
+    if (resp.ok) {
+      console.log(`[SIRH] ${campo} actualizado para sirhId ${sirhId} → ${valor}`);
+      return true;
+    }
+
+    const body = await resp.text().catch(() => "");
+    console.error(
+      `[SIRH] FALLO al actualizar ${campo} (sirhId ${sirhId}) — updateEmployee respondió ${resp.status}: ${body}`,
+    );
+    return false;
+  } catch (err) {
+    console.error(
+      `[SIRH] FALLO al actualizar ${campo} (sirhId ${sirhId}):`,
+      (err as Error).message,
+    );
+    return false;
+  }
+}
+
+// Se llama cuando el empleado confirma o cambia su teléfono (primer acceso / perfil)
+export function updateTelefonoEnSirh(
   rfc: string,
   sirhId: string,
   telefono: string,
 ): Promise<boolean> {
-  if (!SIRH_ENABLED) return false;
-
-  try {
-    const fechas = await fetchFechasParaPreservar(rfc);
-
-    const resp = await sirhFetch("/api/personal/updateEmployee", {
-      method: "POST",
-      body: JSON.stringify({
-        data: {
-          _id: sirhId,
-          TEL_PERSONAL: telefono,
-          ...fechas,
-        },
-      }),
-    });
-
-    if (resp.ok) {
-      console.log(`[SIRH] TEL_PERSONAL actualizado para sirhId ${sirhId} → ${telefono}`);
-      return true;
-    }
-
-    const body = await resp.text().catch(() => "");
-    console.error(
-      `[SIRH] FALLO al actualizar TEL_PERSONAL (sirhId ${sirhId}) — updateEmployee respondió ${resp.status}: ${body}`,
-    );
-    return false;
-  } catch (err) {
-    console.error(
-      `[SIRH] FALLO al actualizar TEL_PERSONAL (sirhId ${sirhId}):`,
-      (err as Error).message,
-    );
-    return false;
-  }
+  return actualizarCampoEnSirh(rfc, sirhId, "TEL_PERSONAL", telefono);
 }
 
-// ============================================================
-// Actualizar EMAIL en SIRH — se llama cuando el empleado
-// confirma o cambia su correo en el primer acceso / perfil
-// ============================================================
-
-export async function updateEmailEnSirh(
-  rfc: string,
-  sirhId: string,
-  email: string,
-): Promise<boolean> {
-  if (!SIRH_ENABLED) return false;
-
-  try {
-    const fechas = await fetchFechasParaPreservar(rfc);
-
-    const resp = await sirhFetch("/api/personal/updateEmployee", {
-      method: "POST",
-      body: JSON.stringify({
-        data: {
-          _id: sirhId,
-          EMAIL: email,
-          ...fechas,
-        },
-      }),
-    });
-
-    if (resp.ok) {
-      console.log(`[SIRH] EMAIL actualizado para sirhId ${sirhId} → ${email}`);
-      return true;
-    }
-
-    const body = await resp.text().catch(() => "");
-    console.error(
-      `[SIRH] FALLO al actualizar EMAIL (sirhId ${sirhId}) — updateEmployee respondió ${resp.status}: ${body}`,
-    );
-    return false;
-  } catch (err) {
-    console.error(`[SIRH] FALLO al actualizar EMAIL (sirhId ${sirhId}):`, (err as Error).message);
-    return false;
-  }
+// Se llama cuando el empleado confirma o cambia su correo (primer acceso / perfil)
+export function updateEmailEnSirh(rfc: string, sirhId: string, email: string): Promise<boolean> {
+  return actualizarCampoEnSirh(rfc, sirhId, "EMAIL", email);
 }
