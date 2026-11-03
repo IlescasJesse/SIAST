@@ -42,6 +42,8 @@ import {
 import { getTecnicos, getDisponibilidadTecnico } from "../api/catalogos.js";
 import { StatusChip } from "../components/common/StatusChip.jsx";
 import { PriorityChip } from "../components/common/PriorityChip.jsx";
+import { useAdjuntos, AdjuntosSelector, AdjuntosLista } from "../components/common/Adjuntos.jsx";
+import { avisar } from "../store/dialogs.js";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
 import { useAuthStore } from "../store/auth.js";
 import { useNotifStore } from "../store/notificaciones.js";
@@ -154,6 +156,7 @@ export const SolicitudDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [comentario, setComentario] = useState("");
+  const adjuntosComentario = useAdjuntos();
   const [dialogEstado, setDialogEstado] = useState(null);
   const [dialogTecnico, setDialogTecnico] = useState(false);
   const [tecnicoSel, setTecnicoSel] = useState("");
@@ -274,12 +277,19 @@ export const SolicitudDetailPage = () => {
 
   const handleComentario = async (e) => {
     e.preventDefault();
-    if (!comentario.trim()) return;
+    const { archivos } = adjuntosComentario;
+    if (!comentario.trim() && archivos.length === 0) return;
     setSaving(true);
     try {
-      await agregarComentario(id, comentario);
+      await agregarComentario(id, comentario.trim(), false, archivos);
       setComentario("");
+      adjuntosComentario.limpiar();
       load();
+    } catch (err) {
+      avisar({
+        mensaje: err.response?.data?.error ?? "No se pudo enviar el comentario",
+        severidad: "error",
+      });
     } finally {
       setSaving(false);
     }
@@ -441,6 +451,12 @@ export const SolicitudDetailPage = () => {
               >
                 {solicitud.descripcion}
               </Typography>
+
+              {/* Capturas / documentos adjuntos al crear la solicitud */}
+              <AdjuntosLista
+                adjuntos={(solicitud.adjuntos ?? []).filter((a) => a.comentarioId == null)}
+                sx={{ mb: 2 }}
+              />
 
               {/* Equipamiento/materiales solicitados (recursosAdicionales — JSON serializado) */}
               {solicitud.recursosAdicionales &&
@@ -880,31 +896,54 @@ export const SolicitudDetailPage = () => {
                           {format(new Date(c.createdAt), "dd/MM HH:mm", { locale: es })}
                         </Typography>
                       </Box>
-                      <Typography variant="body2">{c.texto}</Typography>
+                      {c.texto && (
+                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                          {c.texto}
+                        </Typography>
+                      )}
+                      <AdjuntosLista
+                        adjuntos={(solicitud.adjuntos ?? []).filter((a) => a.comentarioId === c.id)}
+                        sx={{ mt: 0.75 }}
+                      />
                     </Box>
                   </Box>
                 ))}
               </Box>
 
               {canComentar && (
-                <Box component="form" onSubmit={handleComentario} sx={{ display: "flex", gap: 1 }}>
-                  <TextField
-                    value={comentario}
-                    onChange={(e) => setComentario(e.target.value)}
-                    placeholder="Agregar comentario..."
-                    size="small"
-                    fullWidth
-                    multiline
-                    maxRows={3}
-                  />
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    disabled={!comentario.trim() || saving}
-                    sx={{ alignSelf: "flex-end" }}
-                  >
-                    Enviar
-                  </Button>
+                <Box
+                  component="form"
+                  onSubmit={handleComentario}
+                  onPaste={adjuntosComentario.onPaste}
+                  sx={{ display: "flex", flexDirection: "column", gap: 1 }}
+                >
+                  <AdjuntosSelector adjuntos={adjuntosComentario} soloPreview />
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
+                    <AdjuntosSelector
+                      adjuntos={adjuntosComentario}
+                      compacto
+                      soloBoton
+                      disabled={saving}
+                    />
+                    <TextField
+                      value={comentario}
+                      onChange={(e) => setComentario(e.target.value)}
+                      placeholder="Agregar comentario... (Ctrl+V pega una captura)"
+                      size="small"
+                      fullWidth
+                      multiline
+                      maxRows={3}
+                    />
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      disabled={
+                        (!comentario.trim() && adjuntosComentario.archivos.length === 0) || saving
+                      }
+                    >
+                      Enviar
+                    </Button>
+                  </Box>
                 </Box>
               )}
             </CardContent>

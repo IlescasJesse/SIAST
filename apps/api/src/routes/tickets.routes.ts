@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as ctrl from "../controllers/tickets.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { requireRol } from "../middleware/roles.middleware.js";
+import { subirAdjuntos } from "../middleware/upload.middleware.js";
 
 const router = Router();
 
@@ -23,8 +24,13 @@ router.get(
 );
 // Detalle por folio legible (TEC-SIS-0023) — debe ir antes de "/:id".
 router.get("/folio/:folio", ctrl.obtenerPorFolio);
+// Descarga de un adjunto (valida alcance sobre su solicitud) — antes de "/:id".
+router.get("/adjuntos/:adjuntoId", ctrl.descargarAdjunto);
 router.get("/:id", ctrl.obtener);
 router.delete("/:id", requireRol("ADMIN", "MESA_AYUDA"), ctrl.eliminar);
+// Adjuntos de la solicitud (capturas / documentos al crearla). Cualquier rol con
+// acceso de lectura a la solicitud; el alcance se valida en el servicio.
+router.post("/:id/adjuntos", subirAdjuntos, ctrl.adjuntar);
 
 router.patch(
   "/:id/asignar",
@@ -123,6 +129,7 @@ router.post(
     "GESTOR_RECURSOS",
     "GESTOR_INVENTARIO",
   ),
+  subirAdjuntos,
   ctrl.comentar,
 );
 router.patch(

@@ -14,6 +14,7 @@ import {
   verificarLecturaTicket,
   subcategoriasGestor,
 } from "./alcance.service.js";
+import { adjuntoSelect, datosAdjuntos, validarFirmas } from "./adjuntos.service.js";
 
 const SUBCATEGORIAS_VALIDAS = new Set(Object.values(SubcategoriaTicket));
 const CATEGORIAS_VALIDAS = new Set(Object.values(CategoriaTicket));
@@ -156,6 +157,8 @@ const ticketInclude = {
     orderBy: { createdAt: "asc" as const },
     include: { usuario: { select: { nombre: true, apellidos: true, rol: true } } },
   },
+  // Todos los adjuntos de la solicitud; el frontend los agrupa por comentarioId
+  adjuntos: { orderBy: { id: "asc" as const }, select: adjuntoSelect },
   pasos: {
     orderBy: { orden: "asc" as const },
     include: { tecnico: { select: { id: true, nombre: true, apellidos: true, rol: true } } },
@@ -860,8 +863,10 @@ export const cambiarEstado = async (
 
 export const agregarComentario = async (
   ticketId: number,
-  body: { texto: string; esInterno?: boolean },
+  // multipart (con adjuntos) manda esInterno como texto; JSON como booleano
+  body: { texto?: string; esInterno?: boolean | string },
   user: JwtPayload,
+  archivos: Express.Multer.File[] = [],
 ) => {
   const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, activo: true } });
   if (!ticket) throw Object.assign(new Error("Solicitud no encontrada"), { status: 404 });
@@ -869,14 +874,34 @@ export const agregarComentario = async (
   // Mismo alcance que la lectura: no se comenta en solicitudes que el rol no puede ver.
   await verificarLecturaTicket(ticketId, user);
 
-  return prisma.comentario.create({
-    data: {
-      ticketId,
-      texto: body.texto,
-      esInterno: body.esInterno ?? false,
-      usuarioId: user.id,
-    },
-    include: { usuario: { select: { nombre: true, apellidos: true, rol: true } } },
+  // El texto es opcional solo si el comentario lleva adjuntos
+  const texto = typeof body.texto === "string" ? body.texto.trim() : "";
+  if (!texto && archivos.length === 0) {
+    throw Object.assign(new Error("El comentario no puede estar vacío"), { status: 400 });
+  }
+  await validarFirmas(archivos);
+
+  return prisma.$transaction(async (tx) => {
+    const comentario = await tx.comentario.create({
+      data: {
+        ticketId,
+        texto,
+        esInterno: body.esInterno === true || body.esInterno === "true",
+        usuarioId: user.id,
+      },
+    });
+    if (archivos.length > 0) {
+      await tx.adjunto.createMany({
+        data: datosAdjuntos(ticketId, comentario.id, archivos, user),
+      });
+    }
+    return tx.comentario.findUniqueOrThrow({
+      where: { id: comentario.id },
+      include: {
+        usuario: { select: { nombre: true, apellidos: true, rol: true } },
+        adjuntos: { orderBy: { id: "asc" }, select: adjuntoSelect },
+      },
+    });
   });
 };
 

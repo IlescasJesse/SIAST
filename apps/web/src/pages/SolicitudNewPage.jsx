@@ -49,7 +49,9 @@ import ChairIcon from "@mui/icons-material/Chair";
 import DescriptionIcon from "@mui/icons-material/Description";
 import SearchIcon from "@mui/icons-material/Search";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import { createSolicitud, rutaSolicitud } from "../api/solicitudes.js";
+import { createSolicitud, rutaSolicitud, subirAdjuntos } from "../api/solicitudes.js";
+import { useAdjuntos, AdjuntosSelector } from "../components/common/Adjuntos.jsx";
+import { avisar } from "../store/dialogs.js";
 import { getAreas } from "../api/catalogos.js";
 import { useAuthStore } from "../store/auth.js";
 import { BuildingViewer } from "../components/Building3D/BuildingViewer.jsx";
@@ -172,6 +174,7 @@ export const SolicitudNewPage = () => {
   const [horaInicio, setHoraInicio] = useState("");
   const [horaFin, setHoraFin] = useState("");
 
+  const adjuntos = useAdjuntos();
   const [form, setForm] = useState({
     asunto: "",
     descripcion: "",
@@ -305,7 +308,23 @@ export const SolicitudNewPage = () => {
         recursosAdicionales,
         subTipo: form.subTipo || undefined,
       });
-      navigate(rutaSolicitud(result.ticket ?? result));
+      const ticket = result.ticket ?? result;
+      // La solicitud ya existe: si fallan los adjuntos se avisa, pero no se
+      // bloquea (reintentar crearía una solicitud duplicada).
+      if (adjuntos.archivos.length > 0) {
+        try {
+          await subirAdjuntos(ticket.id, adjuntos.archivos);
+        } catch (errAdjuntos) {
+          avisar({
+            mensaje: `La solicitud se creó, pero no se pudieron adjuntar los archivos: ${
+              errAdjuntos.response?.data?.error ?? "error de conexión"
+            }`,
+            severidad: "warning",
+            duracion: 8000,
+          });
+        }
+      }
+      navigate(rutaSolicitud(ticket));
     } catch (err) {
       setError(err.response?.data?.error ?? "Error al crear la solicitud");
     } finally {
@@ -364,7 +383,7 @@ export const SolicitudNewPage = () => {
             </Card>
           )}
 
-          <Card component="form" onSubmit={handleSubmit}>
+          <Card component="form" onSubmit={handleSubmit} onPaste={adjuntos.onPaste}>
             <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {error && <Alert severity="error">{error}</Alert>}
 
@@ -577,6 +596,8 @@ export const SolicitudNewPage = () => {
                 inputProps={{ maxLength: 500 }}
                 helperText={`${form.descripcion.length}/500`}
               />
+
+              <AdjuntosSelector adjuntos={adjuntos} disabled={loading} />
 
               {/* ── Campos adicionales para SALA_JUNTAS ── */}
               {form.subcategoria === "SALA_JUNTAS" && (

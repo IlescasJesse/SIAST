@@ -1,6 +1,8 @@
 import type { Response, NextFunction } from "express";
 import type { AuthRequest } from "../types/index.js";
 import * as ticketsService from "../services/tickets.service.js";
+import * as adjuntosService from "../services/adjuntos.service.js";
+import { archivosDe } from "../middleware/upload.middleware.js";
 
 const parseId = (param: string | string[]): number =>
   parseInt(Array.isArray(param) ? param[0] : param, 10);
@@ -106,13 +108,56 @@ export const cambiarEstado = async (req: AuthRequest, res: Response, next: NextF
 };
 
 export const comentar = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const archivos = archivosDe(req);
   try {
     const comentario = await ticketsService.agregarComentario(
       parseId(req.params.id),
-      req.body,
+      req.body ?? {},
       req.user!,
+      archivos,
     );
     res.status(201).json({ comentario });
+  } catch (err) {
+    // Comentario rechazado: no dejar huérfanos en disco los archivos ya recibidos
+    await adjuntosService.eliminarArchivos(archivos);
+    next(err);
+  }
+};
+
+export const adjuntar = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const archivos = archivosDe(req);
+  try {
+    const adjuntos = await adjuntosService.adjuntarASolicitud(
+      parseId(req.params.id),
+      archivos,
+      req.user!,
+    );
+    res.status(201).json({ adjuntos });
+  } catch (err) {
+    await adjuntosService.eliminarArchivos(archivos);
+    next(err);
+  }
+};
+
+export const descargarAdjunto = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { adjunto, ruta } = await adjuntosService.obtenerAdjunto(
+      parseId(req.params.adjuntoId),
+      req.user!,
+    );
+    // Solo imágenes y PDF se muestran en el navegador; lo demás se descarga
+    const enLinea = adjunto.mimeType.startsWith("image/") || adjunto.mimeType === "application/pdf";
+    res.setHeader("Content-Type", adjunto.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `${enLinea ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(adjunto.nombreOriginal)}`,
+    );
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    // dotfiles "allow": la ruta la arma el servidor; sin esto sendFile responde 404
+    // si UPLOADS_DIR vive bajo una carpeta que empieza con punto
+    res.sendFile(ruta, { dotfiles: "allow" }, (err) => {
+      if (err && !res.headersSent) next(err);
+    });
   } catch (err) {
     next(err);
   }

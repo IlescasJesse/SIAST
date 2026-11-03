@@ -176,6 +176,16 @@ export const EmpleadoSchema = z.object({
 // TICKETS
 // ============================================================
 
+export const AdjuntoSchema = z.object({
+  id: z.number().int(),
+  ticketId: z.number().int(),
+  comentarioId: z.number().int().nullable(),
+  nombreOriginal: z.string(),
+  mimeType: z.string(),
+  tamano: z.number().int(),
+  createdAt: z.string(),
+});
+
 export const ComentarioSchema = z.object({
   id: z.number().int(),
   ticketId: z.number().int(),
@@ -285,6 +295,7 @@ export type Ticket = z.infer<typeof TicketSchema>;
 export type TicketCreateInput = z.infer<typeof TicketCreateSchema>;
 export type TicketPatchInput = z.infer<typeof TicketPatchSchema>;
 export type Comentario = z.infer<typeof ComentarioSchema>;
+export type Adjunto = z.infer<typeof AdjuntoSchema>;
 export type UsuarioPublico = z.infer<typeof UsuarioPublicoSchema>;
 export type Notificacion = z.infer<typeof NotificacionSchema>;
 
@@ -298,6 +309,30 @@ export type Notificacion = z.infer<typeof NotificacionSchema>;
  * valida en tickets.service.ts y el frontend lo usa solo para UX.
  */
 export const MAX_TICKETS_ACTIVOS_EMPLEADO = 4;
+
+/**
+ * Adjuntos de solicitudes y comentarios. La API es la que valida (extensión,
+ * tipo y firma del archivo); el frontend usa estas constantes solo para UX.
+ */
+export const ADJUNTOS_MAX_ARCHIVOS = 5;
+export const ADJUNTOS_MAX_BYTES = 10 * 1024 * 1024; // 10 MB por archivo
+/** Extensión permitida → tipos MIME aceptados para esa extensión. */
+export const ADJUNTOS_TIPOS: Record<string, ReadonlyArray<string>> = {
+  png: ["image/png"],
+  jpg: ["image/jpeg"],
+  jpeg: ["image/jpeg"],
+  webp: ["image/webp"],
+  gif: ["image/gif"],
+  pdf: ["application/pdf"],
+  doc: ["application/msword"],
+  docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  xls: ["application/vnd.ms-excel"],
+  xlsx: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  ppt: ["application/vnd.ms-powerpoint"],
+  pptx: ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  txt: ["text/plain"],
+  csv: ["text/csv", "application/vnd.ms-excel", "text/plain"],
+};
 
 // ============================================================
 // CONSTANTES — CATÁLOGO DE SUBCATEGORÍAS POR CATEGORÍA

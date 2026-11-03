@@ -150,6 +150,7 @@ model Usuario {
   ticketsCreados     Ticket[]            @relation("UsuarioCreador")
   ticketsAceptados   Ticket[]            @relation("TicketAceptadoPor")
   comentarios        Comentario[]
+  adjuntos           Adjunto[]
   historialAcciones  HistorialTicket[]
   notificaciones     Notificacion[]
   asignacionesGestor AsignacionRecurso[] @relation("GestorAsignaciones")
@@ -403,6 +404,7 @@ model Ticket {
   // Relaciones
   historial           HistorialTicket[]
   comentarios         Comentario[]
+  adjuntos            Adjunto[]
   notificaciones      Notificacion[]
   asignacionesRecurso AsignacionRecurso[]
   pasos               PasoTicket[]
@@ -458,11 +460,44 @@ model Comentario {
   usuarioId Int
   usuario   Usuario @relation(fields: [usuarioId], references: [id])
 
+  adjuntos Adjunto[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([ticketId])
   @@map("comentarios")
+}
+
+// ============================================================
+// ADJUNTOS (capturas y documentos de una solicitud o comentario)
+// El archivo vive en disco (UPLOADS_DIR del API); aquí solo metadatos.
+// ============================================================
+
+model Adjunto {
+  id       Int    @id @default(autoincrement())
+  ticketId Int
+  ticket   Ticket @relation(fields: [ticketId], references: [id])
+
+  // null = adjunto de la solicitud (al crearla); con valor = adjunto de ese comentario
+  comentarioId Int?
+  comentario   Comentario? @relation(fields: [comentarioId], references: [id], onDelete: Cascade)
+
+  nombreOriginal String @db.VarChar(255) // nombre que subió el usuario (solo para mostrar)
+  nombreArchivo  String @unique @db.VarChar(80) // nombre aleatorio en disco
+  mimeType       String @db.VarChar(120)
+  tamano         Int // bytes
+
+  // Quién lo subió: staff (usuarioId) o empleado (empleadoRfc)
+  usuarioId   Int?
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id])
+  empleadoRfc String?  @db.VarChar(13)
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([comentarioId])
+  @@map("adjuntos")
 }
 
 // ============================================================

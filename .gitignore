@@ -18,3 +18,9 @@ CREDENCIALES.md
 # DevVault — contexto local Claude Code (no commitear)
 .claude/CLAUDE.md
 .claude/settings.local.json
+
+# Adjuntos subidos por los usuarios (UPLOADS_DIR del API)
+apps/api/uploads/
+
+# Aviso activo del sistema (AVISO_FILE del API)
+apps/api/data/
