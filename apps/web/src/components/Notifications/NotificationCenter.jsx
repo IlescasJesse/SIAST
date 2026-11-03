@@ -15,6 +15,8 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import { NovedadesDialog } from "./NovedadesDialog.jsx";
 import { useNotifStore } from "../../store/notificaciones.js";
 import { rutaSolicitud } from "../../api/solicitudes.js";
 import { formatDistanceToNow } from "date-fns";
@@ -27,16 +29,29 @@ const TIPO_ICON = {
   TICKET_RESUELTO:    <CheckCircleOutlineIcon sx={{ fontSize: 18, color: "success.main" }} />,
   TICKET_CANCELADO:   <CancelOutlinedIcon sx={{ fontSize: 18, color: "error.main" }} />,
   TICKET_URGENTE:     <PriorityHighIcon sx={{ fontSize: 18, color: "error.main" }} />,
+  NOVEDAD:            <AutoAwesomeIcon sx={{ fontSize: 18, color: "#9D2449" }} />,
 };
 
 export const NotificationCenter = () => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { notificaciones, noLeidas, marcarLeida, marcarTodasLeidas, pedirPermiso, permisoNotif } =
-    useNotifStore();
+  const {
+    notificaciones,
+    noLeidas,
+    marcarLeida,
+    marcarTodasLeidas,
+    pedirPermiso,
+    permisoNotif,
+    abrirNovedad,
+  } = useNotifStore();
 
   const handleClick = (n) => {
     marcarLeida(n.id);
+    if (n.tipo === "NOVEDAD") {
+      setOpen(false);
+      abrirNovedad(n.data.novedad);
+      return;
+    }
     const ticketId = n.data?.ticketId ?? n.data?.id;
     if (ticketId) {
       setOpen(false);
@@ -50,6 +65,7 @@ export const NotificationCenter = () => {
 
   return (
     <>
+      <NovedadesDialog />
       <Tooltip title={permisoDenegado ? "Notificaciones bloqueadas" : "Notificaciones"}>
         <IconButton color="inherit" onClick={() => setOpen(true)}>
           <Badge badgeContent={noLeidas} color="error" max={99}>
@@ -109,7 +125,7 @@ export const NotificationCenter = () => {
                     borderRadius: 2,
                     mb: 0.5,
                     bgcolor: n.leida ? "transparent" : PRIMARY_ALPHA(0.07),
-                    cursor: (n.data?.ticketId ?? n.data?.id) ? "pointer" : "default",
+                    cursor: (n.data?.ticketId ?? n.data?.id ?? n.data?.novedad) ? "pointer" : "default",
                     "&:hover": { bgcolor: PRIMARY_ALPHA(0.04) },
                   }}
                 >

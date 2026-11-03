@@ -55,6 +55,8 @@ import { PerfilPage } from "./pages/PerfilPage.jsx";
 import { CompletarPerfilPage } from "./pages/CompletarPerfilPage.jsx";
 import { HonorariosPage } from "./pages/HonorariosPage.jsx";
 import { DialogHost } from "./components/common/DialogHost.jsx";
+import { AvisoSistema } from "./components/common/AvisoSistema.jsx";
+import { FranjaPruebas } from "./components/common/FranjaPruebas.jsx";
 import { AreasPage } from "./pages/AreasPage.jsx";
 import { OrganigramaPage } from "./pages/OrganigramaPage.jsx";
 import { RecursosPage } from "./pages/RecursosPage.jsx";
@@ -91,6 +93,8 @@ export const App = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <DialogHost />
+      <AvisoSistema />
+      <FranjaPruebas />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Pública */}

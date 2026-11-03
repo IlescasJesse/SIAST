@@ -883,3 +883,4 @@ export type MetricasResponse =
 
 // Geometría del edificio (huella, pasillos, validación de áreas)
 export * from "./areaGeometry";
+export * from "./avisoSistema";

@@ -747,3 +747,26 @@ model MetricasHistorial {
   @@index([fecha])
   @@map("metricas_historial")
 }
+
+// Novedades de versión ("¿Qué hay de nuevo?") que se lanzan desde el monitor del
+// servidor. Le llegan a todos los usuarios (o solo empleados / solo staff) en el
+// centro de notificaciones y como ventana la primera vez que entran.
+enum AudienciaNovedad {
+  TODOS
+  EMPLEADOS
+  STAFF
+}
+
+model Novedad {
+  id        Int              @id @default(autoincrement())
+  version   String?          @db.VarChar(30)
+  titulo    String           @db.VarChar(120)
+  mensaje   String           @db.Text
+  puntos    Json // string[] — lista de cambios en lenguaje sencillo
+  audiencia AudienciaNovedad @default(TODOS)
+  activo    Boolean          @default(true)
+  createdAt DateTime         @default(now())
+
+  @@index([activo, createdAt])
+  @@map("novedades")
+}

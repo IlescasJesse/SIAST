@@ -14,6 +14,7 @@ import catalogosRoutes from "./routes/catalogos.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import recursosRoutes from "./routes/recursos.routes.js";
 import metricasRoutes from "./routes/metricas.routes.js";
+import sistemaRoutes from "./routes/sistema.routes.js";
 import * as metricasService from "./services/metricas.service.js";
 import { prisma } from "./config/database.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
@@ -81,6 +82,7 @@ app.use("/api/catalogos", catalogosRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/recursos", recursosRoutes);
 app.use("/api/metricas", metricasRoutes);
+app.use("/api/sistema", sistemaRoutes); // avisos globales lanzados desde el monitor
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV });
