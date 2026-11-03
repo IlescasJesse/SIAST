@@ -1,6 +1,36 @@
 import { create } from "zustand";
 import { io } from "socket.io-client";
-import { API_BASE } from "../api/client.js";
+import { API_BASE, api } from "../api/client.js";
+
+// ── Novedades de versión ("¿Qué hay de nuevo?") ─────────────────────────────
+// Se recuerda por usuario cuáles ya vio, para mostrar la ventana una sola vez.
+const claveVistas = (user) => `siast_novedades_vistas:${user.rfc ?? user.id}`;
+const leerVistas = (user) => {
+  try {
+    return JSON.parse(localStorage.getItem(claveVistas(user)) ?? "[]");
+  } catch {
+    return [];
+  }
+};
+const guardarVistas = (user, ids) => {
+  try {
+    localStorage.setItem(claveVistas(user), JSON.stringify(ids.slice(-50)));
+  } catch {
+    /* sin storage: la ventana puede volver a salir, no pasa nada */
+  }
+};
+const meToca = (novedad, user) =>
+  novedad.audiencia === "TODOS" ||
+  (novedad.audiencia === "EMPLEADOS" && user.rol === "EMPLEADO") ||
+  (novedad.audiencia === "STAFF" && user.rol !== "EMPLEADO");
+const notifDeNovedad = (n, vista) => ({
+  id: new Date(n.createdAt).getTime(),
+  tipo: "NOVEDAD",
+  titulo: n.version ? `${n.titulo} (v${n.version})` : n.titulo,
+  mensaje: n.puntos?.[0] ?? n.mensaje,
+  leida: vista,
+  data: { novedad: n },
+});
 
 let socket = null;
 
@@ -11,6 +41,7 @@ const ICONOS = {
   TICKET_RESUELTO: "✅",
   TICKET_CANCELADO: "❌",
   TICKET_URGENTE: "🚨",
+  NOVEDAD: "✨",
 };
 
 function mostrarNotifNativa(tipo, titulo, mensaje) {
@@ -41,6 +72,8 @@ export const useNotifStore = create((set, get) => ({
   noLeidas: 0,
   ticketsVersion: 0, // se incrementa con cada evento de ticket para forzar refetch
   socket: null,
+  usuario: null,
+  novedadAbierta: null, // novedad que se muestra en la ventana "¿Qué hay de nuevo?"
   permisoNotif: typeof window !== "undefined" ? Notification.permission : "default",
 
   pedirPermiso: async () => {
@@ -54,7 +87,30 @@ export const useNotifStore = create((set, get) => ({
     // Solicitar permiso de notificaciones al conectar
     pedirPermisoNotificaciones().then(() => set({ permisoNotif: Notification.permission }));
 
-    socket = io(API_BASE, { transports: ["websocket"] });
+    // El token viaja en el handshake; el servidor decide a qué salas entra el usuario.
+    // Se lee en cada (re)conexión para usar el token vigente tras una renovación.
+    socket = io(API_BASE, {
+      transports: ["websocket"],
+      auth: (cb) => cb({ token: localStorage.getItem("siast_token") }),
+    });
+    set({ usuario: user });
+
+    // Novedades publicadas mientras el usuario no estaba: van a la lista y la más
+    // reciente que no ha visto se abre en ventana.
+    api
+      .get("/api/sistema/novedades")
+      .then(({ data }) => {
+        const vistas = leerVistas(user);
+        const lista = data.novedades ?? [];
+        const items = lista.map((n) => notifDeNovedad(n, vistas.includes(n.id)));
+        const sinVer = lista.find((n) => !vistas.includes(n.id));
+        set((s) => ({
+          notificaciones: [...s.notificaciones, ...items].sort((a, b) => b.id - a.id),
+          noLeidas: s.noLeidas + items.filter((i) => !i.leida).length,
+          novedadAbierta: s.novedadAbierta ?? sinVer ?? null,
+        }));
+      })
+      .catch(() => {});
 
     socket.on("connect", () => {
       if (
@@ -119,20 +175,54 @@ export const useNotifStore = create((set, get) => ({
       }),
     );
 
+    // Novedad lanzada en vivo desde el monitor.
+    socket.on("sistema:novedad", (n) => {
+      if (!meToca(n, user)) return;
+      mostrarNotifNativa("NOVEDAD", n.titulo, n.puntos?.[0] ?? n.mensaje);
+      set((s) => ({
+        notificaciones: [notifDeNovedad(n, false), ...s.notificaciones],
+        noLeidas: s.noLeidas + 1,
+        novedadAbierta: n,
+      }));
+    });
+
     set({ socket });
+  },
+
+  abrirNovedad: (novedad) => set({ novedadAbierta: novedad }),
+
+  // Cierra la ventana y marca la novedad como vista (no vuelve a abrirse sola).
+  cerrarNovedad: () => {
+    const { novedadAbierta, usuario, notificaciones } = get();
+    if (!novedadAbierta) return;
+    if (usuario) {
+      const vistas = leerVistas(usuario);
+      if (!vistas.includes(novedadAbierta.id)) guardarVistas(usuario, [...vistas, novedadAbierta.id]);
+    }
+    const item = notificaciones.find(
+      (x) => x.tipo === "NOVEDAD" && x.data?.novedad?.id === novedadAbierta.id,
+    );
+    set((s) => ({
+      novedadAbierta: null,
+      notificaciones: s.notificaciones.map((x) => (x === item ? { ...x, leida: true } : x)),
+      noLeidas: item && !item.leida ? Math.max(0, s.noLeidas - 1) : s.noLeidas,
+    }));
   },
 
   desconectar: () => {
     socket?.disconnect();
     socket = null;
-    set({ socket: null, notificaciones: [], noLeidas: 0 });
+    set({ socket: null, notificaciones: [], noLeidas: 0, usuario: null, novedadAbierta: null });
   },
 
   marcarLeida: (id) =>
-    set((s) => ({
-      notificaciones: s.notificaciones.map((n) => (n.id === id ? { ...n, leida: true } : n)),
-      noLeidas: Math.max(0, s.noLeidas - 1),
-    })),
+    set((s) => {
+      const yaLeida = s.notificaciones.find((n) => n.id === id)?.leida;
+      return {
+        notificaciones: s.notificaciones.map((n) => (n.id === id ? { ...n, leida: true } : n)),
+        noLeidas: yaLeida ? s.noLeidas : Math.max(0, s.noLeidas - 1),
+      };
+    }),
 
   marcarTodasLeidas: () =>
     set((s) => ({

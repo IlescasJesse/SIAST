@@ -146,6 +146,22 @@ const ESTADOS_FINALES: string[] = ["RESUELTO", "CANCELADO"];
 const PASO_OMITIDO = "OMITIDO";
 const PASO_CERRADO = ["COMPLETADO", PASO_OMITIDO];
 
+// El empleado solicitante no debe ver los comentarios internos del personal
+// ni los adjuntos que van dentro de ellos.
+type ConComentarios = {
+  comentarios?: { id: number; esInterno: boolean }[];
+  adjuntos?: { comentarioId: number | null }[];
+};
+const ocultarInternos = <T extends ConComentarios>(ticket: T, user: JwtPayload): T => {
+  if (user.rol !== "EMPLEADO" || !ticket.comentarios) return ticket;
+  const internos = new Set(ticket.comentarios.filter((c) => c.esInterno).map((c) => c.id));
+  return {
+    ...ticket,
+    comentarios: ticket.comentarios.filter((c) => !c.esInterno),
+    adjuntos: ticket.adjuntos?.filter((a) => a.comentarioId == null || !internos.has(a.comentarioId)),
+  };
+};
+
 const ticketInclude = {
   area: true,
   empleado: { select: { rfc: true, nombreCompleto: true, areaId: true } },
@@ -207,7 +223,7 @@ export const listarTickets = async (
 
   // Aplicar prioridad efectiva (override manual o auto-cálculo) a cada ticket
   const ticketsConPrioridad = tickets.map((t) => ({
-    ...t,
+    ...ocultarInternos(t, user),
     prioridad: resolvePrioridad(t) as typeof t.prioridad,
   }));
 
@@ -250,6 +266,11 @@ export const crearTicket = async (
     subTipo?: string; // subtipo dentro de EQUIPOS_DISPOSITIVOS
   },
 ) => {
+  // Validación en servidor: la API no depende de que el formulario web haya validado
+  if (!body.asunto?.toString().trim() || !body.descripcion?.toString().trim()) {
+    throw Object.assign(new Error("El asunto y la descripción son obligatorios"), { status: 400 });
+  }
+
   // EMPLEADO crea por sí mismo; todo el staff debe enviar rfcSolicitante
   const empleadoRfc = user.rol === "EMPLEADO" ? user.rfc! : body.rfcSolicitante;
 
@@ -429,7 +450,7 @@ export const obtenerTicket = async (id: number, user: JwtPayload) => {
   await verificarLecturaTicket(id, user);
 
   return {
-    ...ticket,
+    ...ocultarInternos(ticket, user),
     prioridad: resolvePrioridad(ticket) as typeof ticket.prioridad,
   };
 };
@@ -887,7 +908,7 @@ export const cambiarEstado = async (
     tecnicoId: ticket.tecnicoId ?? undefined,
   });
 
-  return updated;
+  return ocultarInternos(updated, user);
 };
 
 export const agregarComentario = async (
