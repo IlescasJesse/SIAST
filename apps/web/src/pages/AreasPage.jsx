@@ -913,7 +913,7 @@ export const AreasPage = () => {
       const y2 = gridY2 !== "" ? Number(gridY2) : DEFAULT_COORDS.gridY2;
       await createArea({
         id: id.trim().toLowerCase().replace(/\s+/g, "_"),
-        label: label.trim(),
+        label: label.trim().toUpperCase(),
         piso,
         floor: pisoItem?.floor ?? 0,
         gridX1: x1,
@@ -922,7 +922,7 @@ export const AreasPage = () => {
         gridY2: y2,
         esComun: nuevaForm.esComun ?? false,
         tipoComun: nuevaForm.tipoComun || null,
-        nombrePropio: nuevaForm.nombrePropio?.trim() || null,
+        nombrePropio: nuevaForm.nombrePropio?.trim().toUpperCase() || null,
         ...(nuevaAdscripcion && {
           adscripcionNombre: nuevaAdscripcion.nombre,
           adscripcionNivel: nuevaAdscripcion.nivel ?? null,
@@ -1859,13 +1859,14 @@ export const AreasPage = () => {
               }
               fullWidth
               required
-              helperText="ej: n2_nominas — solo letras, numeros y guiones bajos"
-              inputProps={{ maxLength: 100 }}
+              helperText="ej: N2_NOMINAS — solo letras, numeros y guiones bajos"
+              // Se muestra en mayúsculas; se guarda en minúsculas como el resto de IDs
+              inputProps={{ maxLength: 100, style: { textTransform: "uppercase" } }}
             />
             <TextField
               label="Nombre"
               value={nuevaForm.label}
-              onChange={(e) => setNueva("label", e.target.value)}
+              onChange={(e) => setNueva("label", e.target.value.toUpperCase())}
               fullWidth
               required
             />
@@ -1904,6 +1905,10 @@ export const AreasPage = () => {
                 {...params}
                 label="Adscripción SIRH (opcional)"
                 helperText="Busca subsecretaría, dirección, coordinación o departamento"
+                inputProps={{
+                  ...params.inputProps,
+                  style: { ...params.inputProps?.style, textTransform: "uppercase" },
+                }}
                 InputProps={{
                   ...params.InputProps,
                   endAdornment: (
@@ -1985,10 +1990,10 @@ export const AreasPage = () => {
               <TextField
                 label="Nombre propio"
                 value={nuevaForm.nombrePropio ?? ""}
-                onChange={(e) => setNueva("nombrePropio", e.target.value)}
+                onChange={(e) => setNueva("nombrePropio", e.target.value.toUpperCase())}
                 fullWidth
                 size="small"
-                placeholder="ej: Sala Oaxaca, Bano Norte..."
+                placeholder="ej: SALA OAXACA, BAÑO NORTE..."
                 helperText="Nombre especifico del espacio (opcional)"
               />
             </>
