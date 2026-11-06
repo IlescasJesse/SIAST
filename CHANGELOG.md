@@ -2,6 +2,11 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.1.1 — 2026-11-06 · ARREGLO
+
+- Conservar la vista de la cámara al activar Dibujar área en el mapa de áreas — Jesse Ilescas (`a53bbed`)
+- Forzar mayúsculas en el formulario de nueva área del mapa de áreas — Jesse Ilescas (`e4498f0`)
+
 ## v1.1.0 — 2026-11-03 · MENOR
 
 - Agregar pruebas unitarias de la API con node:test — Jesse Ilescas (`5e7e72a`)
