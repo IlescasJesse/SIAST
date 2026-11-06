@@ -818,10 +818,11 @@ export const AreasPage = () => {
   const handleSetTool = (tool) => {
     setActiveTool(tool);
     // Al dibujar, asegurar que el visor esté en el piso activo (recomendación
-    // del visor: el rect dibujado se ancla al piso visible)
+    // del visor: el rect dibujado se ancla al piso visible). keepCamera evita
+    // que se pierda el acercamiento/encuadre si ya está en ese piso.
     if (tool === "draw") {
       const floor = PISOS[pisoIdx]?.floor ?? 0;
-      sendToVisor("GO_TO_FLOOR", { floor });
+      sendToVisor("GO_TO_FLOOR", { floor, keepCamera: true });
     }
     sendToVisor("SET_EDIT_TOOL", { tool });
   };

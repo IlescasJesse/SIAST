@@ -771,6 +771,9 @@ window.addEventListener("message", (e) => {
       window.SIAST3D.setLoginMode(payload.enabled);
       break;
     case "GO_TO_FLOOR":
+      // keepCamera: si el visor ya está en ese piso, no reencuadrar (conserva
+      // la vista que el usuario dejó, p. ej. al activar "Dibujar área").
+      if (payload?.keepCamera && activeFloor === payload.floor) break;
       window.SIAST3D.goToFloor(payload.floor);
       break;
     case "SET_THEME":
