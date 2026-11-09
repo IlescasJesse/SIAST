@@ -241,6 +241,8 @@ export const AreasPage = () => {
 
   // Navegación: piso activo
   const [pisoIdx, setPisoIdx] = useState(0);
+  // Marca por visita: obliga al navegador a cargar el visor 3D actual (sin copia vieja en caché).
+  const [visorStamp] = useState(() => Date.now());
 
   // Modal Nueva Área
   const [modalOpen, setModalOpen] = useState(false);
@@ -294,13 +296,16 @@ export const AreasPage = () => {
   );
 
   // ── Cambios pendientes (batch save) ──────────────────────────────────────
+  // Cada vez que se entra a la página se empieza limpio: lo pendiente de una
+  // visita anterior ya se guardó o se descartó al salir (useUnsavedChanges
+  // avisa antes de salir), y restaurarlo mostraba cambios que ya se aplicaron.
   const [pendingChanges, setPendingChanges] = useState(() => {
     try {
-      const raw = localStorage.getItem("siast:areas:pending");
-      return raw ? JSON.parse(raw) : {};
+      localStorage.removeItem("siast:areas:pending");
     } catch {
-      return {};
+      /* localStorage no disponible */
     }
+    return {};
   });
   const [savingAll, setSavingAll] = useState(false);
   const [saveAllError, setSaveAllError] = useState("");
@@ -423,13 +428,15 @@ export const AreasPage = () => {
   // ── Cambio de piso ────────────────────────────────────────────────────────
 
   const changePiso = useCallback(
-    (nextIdx) => {
+    (nextIdx, { keepCamera = false } = {}) => {
       setPisoIdx(nextIdx);
       setSelectedId(null);
       setEditForm(null);
-      // Emisor GO_TO_FLOOR → visor (consumidor en main.js: showFloor / showBuilding)
+      // Emisor GO_TO_FLOOR → visor (consumidor en main.js: showFloor / showBuilding).
+      // keepCamera: cambia el piso visible sin mover la cámara (clic en el 3D).
       const floor = PISOS[nextIdx]?.floor ?? 0;
-      sendToVisor("GO_TO_FLOOR", { floor });
+      sendToVisor("GO_TO_FLOOR", { floor, keepCamera });
+      if (keepCamera) return;
       try {
         visor3DRef.current?.contentWindow?.SIAST3D?.showFloor?.(floor);
       } catch {
@@ -442,7 +449,7 @@ export const AreasPage = () => {
   // ── Selección en el grid ───────────────────────────────────────────────────
 
   const handleSelect = useCallback(
-    (area) => {
+    (area, { acercar = false } = {}) => {
       setSelectedId(area.id);
       setEditForm({
         ...area,
@@ -453,7 +460,13 @@ export const AreasPage = () => {
         _dirty: false,
       });
       setSaveError("");
-      // Volar a la habitación y resaltarla en el visor 3D
+      if (!acercar) {
+        // Seleccionar/editar/redimensionar no mueve la cámara: solo resalta el
+        // área (sin piso en el payload = el visor no reencuadra).
+        sendToVisor("HIGHLIGHT_ROOM", { roomId: area.id });
+        return;
+      }
+      // Acercar a propósito (doble clic en la lista): volar al área.
       sendToVisor("FLY_TO_AREA", { areaId: area.id, floor: area.floor });
       visorShowArea(area.id);
     },
@@ -523,7 +536,7 @@ export const AreasPage = () => {
         const { roomId, floor } = payload ?? {};
         if (!roomId) return;
         const pisoItemIdx = PISOS.findIndex((p) => p.floor === floor);
-        if (pisoItemIdx >= 0) changePiso(pisoItemIdx);
+        if (pisoItemIdx >= 0) changePiso(pisoItemIdx, { keepCamera: true });
         setAreas((prev) => {
           const area = prev.find((a) => a.id === roomId);
           if (area) handleSelect(area);
@@ -1011,7 +1024,7 @@ export const AreasPage = () => {
       ) : (
         <iframe
           ref={visor3DRef}
-          src={`${VIEWER_URL}?editor=1`}
+          src={`${VIEWER_URL}?editor=1&t=${visorStamp}`}
           title="Visor 3D Edificio"
           onLoad={() => {
             sendToVisor("SET_THEME", { theme: "light" });
@@ -1560,6 +1573,8 @@ export const AreasPage = () => {
                       key={a.id}
                       disablePadding
                       onClick={() => handleSelect(a)}
+                      onDoubleClick={() => handleSelect(a, { acercar: true })}
+                      title="Doble clic para acercar la cámara"
                       sx={{
                         cursor: "pointer",
                         px: 1.25,

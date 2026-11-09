@@ -208,7 +208,8 @@ const removeRoom = (areaId) => {
  * el editor de áreas), para no depender de recargar el iframe.
  */
 const syncAreasFromApi = () =>
-  fetch(`${API_BASE}/api/catalogos/areas`)
+  // no-store: siempre lo último guardado, nunca una copia vieja del navegador.
+  fetch(`${API_BASE}/api/catalogos/areas`, { cache: "no-store" })
     .then((r) => r.json())
     .then((json) => {
       // Respuesta de error (sin data): no tocar la escena
@@ -369,8 +370,9 @@ const onPointerClick = (e) => {
   highlightRoom(roomMeshes, roomId);
   showInfoPanel({ roomId, label, floor, x1, y1, x2, y2 });
 
-  // Entrar al nivel área al hacer click en un área
-  window.SIAST3D.showArea(roomId);
+  // Entrar al nivel área al hacer click en un área. En el editor de áreas no:
+  // seleccionar solo resalta, la cámara se queda donde el usuario la dejó.
+  if (!EDITOR_MODE) window.SIAST3D.showArea(roomId);
 
   // Notificar al parent (postMessage)
   parent?.postMessage({ type: "ROOM_CLICKED", payload: { floor, roomId, label } }, "*");
@@ -442,13 +444,13 @@ window.SIAST3D = {
   /**
    * Nivel 'building': solo losas visibles, muebles ocultos, cámara alejada.
    */
-  showBuilding() {
+  showBuilding({ fly = true } = {}) {
     viewLevel = "building";
     activeFloor = -1;
     focusedAreaId = null;
     setViewLevel(floorGroups, roomMeshes, "building", { activeFloor: -1, focusedAreaId: null });
     updateLabelVisibility(camera, floorGroups, -1);
-    flyToBuilding(camera, controls);
+    if (fly) flyToBuilding(camera, controls);
     // Notificar a la UI (tab bar + badge) del cambio de nivel
     _dispatchViewChange("building", -1);
   },
@@ -457,13 +459,13 @@ window.SIAST3D = {
    * Nivel 'floor': contornos de áreas del piso, muebles ocultos.
    * @param {number} n  piso (0=PB..3)
    */
-  showFloor(n) {
+  showFloor(n, { fly = true } = {}) {
     viewLevel = "floor";
     activeFloor = n;
     focusedAreaId = null;
     setViewLevel(floorGroups, roomMeshes, "floor", { activeFloor: n, focusedAreaId: null });
     updateLabelVisibility(camera, floorGroups, n);
-    flyToFloor(camera, controls, n);
+    if (fly) flyToFloor(camera, controls, n);
     // Notificar a la UI (tab bar + badge) del cambio de nivel
     _dispatchViewChange("floor", n);
   },
@@ -773,7 +775,13 @@ window.addEventListener("message", (e) => {
     case "GO_TO_FLOOR":
       // keepCamera: si el visor ya está en ese piso, no reencuadrar (conserva
       // la vista que el usuario dejó, p. ej. al activar "Dibujar área").
-      if (payload?.keepCamera && activeFloor === payload.floor) break;
+      // En otro piso: cambia lo que se ve, pero sin mover la cámara.
+      if (payload?.keepCamera) {
+        if (activeFloor === payload.floor) break;
+        if (payload.floor === -1) window.SIAST3D.showBuilding({ fly: false });
+        else window.SIAST3D.showFloor(payload.floor, { fly: false });
+        break;
+      }
       window.SIAST3D.goToFloor(payload.floor);
       break;
     case "SET_THEME":
