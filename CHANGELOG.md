@@ -2,6 +2,10 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.1.2 — 2026-11-09 · ARREGLO
+
+- Mapa de áreas: la cámara no se mueve al seleccionar/editar y se empieza sin pendientes viejos — Jesse Ilescas (`082f572`)
+
 ## v1.1.1 — 2026-11-06 · ARREGLO
 
 - Conservar la vista de la cámara al activar Dibujar área en el mapa de áreas — Jesse Ilescas (`a53bbed`)
