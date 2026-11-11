@@ -2,6 +2,10 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.3.2 — 2026-11-11 · ARREGLO
+
+- Forzar que el visor 3D se recargue al salir una versión nueva — Jesse Ilescas (`7278006`)
+
 ## v1.3.1 — 2026-11-11 · ARREGLO
 
 - Corregir clic en un área del piso 2 que mandaba al piso 4 en el Mapa de Áreas — Jesse Ilescas (`5869f0b`)
