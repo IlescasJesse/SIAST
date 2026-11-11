@@ -2,6 +2,10 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.3.1 — 2026-11-11 · ARREGLO
+
+- Corregir clic en un área del piso 2 que mandaba al piso 4 en el Mapa de Áreas — Jesse Ilescas (`5869f0b`)
+
 ## v1.3.0 — 2026-11-11 · MENOR
 
 - Agregar prompt del monitor del servidor para avisos y novedades — Jesse Ilescas (`7bbf39b`)
