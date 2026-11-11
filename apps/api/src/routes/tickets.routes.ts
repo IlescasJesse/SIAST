@@ -141,6 +141,8 @@ router.patch(
     "TECNICO_ELECTRICISTA",
     "TECNICO_PLOMERO",
     "TECNICO_MOVILIDAD",
+    // Admin también puede tener pasos asignados (los asigna Admin o Mesa de Ayuda).
+    "ADMIN",
   ),
   ctrl.completarPaso,
 );

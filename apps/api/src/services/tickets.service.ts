@@ -158,7 +158,9 @@ const ocultarInternos = <T extends ConComentarios>(ticket: T, user: JwtPayload):
   return {
     ...ticket,
     comentarios: ticket.comentarios.filter((c) => !c.esInterno),
-    adjuntos: ticket.adjuntos?.filter((a) => a.comentarioId == null || !internos.has(a.comentarioId)),
+    adjuntos: ticket.adjuntos?.filter(
+      (a) => a.comentarioId == null || !internos.has(a.comentarioId),
+    ),
   };
 };
 
@@ -730,9 +732,18 @@ export const asignarTicket = async (id: number, tecnicoId: number, user: JwtPayl
   });
   if (!tecnico) throw Object.assign(new Error("Técnico no encontrado"), { status: 404 });
 
+  // Admin como asignado: sirve para cualquier categoría, pero solo lo asigna
+  // Admin / Mesa de Ayuda (un responsable no puede mandarle trabajo a un admin).
+  const asignadoEsAdmin = tecnico.rol === "ADMIN";
+  if (asignadoEsAdmin && !esStaffGlobal(user.rol)) {
+    throw Object.assign(new Error("Solo Admin o Mesa de Ayuda pueden asignar a un administrador"), {
+      status: 403,
+    });
+  }
+
   // Validar que el rol del técnico corresponde a la categoría del ticket
   const rolesPermitidos = CATEGORIA_ROL_MAP[ticket.categoria] ?? [];
-  if (rolesPermitidos.length > 0 && !rolesPermitidos.includes(tecnico.rol)) {
+  if (!asignadoEsAdmin && rolesPermitidos.length > 0 && !rolesPermitidos.includes(tecnico.rol)) {
     throw Object.assign(
       new Error(
         `El usuario seleccionado no tiene el rol adecuado para solicitudes de ${ticket.categoria}. ` +
@@ -1030,7 +1041,8 @@ export const completarPaso = async (
       status: 403,
     });
   }
-  if (paso.rolRequerido !== user.rol) {
+  // Un ADMIN asignado al paso lo completa aunque no tenga el rol técnico requerido.
+  if (paso.rolRequerido !== user.rol && user.rol !== "ADMIN") {
     throw Object.assign(new Error("No tienes el rol requerido para completar este paso"), {
       status: 403,
     });
@@ -1167,7 +1179,15 @@ export const asignarPaso = async (
 
   const tecnico = await prisma.usuario.findFirst({ where: { id: tecnicoId, activo: true } });
   if (!tecnico) throw Object.assign(new Error("Técnico no encontrado"), { status: 404 });
-  if (tecnico.rol !== paso.rolRequerido) {
+  // Admin como asignado: lo permite solo Admin / Mesa de Ayuda (no los responsables).
+  if (tecnico.rol === "ADMIN") {
+    if (!esStaffGlobal(user.rol)) {
+      throw Object.assign(
+        new Error("Solo Admin o Mesa de Ayuda pueden asignar a un administrador"),
+        { status: 403 },
+      );
+    }
+  } else if (tecnico.rol !== paso.rolRequerido) {
     throw Object.assign(new Error(`Este paso requiere un ${paso.rolRequerido}`), { status: 400 });
   }
 

@@ -430,7 +430,8 @@ export const SolicitudDetailPage = () => {
   const { pasos, labels } = getPasosYLabels(solicitud.categoria);
   const activeStep = getActiveStep(solicitud.estado, pasos);
   const tecnicosFiltradosPaso = dialogAsignarPaso
-    ? tecnicos.filter((t) => t.rol === dialogAsignarPaso.rolRequerido)
+    ? // Los admins (solo llegan para Admin / Mesa de Ayuda) pueden tomar cualquier paso.
+      tecnicos.filter((t) => t.rol === dialogAsignarPaso.rolRequerido || t.rol === "ADMIN")
     : [];
   const subcategoriasDisponibles = Object.values(SUBCATEGORIAS_POR_CATEGORIA)
     .flat()
@@ -1196,7 +1197,8 @@ export const SolicitudDetailPage = () => {
               >
                 {tecnicosFiltradosPaso.map((t) => (
                   <MenuItem key={t.id} value={t.id}>
-                    {t.nombre} {t.apellidos} — {t.ticketsActivos ?? 0} activo
+                    {t.nombre} {t.apellidos}
+                    {t.rol === "ADMIN" ? " (Administrador)" : ""} — {t.ticketsActivos ?? 0} activo
                     {t.ticketsActivos === 1 ? "" : "s"}
                   </MenuItem>
                 ))}

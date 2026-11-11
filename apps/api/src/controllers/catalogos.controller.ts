@@ -86,6 +86,12 @@ export const tecnicos = async (req: AuthRequest, res: Response, next: NextFuncti
       }
     }
 
+    // Admin / Mesa de Ayuda también pueden asignar solicitudes a los administradores
+    // (sirven para cualquier categoría). Los responsables no los ven.
+    if (esStaffGlobal(user.rol)) {
+      rolesVisibles = [...rolesVisibles, "ADMIN"];
+    }
+
     const data = await prisma.usuario.findMany({
       where: {
         activo: true,
