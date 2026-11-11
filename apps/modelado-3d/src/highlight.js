@@ -33,10 +33,11 @@ export const highlightRoom = (roomMeshes, roomId) => {
  * Llama en cada frame para animar el pulse (respiración suave del glow).
  */
 export const updateHighlight = (delta) => {
-  if (!_pulseMesh) return;
+  if (!_pulseMesh) return false;
   _pulseTime += delta;
   const pulse = 1.1 + Math.sin(_pulseTime * 3) * 0.45;
   _pulseMesh.material.emissiveIntensity = pulse;
+  return true; // hay animación: el visor debe seguir dibujando
 };
 
 export const clearHighlight = (roomMeshes) => {

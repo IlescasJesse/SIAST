@@ -14,11 +14,14 @@ import {
   setHoloGridVisible,
 } from "./building.js";
 import { highlightRoom, updateHighlight, clearHighlight } from "./highlight.js";
+import { raiseRoom, applyRaisedStyle, getRaisedId, updateRaised } from "./raise.js";
 import {
   createCamera,
   flyToFloor,
   flyToBuilding,
   flyToArea,
+  flyToCenital,
+  setControlsMode,
   setLoginMode as setCameraLoginMode,
   updateLoginCamera,
 } from "./camera.js";
@@ -29,6 +32,7 @@ import {
   ensureRoomLabel,
   removeRoomLabel,
   setLabelTheme,
+  setLabelsEnabled,
 } from "./labels.js";
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
@@ -62,7 +66,9 @@ let _jwtToken = null;
 // RENDERER
 // ════════════════════════════════════════════════════════════
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// Máx. 1.5×: a 2× (pantallas HiDPI) se dibujaban 78 % más píxeles, cada uno con
+// varias capas de vidrio transparente; con antialias la diferencia casi no se nota.
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -96,13 +102,15 @@ scene.add(hemi);
 
 // Luz principal (sol): sin sombras.
 const dirLight = new THREE.DirectionalLight(0xfff4e6, 2.1);
-dirLight.position.set(38, 64, 44);
+// Luces giradas 180° junto con la cámara (que ahora mira desde el fondo):
+// así el edificio conserva el mismo modelado de luz que antes.
+dirLight.position.set(-38, 64, -44);
 dirLight.castShadow = false;
 scene.add(dirLight);
 
 // Luz de relleno fría opuesta, baja intensidad, sin sombras (modela el ambiente).
 const fillLight = new THREE.DirectionalLight(0xbcd4ff, 0.45);
-fillLight.position.set(-44, 30, -36);
+fillLight.position.set(44, 30, 36);
 scene.add(fillLight);
 
 // Ambiente base muy tenue para que ninguna cara quede totalmente negra.
@@ -311,6 +319,17 @@ let focusedAreaId = null; // roomId del área enfocada (nivel 'area')
 let embedMode = false;
 let loginMode = false;
 const ticketPins = new Map(); // roomId → ticketData
+let camMode = "orbita"; // 'orbita' | 'cenital' (botón del editor de áreas)
+
+// Movimientos de cámara que respetan el modo: en cenital siempre desde arriba.
+const flyFloor = (n) =>
+  camMode === "cenital" ? flyToCenital(camera, controls, n) : flyToFloor(camera, controls, n);
+const flyBuilding = () =>
+  camMode === "cenital" ? flyToCenital(camera, controls, -1) : flyToBuilding(camera, controls);
+const flyArea = (room) =>
+  camMode === "cenital"
+    ? flyToCenital(camera, controls, room.floor ?? 0, room)
+    : flyToArea(camera, controls, room);
 
 /**
  * Despacha el CustomEvent "siast:viewchange" en window para que la UI
@@ -354,6 +373,16 @@ const onPointerClick = (e) => {
       { type: "MUEBLE_CLICKED", payload: { muebleId, areaId, label, tipo } },
       "*",
     );
+    return;
+  }
+
+  // Con un área levantada (solicitudes) solo esa se puede seleccionar: las
+  // demás quedan de contexto y no reaccionan al clic.
+  const raisedId = getRaisedId();
+  if (raisedId) {
+    const raised = roomMeshes.get(raisedId);
+    // Clic en el área levantada: no cambia nada (ya está destacada)
+    if (raised && raycaster.intersectObject(raised).length) invalidate();
     return;
   }
 
@@ -423,6 +452,37 @@ const hideInfoPanel = () => {
 // API PÚBLICA — window.SIAST3D
 // ════════════════════════════════════════════════════════════
 window.SIAST3D = {
+  /** Botón "Órbita 3D / Cenital" del editor de áreas. */
+  setCameraMode(mode) {
+    camMode = mode === "cenital" ? "cenital" : "orbita";
+    setControlsMode(controls, camMode);
+    const room = viewLevel === "area" ? liveRoomMap[focusedAreaId] : null;
+    if (room) flyArea(room);
+    else if (activeFloor === -1) flyBuilding();
+    else flyFloor(activeFloor);
+    invalidate();
+  },
+
+  /**
+   * Levanta el área con animación para señalar "aquí es" (solicitudes).
+   * Se queda arriba hasta que se levante otra.
+   */
+  raiseArea(areaId) {
+    const mesh = roomMeshes.get(areaId);
+    if (!mesh) return;
+    // Sin el pulso fuerte del resaltado: el área levantada tiene su propio
+    // cambio de tono (claro ↔ oscuro) y flotación, ver raise.js
+    clearHighlight(roomMeshes);
+    raiseRoom(mesh, (m) => ensureRoomLabel(scene, areaId, m.userData.label, m));
+    invalidate();
+  },
+
+  /** Botón "Mostrar/Ocultar etiquetas" del editor de áreas. */
+  setLabelsVisible(visible) {
+    setLabelsEnabled(visible);
+    invalidate();
+  },
+
   highlightRoom(floorId, roomId) {
     highlightRoom(roomMeshes, roomId);
     const room = liveRoomMap[roomId];
@@ -449,8 +509,9 @@ window.SIAST3D = {
     activeFloor = -1;
     focusedAreaId = null;
     setViewLevel(floorGroups, roomMeshes, "building", { activeFloor: -1, focusedAreaId: null });
+    applyRaisedStyle();
     updateLabelVisibility(camera, floorGroups, -1);
-    if (fly) flyToBuilding(camera, controls);
+    if (fly) flyBuilding();
     // Notificar a la UI (tab bar + badge) del cambio de nivel
     _dispatchViewChange("building", -1);
   },
@@ -464,8 +525,9 @@ window.SIAST3D = {
     activeFloor = n;
     focusedAreaId = null;
     setViewLevel(floorGroups, roomMeshes, "floor", { activeFloor: n, focusedAreaId: null });
+    applyRaisedStyle();
     updateLabelVisibility(camera, floorGroups, n);
-    if (fly) flyToFloor(camera, controls, n);
+    if (fly) flyFloor(n);
     // Notificar a la UI (tab bar + badge) del cambio de nivel
     _dispatchViewChange("floor", n);
   },
@@ -488,8 +550,9 @@ window.SIAST3D = {
       activeFloor,
       focusedAreaId: areaId,
     });
+    applyRaisedStyle();
     updateLabelVisibility(camera, floorGroups, activeFloor);
-    flyToArea(camera, controls, room);
+    flyArea(room);
     // Notificar a la UI (tab bar + badge) del cambio de nivel, incluyendo el label del área
     _dispatchViewChange("area", activeFloor, room.label);
 
@@ -654,7 +717,7 @@ window.SIAST3D = {
     if (activeFloor !== -1 && activeFloor !== floor) {
       this.goToFloor(floor);
     } else if (floor >= 0) {
-      flyToFloor(camera, controls, floor);
+      flyFloor(floor);
     }
 
     // Colocar pin sobre el mueble (se muestra cuando el LOD lo hace visible)
@@ -676,7 +739,7 @@ window.SIAST3D = {
       if (!res.ok) return;
       const data = await res.json();
       this.highlightRoom(data.floor, data.areaId);
-      flyToFloor(camera, controls, data.floor);
+      flyFloor(data.floor);
     } catch (e) {
       console.warn("SIAST3D.showEmployee error:", e);
     }
@@ -745,6 +808,8 @@ window.addEventListener("message", (e) => {
       break;
     case "HIGHLIGHT_ROOM":
       window.SIAST3D.highlightRoom(payload.floor, payload.roomId);
+      // raise: el área sube y se queda levantada (detalle de solicitud: vista del piso)
+      if (payload?.raise) window.SIAST3D.raiseArea(payload.roomId);
       break;
     case "SHOW_EMPLOYEE": {
       // payload: { rfc?, nombre, area (roomId), floor }
@@ -757,7 +822,7 @@ window.addEventListener("message", (e) => {
       const floor = payload?.floor ?? room?.floor ?? 0;
 
       window.SIAST3D.highlightRoom(floor, payload?.area);
-      flyToFloor(camera, controls, floor);
+      flyFloor(floor);
       showInfoPanel({
         roomId: payload?.area,
         label: empleadoNombre ? `${empleadoNombre} — ${areaLabel}` : areaLabel,
@@ -813,6 +878,14 @@ window.addEventListener("message", (e) => {
         setEditTool(payload.tool);
       }
       break;
+    case "SET_CAMERA_MODE":
+      // Payload: { mode: 'orbita' | 'cenital' }
+      window.SIAST3D.setCameraMode(payload?.mode);
+      break;
+    case "SET_LABELS_VISIBLE":
+      // Payload: { visible: boolean }
+      window.SIAST3D.setLabelsVisible(payload?.visible !== false);
+      break;
     case "RELOAD_AREAS":
       // El editor de áreas creó/guardó/desactivó áreas: releer de la API.
       syncAreasFromApi();
@@ -821,7 +894,16 @@ window.addEventListener("message", (e) => {
       // Transición de cámara suave desde cualquier nivel hasta el área indicada.
       // Payload: { areaId: string }
       // Equivale a llamar window.SIAST3D.showArea(areaId) que ya incluye flyToArea.
-      if (payload?.areaId) {
+      if (payload?.areaId && payload.raise) {
+        // Nueva solicitud: el piso completo del área (referencia de cómo está
+        // distribuido el edificio; las demás áreas no se pueden seleccionar)
+        // y el área sube.
+        const room = liveRoomMap[payload.areaId];
+        if (room) {
+          window.SIAST3D.showFloor(room.floor ?? 0);
+          window.SIAST3D.raiseArea(payload.areaId);
+        }
+      } else if (payload?.areaId) {
         window.SIAST3D.showArea(payload.areaId);
       }
       break;
@@ -882,7 +964,10 @@ const animateEntry = () => {
     }
     const floor = floors[shown];
     const group = floorGroups.get(floor);
-    if (group) {
+    // Si ya se pidió un piso o un área (p. ej. solicitudes), no volver a
+    // mostrar los otros pisos: solo se anima el que está a la vista.
+    const enVista = viewLevel === "building" || floor === activeFloor;
+    if (group && enVista) {
       group.visible = true;
       // Animar desde abajo
       const targetY = 0;
@@ -910,14 +995,57 @@ const animateEntry = () => {
 const clock = new THREE.Clock();
 let _rafId = null;
 
+// ── Render bajo demanda ─────────────────────────────────────────────────────
+// Antes se dibujaba la escena completa 60 veces por segundo aunque nada se
+// moviera; con muchas áreas (vidrio transparente + etiquetas) eso pesaba.
+// Ahora solo se dibuja cuando algo cambia: cámara, interacción, mensajes del
+// editor, fundidos de etiquetas o el pulso del área seleccionada. En reposo
+// queda un latido de ~4 fps para cambios que no avisan (cargas de la API).
+const IDLE_FRAME_MS = 250;
+const FRAMES_AFTER_INVALIDATE = 30; // ~0.5 s a 60 fps tras cada evento
+let _framesPendientes = 240; // primeros ~4 s siempre: animación de entrada de pisos
+let _lastDrawT = 0;
+const _lastCamPos = new THREE.Vector3();
+const _lastCamQuat = new THREE.Quaternion();
+
+/** Pide redibujar los próximos frames (llamar tras cualquier cambio de escena). */
+const invalidate = () => {
+  _framesPendientes = Math.max(_framesPendientes, FRAMES_AFTER_INVALIDATE);
+};
+
+for (const ev of ["pointerdown", "pointermove", "pointerup", "wheel", "keydown", "message"]) {
+  window.addEventListener(ev, invalidate, { passive: true });
+}
+controls.addEventListener("change", invalidate);
+
 const render = () => {
   _rafId = requestAnimationFrame(render);
   const delta = clock.getDelta();
 
   controls.update();
-  updateHighlight(delta);
+  const pulsando = updateHighlight(delta);
+  const elevada = updateRaised(); // área levantada: sube, flota y cambia de tono
   updateLoginCamera(camera, controls, delta);
-  updateLabelVisibility(camera, floorGroups, activeFloor);
+
+  const camaraMovida =
+    !camera.position.equals(_lastCamPos) || !camera.quaternion.equals(_lastCamQuat);
+  const now = performance.now();
+  const debeDibujar =
+    camaraMovida ||
+    pulsando ||
+    elevada ||
+    loginMode ||
+    _framesPendientes > 0 ||
+    now - _lastDrawT >= IDLE_FRAME_MS;
+  if (!debeDibujar) return;
+
+  if (_framesPendientes > 0) _framesPendientes--;
+  _lastDrawT = now;
+  _lastCamPos.copy(camera.position);
+  _lastCamQuat.copy(camera.quaternion);
+
+  // Etiquetas en fundido → seguir dibujando hasta que terminen
+  if (updateLabelVisibility(camera, floorGroups, activeFloor)) invalidate();
   // Los muebles solo aplican LOD en nivel 'area'; en building/floor fuerza invisible.
   furniture.updateVisibility(camera, activeFloor, viewLevel === "area");
 
@@ -950,6 +1078,7 @@ document.addEventListener("visibilitychange", () => {
 // RESIZE
 // ════════════════════════════════════════════════════════════
 window.addEventListener("resize", () => {
+  invalidate();
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);

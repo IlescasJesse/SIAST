@@ -266,6 +266,14 @@ export const setLabelTheme = (theme) => {
   for (const sprite of _labels.values()) paintSprite(sprite, sprite.userData.text);
 };
 
+// Interruptor global "Mostrar/Ocultar etiquetas" (botón del editor de áreas).
+let _labelsEnabled = true;
+
+/** Enciende o apaga todas las etiquetas de área (se desvanecen suavemente). */
+export const setLabelsEnabled = (enabled) => {
+  _labelsEnabled = Boolean(enabled);
+};
+
 const floorOf = (y) => (y > FLOOR_Y(3) ? 3 : y > FLOOR_Y(2) ? 2 : y > FLOOR_Y(1) ? 1 : 0);
 
 const _proj = new THREE.Vector3();
@@ -274,6 +282,8 @@ let _lastT = performance.now();
 /**
  * Llamar cada frame: decide qué etiquetas se ven (piso activo, distancia y
  * sin encimarse), fija su tamaño en pantalla y anima el fundido.
+ * Devuelve true mientras alguna etiqueta sigue en fundido (hay que seguir
+ * dibujando frames).
  */
 export const updateLabelVisibility = (camera, floorGroups, activeFloor) => {
   const now = performance.now();
@@ -292,6 +302,11 @@ export const updateLabelVisibility = (camera, floorGroups, activeFloor) => {
   for (const sprite of _labels.values()) {
     sprite.scale.set(sprite.userData.pxW * pxToScale, sprite.userData.pxH * pxToScale, 1);
     let quiere = false;
+    // Apagadas: no se proyecta nada, solo se desvanecen las que estaban visibles
+    if (!_labelsEnabled) {
+      sprite.userData.target = 0;
+      continue;
+    }
     const floor = floorOf(sprite.position.y);
     const dist = camera.position.distanceTo(sprite.position);
     if ((activeFloor === -1 || floor === activeFloor) && dist < MAX_DIST) {
@@ -336,6 +351,7 @@ export const updateLabelVisibility = (camera, floorGroups, activeFloor) => {
   }
 
   // Fundido suave hacia el objetivo
+  let animando = false;
   for (const sprite of _labels.values()) {
     const mat = sprite.material;
     const target = sprite.userData.target ?? 0;
@@ -345,5 +361,7 @@ export const updateLabelVisibility = (camera, floorGroups, activeFloor) => {
         ? Math.min(target, mat.opacity + step)
         : Math.max(target, mat.opacity - step);
     sprite.visible = mat.opacity > 0.01;
+    if (mat.opacity !== target) animando = true;
   }
+  return animando;
 };

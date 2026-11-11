@@ -11,7 +11,10 @@
  *   areas      — array de AreaEdificio del piso activo (ya filtradas por floor)
  *   selectedId — id del área seleccionada (string | null)
  *   onSelect   — (area) => void
+ *   showLabels — muestra los nombres de las áreas (default true)
  */
+
+import { memo } from "react";
 
 // ── Constantes de grid (idénticas a AreaGridEditor) ──────────────────────────
 const COLS = 32;
@@ -23,18 +26,18 @@ const CELL = 14;
 const SVG_W = COLS * CELL; // 448
 const SVG_H = ROWS * CELL; // 378
 
-// Misma orientación que el visor 3D visto desde su cámara: columna 0 a la
-// izquierda y fila 0 (frente/entrada) ABAJO, con las filas altas (posterior)
-// hacia arriba. Con la fila 0 arriba la planta salía en espejo respecto al 3D.
-const toSvgY = (gridY) => (ROWS - gridY) * CELL;
-const toSvgX = (gridX) => gridX * CELL;
+// Misma orientación que la vista "Cenital" del visor 3D (planta vista desde
+// arriba, girada 180°): patio (fila 0) ARRIBA, conector/fondo ABAJO; por el
+// giro, la columna 0 queda a la DERECHA. Sin espejo: coincide con el 3D.
+const toSvgY = (gridY) => gridY * CELL;
+const toSvgX = (gridX) => (COLS - gridX) * CELL;
 
 // ── Huella U del edificio ─────────────────────────────────────────────────────
 // Misma huella que ZONAS_EDIFICIO en @stf/shared (y que el exterior del visor 3D):
 // Ala Izq: cols 0→14, filas 0→27
 // Conector: cols 14→18, filas 14→27  (fondo)
 // Ala Der:  cols 18→32, filas 0→27
-// Patio:    cols 14→18, filas 0→14  (frente — vacío; queda abajo en pantalla)
+// Patio:    cols 14→18, filas 0→14  (frente — vacío; queda arriba en pantalla)
 const BUILDING_PATH = (() => {
   const c = (x, y) => `${toSvgX(x)},${toSvgY(y)}`;
   // Recorre el perímetro exterior en U, sentido horario
@@ -82,14 +85,14 @@ const colorForIdx = (i) => PALETTE[i % PALETTE.length];
 
 // ── Zonas para etiquetas contextuales ─────────────────────────────────────────
 const ZONE_LABELS = [
-  { label: "Ala Izquierda", x: 7 * CELL, y: toSvgY(6), color: "#3f51b5" },
-  { label: "Conector", x: 16 * CELL, y: toSvgY(22), color: "#7b1fa2" },
-  { label: "Ala Derecha", x: 25 * CELL, y: toSvgY(6), color: "#0277bd" },
+  { label: "Ala Izquierda", x: toSvgX(7), y: toSvgY(6), color: "#3f51b5" },
+  { label: "Conector", x: toSvgX(16), y: toSvgY(22), color: "#7b1fa2" },
+  { label: "Ala Derecha", x: toSvgX(25), y: toSvgY(6), color: "#0277bd" },
 ];
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
+function FloorPlanMobileBase({ areas = [], selectedId = null, onSelect, showLabels = true }) {
   // Construir mapa de colores estables ordenando por id para consistencia
   const sorted = [...areas].sort((a, b) => a.id.localeCompare(b.id));
   const colorMap = {};
@@ -104,9 +107,9 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
   const areaRects = areas
     .filter((a) => a.gridX1 != null && a.gridY1 != null && a.gridX2 != null && a.gridY2 != null)
     .map((area) => {
-      const x = toSvgX(area.gridX1);
-      // Fila 0 abajo: el borde superior del rect en pantalla es la fila mayor
-      const y = toSvgY(area.gridY2);
+      // Giro 180°: el borde izquierdo del rect en pantalla es la columna mayor
+      const x = toSvgX(area.gridX2);
+      const y = toSvgY(area.gridY1);
       // Área poligonal (esquinas movidas en el editor): se dibuja su contorno real
       const puntos =
         area.vertices?.length >= 3
@@ -183,7 +186,7 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
           )}
 
           {/* Label — solo si hay espacio */}
-          {w > 18 && h > 10 && fontSize > 4 && (
+          {showLabels && w > 18 && h > 10 && fontSize > 4 && (
             <text
               x={x + w / 2}
               y={y + h / 2 + 3}
@@ -270,8 +273,8 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
 
       {/* Patio abierto — relleno diferenciado */}
       <rect
-        x={14 * CELL}
-        y={toSvgY(14)}
+        x={toSvgX(18)}
+        y={toSvgY(0)}
         width={4 * CELL}
         height={14 * CELL}
         fill="rgba(180,220,180,0.25)"
@@ -280,7 +283,7 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         strokeDasharray="4,3"
       />
       <text
-        x={16 * CELL}
+        x={toSvgX(16)}
         y={toSvgY(7)}
         fontSize={7}
         textAnchor="middle"
@@ -289,28 +292,29 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         fontWeight={700}
         letterSpacing={1}
         style={{ userSelect: "none", pointerEvents: "none" }}
-        transform={`rotate(-90 ${16 * CELL} ${toSvgY(7)})`}
+        transform={`rotate(-90 ${toSvgX(16)} ${toSvgY(7)})`}
       >
         PATIO
       </text>
 
       {/* Etiquetas de zona */}
-      {ZONE_LABELS.map((z) => (
-        <text
-          key={z.label}
-          x={z.x}
-          y={z.y}
-          fontSize={6}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill={z.color + "66"}
-          fontWeight={800}
-          letterSpacing={0.8}
-          style={{ userSelect: "none", pointerEvents: "none" }}
-        >
-          {z.label.toUpperCase()}
-        </text>
-      ))}
+      {showLabels &&
+        ZONE_LABELS.map((z) => (
+          <text
+            key={z.label}
+            x={z.x}
+            y={z.y}
+            fontSize={6}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={z.color + "66"}
+            fontWeight={800}
+            letterSpacing={0.8}
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            {z.label.toUpperCase()}
+          </text>
+        ))}
 
       {/* Áreas del piso activo */}
       {areaRects}
@@ -327,7 +331,7 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         letterSpacing={1}
         style={{ userSelect: "none", pointerEvents: "none" }}
       >
-        ▲ POSTERIOR
+        ▲ FRENTE / PATIO
       </text>
       <text
         x={SVG_W / 2}
@@ -340,8 +344,11 @@ export function FloorPlanMobile({ areas = [], selectedId = null, onSelect }) {
         letterSpacing={1}
         style={{ userSelect: "none", pointerEvents: "none" }}
       >
-        ▼ FRENTE / ENTRADA
+        ▼ POSTERIOR
       </text>
     </svg>
   );
 }
+
+// memo: el minimapa no se redibuja cuando cambia otro estado de la página
+export const FloorPlanMobile = memo(FloorPlanMobileBase);

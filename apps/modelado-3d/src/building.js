@@ -37,17 +37,18 @@ export const ROOM_BASE_OPACITY = 0.48;
  * desaparecía (se veía el fondo blanquecino). depthWrite:false evita que el
  * orden de dibujo de cajas solapadas oculte cuartos según el ángulo de cámara.
  */
+// Rendimiento: MeshStandardMaterial en lugar de Physical con clearcoat. Con
+// ~100 áreas transparentes encimadas, la segunda capa de brillo del clearcoat
+// duplicaba el costo de cada píxel; la diferencia visual es mínima.
 const createRoomMaterial = (color) =>
-  new THREE.MeshPhysicalMaterial({
+  new THREE.MeshStandardMaterial({
     color,
-    roughness: 0.35,
+    roughness: 0.28,
     metalness: 0,
     transparent: true,
     opacity: ROOM_BASE_OPACITY,
     depthWrite: false,
-    clearcoat: 0.6,
-    clearcoatRoughness: 0.25,
-    envMapIntensity: 0.7,
+    envMapIntensity: 0.8,
   });
 
 /**
@@ -537,32 +538,28 @@ const WIN_SPACING = 1.8;
  * azulado muy tenue, coherente con el vocabulario de la maqueta.
  * opacity 0.22 → no tapa el interior desde ningún ángulo.
  */
-const _wallMat = new THREE.MeshPhysicalMaterial({
+const _wallMat = new THREE.MeshStandardMaterial({
   color: 0x8fa8c0,
-  roughness: 0.3,
+  roughness: 0.25,
   metalness: 0.0,
   transparent: true,
   opacity: 0.22,
   depthWrite: false,
-  clearcoat: 0.5,
-  clearcoatRoughness: 0.3,
-  envMapIntensity: 0.6,
+  envMapIntensity: 0.7,
 });
 
 /**
  * Material compartido para los paneles de ventana — vidrio ligeramente
  * más claro y con emisivo azulado que los distingue del muro.
  */
-const _winMat = new THREE.MeshPhysicalMaterial({
+const _winMat = new THREE.MeshStandardMaterial({
   color: 0xb8d8f0,
-  roughness: 0.1,
+  roughness: 0.08,
   metalness: 0.0,
   transparent: true,
   opacity: 0.45,
   depthWrite: false,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.05,
-  envMapIntensity: 1.0,
+  envMapIntensity: 1.1,
   emissive: new THREE.Color(0x2255aa),
   emissiveIntensity: 0.04,
 });
@@ -581,6 +578,8 @@ const _wallEdgeMat = new THREE.LineBasicMaterial({
  * se desplaza al centro del muro para parecer empotrada).
  */
 const _winGeo = new THREE.PlaneGeometry(WIN_W, WIN_H);
+// Objeto auxiliar para calcular la matriz de cada ventana (no se agrega a la escena)
+const _winTmp = new THREE.Object3D();
 
 /**
  * Crea un tramo de muro recto con ventanas distribuidas uniformemente.
@@ -591,7 +590,7 @@ const _winGeo = new THREE.PlaneGeometry(WIN_W, WIN_H);
  * @param {number}        yBase  — Y en la base del piso (FLOOR_Y(floor))
  * @returns {THREE.Group}
  */
-const createWallSegment = (from, to, axis, yBase) => {
+const createWallSegment = (from, to, axis, yBase, winMatrices) => {
   const group = new THREE.Group();
 
   // Longitud del tramo y centro.
@@ -636,8 +635,11 @@ const createWallSegment = (from, to, axis, yBase) => {
     for (let i = 0; i < nWin; i++) {
       const offset = startOffset + i * step;
 
-      // Panel de ventana — plano fino desplazado al frente del muro.
-      const winMesh = new THREE.Mesh(_winGeo, _winMat);
+      // Panel de ventana — plano fino desplazado al frente del muro. Solo se
+      // calcula su posición: todas las ventanas del piso se dibujan juntas en
+      // un InstancedMesh (una sola llamada de dibujo en vez de ~100).
+      const winMesh = _winTmp;
+      winMesh.rotation.set(0, 0, 0);
       if (axis === "x") {
         winMesh.position.set(cx + offset, winY, cz);
         // La ventana queda coplanar con la cara frontal del muro; si el muro
@@ -650,8 +652,8 @@ const createWallSegment = (from, to, axis, yBase) => {
         // del panel mire en X en vez de Z.
         winMesh.rotation.y = Math.PI / 2;
       }
-      winMesh.userData = { isWindowPanel: true };
-      group.add(winMesh);
+      winMesh.updateMatrix();
+      winMatrices.push(winMesh.matrix.clone());
     }
   }
 
@@ -727,11 +729,22 @@ export const createPerimeterWalls = (floor) => {
     { x1: -16, z1: -13.5, x2: -16, z2: 13.5, axis: "z" },
   ];
 
+  const winMatrices = [];
   for (const seg of SEGS) {
     const from = new THREE.Vector3(seg.x1, yBase, seg.z1);
     const to = new THREE.Vector3(seg.x2, yBase, seg.z2);
-    const segGroup = createWallSegment(from, to, seg.axis, yBase);
+    const segGroup = createWallSegment(from, to, seg.axis, yBase, winMatrices);
     group.add(segGroup);
+  }
+
+  // Todas las ventanas del piso en un solo InstancedMesh
+  if (winMatrices.length) {
+    const windows = new THREE.InstancedMesh(_winGeo, _winMat, winMatrices.length);
+    winMatrices.forEach((m, i) => windows.setMatrixAt(i, m));
+    windows.instanceMatrix.needsUpdate = true;
+    windows.computeBoundingSphere();
+    windows.userData = { isWindowPanel: true };
+    group.add(windows);
   }
 
   return group;

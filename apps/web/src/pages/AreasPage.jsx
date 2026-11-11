@@ -86,6 +86,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import ThreeDRotationIcon from "@mui/icons-material/ThreeDRotation";
 import ChairIcon from "@mui/icons-material/Chair";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import MinimizeIcon from "@mui/icons-material/Minimize";
+import CropSquareIcon from "@mui/icons-material/CropSquare";
 import MapIcon from "@mui/icons-material/Map";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
@@ -95,6 +97,8 @@ import DrawIcon from "@mui/icons-material/Draw";
 import HighlightAltIcon from "@mui/icons-material/HighlightAlt";
 import CloseIcon from "@mui/icons-material/Close";
 import LayersIcon from "@mui/icons-material/Layers";
+import LabelIcon from "@mui/icons-material/Label";
+import LabelOffIcon from "@mui/icons-material/LabelOff";
 import {
   getAreas,
   createArea,
@@ -263,6 +267,8 @@ export const AreasPage = () => {
   const [panelAreasOpen, setPanelAreasOpen] = useState(true);
   /** Minimapa 2D en tiempo real (solo desktop) colapsado/expandido */
   const [miniMapOpen, setMiniMapOpen] = useState(true);
+  /** Nombres de las áreas en el visor 3D y en el minimapa 2D */
+  const [showLabels, setShowLabels] = useState(true);
   /** Solicitud de borrado proveniente del visor (tool delete) — abre Dialog de confirmación */
   const [deleteRequest, setDeleteRequest] = useState(null); // { id, label } | null
 
@@ -819,10 +825,16 @@ export const AreasPage = () => {
 
   // ── Toggle modo cámara ─────────────────────────────────────────────────────
 
+  const handleToggleLabels = () => {
+    const next = !showLabels;
+    setShowLabels(next);
+    sendToVisor("SET_LABELS_VISIBLE", { visible: next });
+  };
+
   const handleToggleCamMode = () => {
     const next = camMode === "orbita" ? "cenital" : "orbita";
     setCamMode(next);
-    // Emisor SET_CAMERA_MODE → visor (consumidor en sub-fase B)
+    // El visor encuadra desde arriba (cenital) o vuelve a la vista 3D (órbita)
     sendToVisor("SET_CAMERA_MODE", { mode: next });
   };
 
@@ -1019,7 +1031,12 @@ export const AreasPage = () => {
             overflow: "hidden",
           }}
         >
-          <FloorPlanMobile areas={areasDelPiso} selectedId={selectedId} onSelect={handleSelect} />
+          <FloorPlanMobile
+            areas={areasDelPiso}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            showLabels={showLabels}
+          />
         </Box>
       ) : (
         <iframe
@@ -1031,6 +1048,9 @@ export const AreasPage = () => {
             // JWT para que el visor pueda cargar muebles (/api/admin/areas/:id/muebles)
             const token = localStorage.getItem("siast_token");
             if (token) sendToVisor("SET_TOKEN", { token });
+            // Al recargar el visor, conservar el estado del botón de etiquetas
+            sendToVisor("SET_LABELS_VISIBLE", { visible: showLabels });
+            if (camMode === "cenital") sendToVisor("SET_CAMERA_MODE", { mode: camMode });
           }}
           style={{
             position: "absolute",
@@ -1280,6 +1300,34 @@ export const AreasPage = () => {
 
         {/* Acciones derechas */}
         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Mostrar / ocultar etiquetas de áreas (3D y minimapa 2D) */}
+          <Tooltip
+            title={showLabels ? "Ocultar nombres de las áreas" : "Mostrar nombres de las áreas"}
+          >
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={
+                showLabels ? (
+                  <LabelOffIcon sx={{ fontSize: 14 }} />
+                ) : (
+                  <LabelIcon sx={{ fontSize: 14 }} />
+                )
+              }
+              onClick={handleToggleLabels}
+              sx={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "rgba(60,20,35,0.75)",
+                borderColor: "rgba(157,36,73,0.35)",
+                py: 0.4,
+                "&:hover": { bgcolor: "rgba(157,36,73,0.10)" },
+              }}
+            >
+              {showLabels ? "Ocultar etiquetas" : "Mostrar etiquetas"}
+            </Button>
+          </Tooltip>
+
           {/* Toggle órbita / cenital */}
           <Tooltip
             title={
@@ -1544,14 +1592,13 @@ export const AreasPage = () => {
               }}
             />
           </Box>
-          <ExpandMoreIcon
-            sx={{
-              fontSize: 15,
-              color: "rgba(60,20,35,0.40)",
-              transition: "transform 0.2s",
-              transform: panelAreasOpen ? "rotate(180deg)" : "rotate(0deg)",
-            }}
-          />
+          <Tooltip title={panelAreasOpen ? "Minimizar" : "Maximizar"}>
+            {panelAreasOpen ? (
+              <MinimizeIcon sx={{ fontSize: 15, color: "rgba(60,20,35,0.55)" }} />
+            ) : (
+              <CropSquareIcon sx={{ fontSize: 14, color: "rgba(60,20,35,0.55)" }} />
+            )}
+          </Tooltip>
         </Box>
 
         <Collapse in={panelAreasOpen}>
@@ -1815,13 +1862,13 @@ export const AreasPage = () => {
                   PLANTA — PISO {pisoActivo.label}
                 </Typography>
               </Box>
-              <Tooltip title="Ocultar minimapa">
+              <Tooltip title="Minimizar minimapa">
                 <IconButton
                   size="small"
                   onClick={() => setMiniMapOpen(false)}
                   sx={{ color: "rgba(60,20,35,0.45)", p: 0.25 }}
                 >
-                  <ExpandMoreIcon sx={{ fontSize: 15 }} />
+                  <MinimizeIcon sx={{ fontSize: 15 }} />
                 </IconButton>
               </Tooltip>
             </Box>
@@ -1831,11 +1878,12 @@ export const AreasPage = () => {
                 areas={areasDelPiso}
                 selectedId={selectedId}
                 onSelect={handleSelect}
+                showLabels={showLabels}
               />
             </Box>
           </Box>
         ) : (
-          <Tooltip title="Mostrar minimapa 2D" placement="right">
+          <Tooltip title="Maximizar minimapa 2D" placement="right">
             <IconButton
               onClick={() => setMiniMapOpen(true)}
               sx={{
