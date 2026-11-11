@@ -606,6 +606,12 @@ export const SolicitudDetailPage = () => {
                 {[
                   ["Área", solicitud.area?.label],
                   ["Piso", LABEL_PISO[solicitud.piso] ?? solicitud.piso],
+                  [
+                    "Disponible en su área",
+                    solicitud.disponibleDesde && solicitud.disponibleHasta
+                      ? `${solicitud.disponibleDesde} a ${solicitud.disponibleHasta} h`
+                      : "Sin horario indicado",
+                  ],
                   ["Categoría", solicitud.subcategoria?.replace("_", " ")],
                   [
                     "Técnico",
@@ -1012,6 +1018,7 @@ export const SolicitudDetailPage = () => {
         {/* Panel 3D */}
         <Grid item xs={12} md={6} sx={{ height: "100%" }}>
           <BuildingViewer
+            raiseArea
             autoHighlight={
               solicitud.areaId
                 ? { floor: solicitud.area?.floor ?? 0, roomId: solicitud.areaId }

@@ -203,6 +203,9 @@ export const ComentarioSchema = z.object({
   updatedAt: z.string(),
 });
 
+/** Hora "HH:mm" en formato de 24 h (p. ej. "09:30"). */
+export const HoraSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora inválida (HH:mm)");
+
 export const TicketSchema = z.object({
   id: z.number().int(),
   folio: z.string(),
@@ -221,6 +224,9 @@ export const TicketSchema = z.object({
   fechaAsignacion: z.string().nullable().optional(),
   fechaInicio: z.string().nullable().optional(),
   fechaResolucion: z.string().nullable().optional(),
+  // Horario en que se puede encontrar al solicitante en su área (opcional)
+  disponibleDesde: HoraSchema.nullable().optional(),
+  disponibleHasta: HoraSchema.nullable().optional(),
   activo: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -237,6 +243,8 @@ export const TicketCreateSchema = z.object({
   piso: PisoEdificioSchema,
   muebleId: z.number().int().optional(),
   creadoPorId: z.number().int().optional(),
+  disponibleDesde: HoraSchema.optional(),
+  disponibleHasta: HoraSchema.optional(),
 });
 
 export const TicketPatchSchema = z.object({

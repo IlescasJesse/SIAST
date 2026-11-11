@@ -18,6 +18,8 @@ export const VIEWER_URL = (() => {
  *   autoHighlight?: { floor, roomId } — resalta y va al piso (sin zoom al área)
  *   focusAreaId?: string — hace zoom automático al área (FLY_TO_AREA). Tiene
  *     prioridad sobre autoHighlight cuando ambos están presentes.
+ *   raiseArea?: boolean — el área de focusAreaId / autoHighlight sube con una
+ *     animación y se queda levantada (solicitudes: "aquí es tu área")
  *   loginMode?: boolean
  *
  * Timing: el visor tarda un instante en poblar su mapa de áreas (llega vía
@@ -31,6 +33,7 @@ export const BuildingViewer = ({
   onRoomClick,
   autoHighlight,
   focusAreaId,
+  raiseArea = false,
   loginMode = false,
   sx = {},
 }) => {
@@ -89,8 +92,8 @@ export const BuildingViewer = ({
     pendingZoomRef.current = null;
     if (token) send("SET_TOKEN", { token });
     if (loginMode) send("SET_LOGIN_MODE", { enabled: true });
-    if (focusAreaId) sendZoom("FLY_TO_AREA", { areaId: focusAreaId });
-    else if (autoHighlight) sendZoom("HIGHLIGHT_ROOM", autoHighlight);
+    if (focusAreaId) sendZoom("FLY_TO_AREA", { areaId: focusAreaId, raise: raiseArea });
+    else if (autoHighlight) sendZoom("HIGHLIGHT_ROOM", { ...autoHighlight, raise: raiseArea });
   };
 
   // Actualizar token en el iframe si cambia (re-login, refresh)
@@ -100,11 +103,12 @@ export const BuildingViewer = ({
 
   // Reaccionar a cambios externos: zoom al área (prioridad sobre highlight simple)
   useEffect(() => {
-    if (focusAreaId) sendZoom("FLY_TO_AREA", { areaId: focusAreaId });
+    if (focusAreaId) sendZoom("FLY_TO_AREA", { areaId: focusAreaId, raise: raiseArea });
   }, [focusAreaId]);
 
   useEffect(() => {
-    if (!focusAreaId && autoHighlight) sendZoom("HIGHLIGHT_ROOM", autoHighlight);
+    if (!focusAreaId && autoHighlight)
+      sendZoom("HIGHLIGHT_ROOM", { ...autoHighlight, raise: raiseArea });
   }, [autoHighlight?.roomId, autoHighlight?.floor, focusAreaId]);
 
   return (

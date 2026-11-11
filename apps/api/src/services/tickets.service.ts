@@ -3,7 +3,7 @@ import { SubcategoriaTicket, CategoriaTicket } from "@prisma/client";
 import type { JwtPayload } from "../types/index.js";
 import * as notif from "./notificaciones.service.js";
 import { enviarNotifTicketCreado } from "./whatsapp.service.js";
-import { FOLIO_PREFIX, MAX_TICKETS_ACTIVOS_EMPLEADO } from "@stf/shared";
+import { FOLIO_PREFIX, HoraSchema, MAX_TICKETS_ACTIVOS_EMPLEADO } from "@stf/shared";
 import {
   esResponsable,
   esTecnico,
@@ -264,6 +264,8 @@ export const crearTicket = async (
     rfcSolicitante?: string;
     recursosAdicionales?: string | Record<string, unknown>; // objeto del frontend o JSON string — se serializa antes de persistir
     subTipo?: string; // subtipo dentro de EQUIPOS_DISPOSITIVOS
+    disponibleDesde?: string | null; // "HH:mm" — horario en que se encuentra en su área
+    disponibleHasta?: string | null;
   },
 ) => {
   // Validación en servidor: la API no depende de que el formulario web haya validado
@@ -293,6 +295,28 @@ export const crearTicket = async (
         ),
         { status: 403 },
       );
+    }
+  }
+
+  // Horario de disponibilidad (opcional): ambos o ninguno, "HH:mm", desde < hasta
+  const disponibleDesde = body.disponibleDesde?.toString().trim() || null;
+  const disponibleHasta = body.disponibleHasta?.toString().trim() || null;
+  if (disponibleDesde || disponibleHasta) {
+    if (!disponibleDesde || !disponibleHasta) {
+      throw Object.assign(new Error("Indica la hora de inicio y la de fin del horario"), {
+        status: 400,
+      });
+    }
+    if (
+      !HoraSchema.safeParse(disponibleDesde).success ||
+      !HoraSchema.safeParse(disponibleHasta).success
+    ) {
+      throw Object.assign(new Error("Horario inválido: usa el formato HH:mm"), { status: 400 });
+    }
+    if (disponibleDesde >= disponibleHasta) {
+      throw Object.assign(new Error("La hora de inicio debe ser anterior a la de fin"), {
+        status: 400,
+      });
     }
   }
 
@@ -369,6 +393,8 @@ export const crearTicket = async (
         creadoPorId,
         recursosAdicionales,
         subTipo: body.subTipo ?? null,
+        disponibleDesde,
+        disponibleHasta,
       },
       include: ticketInclude,
     }),

@@ -399,6 +399,11 @@ model Ticket {
   // Subtipo dentro de EQUIPOS_DISPOSITIVOS (equipo nuevo, falla impresora, etc.)
   subTipo String? @db.VarChar(50) @map("sub_tipo")
 
+  // Horario en que se puede encontrar al solicitante en su área ("HH:mm", 24 h).
+  // Opcional: el formulario lo pide pero no lo exige. Ambos o ninguno.
+  disponibleDesde String? @db.VarChar(5) @map("disponible_desde")
+  disponibleHasta String? @db.VarChar(5) @map("disponible_hasta")
+
   // Control
   activo    Boolean  @default(true) // false = eliminado (soft delete)
   createdAt DateTime @default(now())

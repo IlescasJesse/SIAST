@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.jsx";
 import {
@@ -172,6 +172,9 @@ export const SolicitudNewPage = () => {
   // Fecha y hora de uso (compartidos para SALA_JUNTAS y MOBILIARIO)
   const [fechaUso, setFechaUso] = useState("");
   const [horaInicio, setHoraInicio] = useState("");
+  // Horario en que se puede encontrar al solicitante en su área (opcional)
+  const [dispDesde, setDispDesde] = useState("");
+  const [dispHasta, setDispHasta] = useState("");
   const [horaFin, setHoraFin] = useState("");
 
   const adjuntos = useAdjuntos();
@@ -295,6 +298,14 @@ export const SolicitudNewPage = () => {
       setError("Indica la fecha y hora de uso para esta solicitud");
       return;
     }
+    if ((dispDesde || dispHasta) && (!dispDesde || !dispHasta)) {
+      setError("Completa el horario de disponibilidad (de qué hora a qué hora) o déjalo vacío");
+      return;
+    }
+    if (dispDesde && dispHasta && dispDesde >= dispHasta) {
+      setError("En el horario de disponibilidad, la hora de inicio debe ser antes de la de fin");
+      return;
+    }
     if (user?.rol !== "EMPLEADO" && !form.rfcSolicitante.trim()) {
       setError("Ingresa el RFC del empleado solicitante");
       return;
@@ -307,6 +318,8 @@ export const SolicitudNewPage = () => {
         ...form,
         recursosAdicionales,
         subTipo: form.subTipo || undefined,
+        disponibleDesde: dispDesde || undefined,
+        disponibleHasta: dispHasta || undefined,
       });
       const ticket = result.ticket ?? result;
       // La solicitud ya existe: si fallan los adjuntos se avisa, pero no se
@@ -332,6 +345,15 @@ export const SolicitudNewPage = () => {
       setLoading(false);
     }
   };
+
+  // Ordenadas por piso y nombre: el Autocomplete agrupa por piso
+  const areasOrdenadas = useMemo(
+    () =>
+      [...areas].sort(
+        (a, b) => (a.floor ?? 0) - (b.floor ?? 0) || String(a.label).localeCompare(b.label, "es"),
+      ),
+    [areas],
+  );
 
   const onAreaChange = (areaId) => {
     set("ubicacionAreaId", areaId);
@@ -857,21 +879,77 @@ export const SolicitudNewPage = () => {
               {loadingAreas ? (
                 <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 1 }} />
               ) : (
-                <FormControl fullWidth required>
-                  <InputLabel>Ubicación</InputLabel>
-                  <Select
-                    value={form.ubicacionAreaId}
-                    label="Ubicación"
-                    onChange={(e) => onAreaChange(e.target.value)}
-                  >
-                    {areas.map((a) => (
-                      <MenuItem key={a.id} value={a.id}>
-                        {a.label} — {LABEL_PISO[a.piso] ?? a.piso}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                // Precargada con el área del empleado; se puede cambiar escribiendo
+                <Autocomplete
+                  options={areasOrdenadas}
+                  value={areas.find((a) => a.id === form.ubicacionAreaId) ?? null}
+                  onChange={(_, a) => onAreaChange(a?.id ?? "")}
+                  groupBy={(a) => LABEL_PISO[a.piso] ?? a.piso ?? ""}
+                  getOptionLabel={(a) => `${a.label} — ${LABEL_PISO[a.piso] ?? a.piso}`}
+                  isOptionEqualToValue={(o, v) => o.id === v.id}
+                  noOptionsText="Sin áreas con ese nombre"
+                  renderOption={(props, a) => {
+                    const { key, ...rest } = props;
+                    return (
+                      <li key={key} {...rest}>
+                        {a.label}
+                        {a.id === user?.areaId && (
+                          <Chip label="Tu área" size="small" sx={{ ml: 1, height: 18 }} />
+                        )}
+                      </li>
+                    );
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Ubicación"
+                      required
+                      placeholder="Escribe para buscar el área…"
+                      helperText={
+                        user?.areaId && form.ubicacionAreaId === user.areaId
+                          ? "Es tu área asignada. Cámbiala si el problema está en otro lugar."
+                          : undefined
+                      }
+                    />
+                  )}
+                />
               )}
+
+              {/* Horario de disponibilidad en el área — opcional, pero se pide */}
+              <Box>
+                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                  {user?.rol === "EMPLEADO"
+                    ? "¿En qué horario te encontramos en tu área?"
+                    : "¿En qué horario se encuentra el solicitante en su área?"}{" "}
+                  <Typography component="span" variant="caption" color="text.secondary">
+                    (opcional)
+                  </Typography>
+                </Typography>
+                {!(dispDesde && dispHasta) && (
+                  <Alert severity="info" sx={{ mb: 1.5, py: 0.25 }}>
+                    Te pedimos marcarlo si puedes: así el técnico sabe cuándo ir y no pierde la
+                    visita.
+                  </Alert>
+                )}
+                <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
+                  <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+                    <TimePicker
+                      label="Desde"
+                      value={dispDesde ? dayjs(`2000-01-01T${dispDesde}`) : null}
+                      onChange={(v) => setDispDesde(v?.isValid() ? v.format("HH:mm") : "")}
+                      ampm={false}
+                      slotProps={{ textField: { size: "small", sx: { flex: 1, minWidth: 130 } } }}
+                    />
+                    <TimePicker
+                      label="Hasta"
+                      value={dispHasta ? dayjs(`2000-01-01T${dispHasta}`) : null}
+                      onChange={(v) => setDispHasta(v?.isValid() ? v.format("HH:mm") : "")}
+                      ampm={false}
+                      slotProps={{ textField: { size: "small", sx: { flex: 1, minWidth: 130 } } }}
+                    />
+                  </Box>
+                </LocalizationProvider>
+              </Box>
 
               <Button
                 type="submit"
@@ -888,7 +966,11 @@ export const SolicitudNewPage = () => {
 
         {/* Mapa 3D */}
         <Grid item xs={12} md={6} sx={{ height: "100%", position: "relative" }}>
-          <BuildingViewer focusAreaId={focusAreaId} sx={{ height: "100%", borderRadius: 2 }} />
+          <BuildingViewer
+            focusAreaId={focusAreaId}
+            raiseArea
+            sx={{ height: "100%", borderRadius: 2 }}
+          />
           {user?.areaId && (
             <Chip
               label={`📍 ${user.nombreCompleto ?? user.nombre} — ${userAreaLabel}`}
