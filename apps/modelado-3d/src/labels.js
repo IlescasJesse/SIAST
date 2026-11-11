@@ -274,6 +274,15 @@ export const setLabelsEnabled = (enabled) => {
   _labelsEnabled = Boolean(enabled);
 };
 
+// Enfoque: con un área enfocada (área levantada en solicitudes o área en
+// edición en el Mapa de Áreas) solo se muestra la etiqueta de esa área.
+let _soloRoomId = null;
+
+/** Muestra solo la etiqueta de roomId (null = todas). */
+export const setLabelsOnly = (roomId) => {
+  _soloRoomId = roomId ?? null;
+};
+
 const floorOf = (y) => (y > FLOOR_Y(3) ? 3 : y > FLOOR_Y(2) ? 2 : y > FLOOR_Y(1) ? 1 : 0);
 
 const _proj = new THREE.Vector3();
@@ -303,7 +312,7 @@ export const updateLabelVisibility = (camera, floorGroups, activeFloor) => {
     sprite.scale.set(sprite.userData.pxW * pxToScale, sprite.userData.pxH * pxToScale, 1);
     let quiere = false;
     // Apagadas: no se proyecta nada, solo se desvanecen las que estaban visibles
-    if (!_labelsEnabled) {
+    if (!_labelsEnabled || (_soloRoomId && sprite.userData.roomId !== _soloRoomId)) {
       sprite.userData.target = 0;
       continue;
     }

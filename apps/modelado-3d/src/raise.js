@@ -12,15 +12,16 @@ import { ROOM_BASE_OPACITY } from "./building.js";
 // ============================================================
 
 const RAISE_H = 1.4; // cuánto sube (unidades = celdas)
-const START_DELAY = 150; // ms — casi inmediato
-const FOOTPRINT_FADE = 500; // ms — aparición de la huella en el piso
-const DURATION = 2000; // ms — subida (lenta para que se vea qué área sube)
+const START_DELAY = 60; // ms — inmediato
+const FOOTPRINT_FADE = 350; // ms — aparición de la huella en el piso
+const DURATION = 1100; // ms — subida
 const FOOTPRINT_OPACITY = 0.38;
 
 const BOB_AMP = 0.16; // flotación: recorre 2·amp hacia abajo desde lo alto
 const BOB_SPEED = 1.6; // rad/s (~4 s por ciclo)
 const TONO_CLARO = 0.14; // + luminosidad (HSL) arriba
 const TONO_OSCURO = -0.1; // − luminosidad (HSL) abajo
+const SATURACION_EXTRA = 0.22; // + saturación (HSL) del área levantada
 const SOMBRA_CRECE = 0.08; // la sombra crece hasta 8 % al estar arriba
 const SOMBRA_ATENUA = 0.35; // y se aclara hasta 35 % (se difumina)
 
@@ -85,8 +86,10 @@ export const raiseRoom = (mesh, onFrame) => {
   lowerRaised();
 
   const base = new THREE.Color(mesh.userData.baseColor ?? mesh.material.color);
-  const claro = base.clone().offsetHSL(0, 0, TONO_CLARO);
-  const oscuro = base.clone().offsetHSL(0, 0, TONO_OSCURO);
+  // Más saturado que su color normal: destaca aunque el piso tenga muchas áreas
+  const vivo = base.clone().offsetHSL(0, SATURACION_EXTRA, 0);
+  const claro = vivo.clone().offsetHSL(0, 0, TONO_CLARO);
+  const oscuro = vivo.clone().offsetHSL(0, 0, TONO_OSCURO);
   const footprint = crearHuella(mesh);
   mesh.parent?.add(footprint);
   _raised = {
@@ -100,8 +103,8 @@ export const raiseRoom = (mesh, onFrame) => {
     oscuro,
   };
   // Brillo propio muy tenue del mismo tono (sin el pulso fuerte del resaltado)
-  mesh.material.emissive?.copy(base);
-  mesh.material.emissiveIntensity = 0.18;
+  mesh.material.emissive?.copy(vivo);
+  mesh.material.emissiveIntensity = 0.32;
   applyRaisedStyle();
 };
 
@@ -155,7 +158,7 @@ export const applyRaisedStyle = () => {
   const visibleFloor = mesh.parent?.visible !== false;
   mesh.visible = true;
   mesh.material.transparent = true;
-  mesh.material.opacity = Math.max(ROOM_BASE_OPACITY, 0.66);
+  mesh.material.opacity = Math.max(ROOM_BASE_OPACITY, 0.86);
   mesh.renderOrder = 2;
   mesh.traverse((child) => {
     if (!child.userData?.isEdge) return;

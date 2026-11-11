@@ -825,6 +825,13 @@ export const AreasPage = () => {
 
   // ── Toggle modo cámara ─────────────────────────────────────────────────────
 
+  // Área en edición → el visor bloquea y pone en gris las demás (no se pueden
+  // seleccionar ni mover hasta cerrar el panel; se cambia desde la lista).
+  const editFocusId = editForm?.id ?? null;
+  useEffect(() => {
+    sendToVisor("SET_EDIT_FOCUS", { areaId: editFocusId });
+  }, [editFocusId, sendToVisor]);
+
   const handleToggleLabels = () => {
     const next = !showLabels;
     setShowLabels(next);
@@ -1050,6 +1057,7 @@ export const AreasPage = () => {
             if (token) sendToVisor("SET_TOKEN", { token });
             // Al recargar el visor, conservar el estado del botón de etiquetas
             sendToVisor("SET_LABELS_VISIBLE", { visible: showLabels });
+            sendToVisor("SET_EDIT_FOCUS", { areaId: editFocusId });
             if (camMode === "cenital") sendToVisor("SET_CAMERA_MODE", { mode: camMode });
           }}
           style={{

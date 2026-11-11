@@ -15,6 +15,7 @@ import {
 } from "./building.js";
 import { highlightRoom, updateHighlight, clearHighlight } from "./highlight.js";
 import { raiseRoom, applyRaisedStyle, getRaisedId, updateRaised } from "./raise.js";
+import { setFocus, clearFocus, getFocusId, updateFocus } from "./focus.js";
 import {
   createCamera,
   flyToFloor,
@@ -33,6 +34,7 @@ import {
   removeRoomLabel,
   setLabelTheme,
   setLabelsEnabled,
+  setLabelsOnly,
 } from "./labels.js";
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
@@ -376,9 +378,9 @@ const onPointerClick = (e) => {
     return;
   }
 
-  // Con un área levantada (solicitudes) solo esa se puede seleccionar: las
-  // demás quedan de contexto y no reaccionan al clic.
-  const raisedId = getRaisedId();
+  // Con un área levantada (solicitudes) o en edición (Mapa de Áreas) solo esa
+  // se puede seleccionar: las demás quedan de contexto y no reaccionan al clic.
+  const raisedId = getRaisedId() ?? editFocusId;
   if (raisedId) {
     const raised = roomMeshes.get(raisedId);
     // Clic en el área levantada: no cambia nada (ya está destacada)
@@ -454,6 +456,70 @@ const hideInfoPanel = () => {
 // que _dispatchViewChange() despacha desde showBuilding / showFloor / showArea.
 
 // ════════════════════════════════════════════════════════════
+// BARRA DEL ÁREA ENFOCADA — nombre completo arriba del visor (solicitudes)
+// ════════════════════════════════════════════════════════════
+const PISO_NOMBRE = { 0: "Planta baja", 1: "Piso 2", 2: "Piso 3", 3: "Piso 4" };
+let _barraEl = null;
+
+const mostrarBarraArea = (label, floor) => {
+  if (!_barraEl) {
+    _barraEl = document.createElement("div");
+    Object.assign(_barraEl.style, {
+      position: "absolute",
+      top: "12px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      maxWidth: "calc(100% - 32px)",
+      zIndex: "20",
+      pointerEvents: "none",
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      padding: "8px 16px 8px 12px",
+      background: "rgba(255,255,255,0.96)",
+      borderLeft: "4px solid #9d2449",
+      borderRadius: "10px",
+      boxShadow: "0 4px 16px rgba(60,20,35,0.18)",
+      fontFamily: '"Segoe UI", system-ui, sans-serif',
+      color: "#3a1422",
+      transition: "opacity 0.3s ease",
+    });
+    document.body.appendChild(_barraEl);
+  }
+  _barraEl.innerHTML = "";
+  const piso = document.createElement("span");
+  piso.textContent = PISO_NOMBRE[floor] ?? "";
+  Object.assign(piso.style, {
+    fontSize: "11px",
+    fontWeight: "800",
+    letterSpacing: "0.6px",
+    textTransform: "uppercase",
+    color: "#fff",
+    background: "#9d2449",
+    borderRadius: "6px",
+    padding: "2px 8px",
+    whiteSpace: "nowrap",
+  });
+  const nombre = document.createElement("span");
+  nombre.textContent = label ?? "";
+  Object.assign(nombre.style, { fontSize: "15px", fontWeight: "700", lineHeight: "1.25" });
+  _barraEl.append(piso, nombre);
+  _barraEl.style.opacity = "1";
+};
+
+/** Vuelve a aplicar el nivel de vista actual (restaura opacidades). */
+const reaplicarVista = () => {
+  setViewLevel(floorGroups, roomMeshes, viewLevel, {
+    activeFloor,
+    focusedAreaId: viewLevel === "area" ? focusedAreaId : null,
+  });
+  applyRaisedStyle();
+};
+
+// Área en edición en el Mapa de Áreas (las demás quedan bloqueadas y en gris)
+let editFocusId = null;
+
+// ════════════════════════════════════════════════════════════
 // API PÚBLICA — window.SIAST3D
 // ════════════════════════════════════════════════════════════
 window.SIAST3D = {
@@ -479,6 +545,27 @@ window.SIAST3D = {
     // cambio de tono (claro ↔ oscuro) y flotación, ver raise.js
     clearHighlight(roomMeshes);
     raiseRoom(mesh, (m) => ensureRoomLabel(scene, areaId, m.userData.label, m));
+    // A la vez que sube, el resto del piso pasa a un mismo gris tenue y solo
+    // queda la etiqueta de esta área; su nombre completo va arriba del visor
+    setFocus(roomMeshes, areaId, { duration: 900 });
+    setLabelsOnly(areaId);
+    mostrarBarraArea(mesh.userData.label, mesh.userData.floor);
+    invalidate();
+  },
+
+  /**
+   * Mapa de Áreas: área en edición. Las demás se ponen en gris, sin etiqueta
+   * y no se pueden seleccionar ni mover hasta cerrar la edición.
+   * @param {string|null} areaId  null = sin área en edición
+   */
+  setEditFocus(areaId) {
+    editFocusId = areaId && roomMeshes.has(areaId) ? areaId : null;
+    if (editFocusId) {
+      setFocus(roomMeshes, editFocusId);
+    } else if (clearFocus()) {
+      reaplicarVista();
+    }
+    setLabelsOnly(editFocusId);
     invalidate();
   },
 
@@ -766,6 +853,8 @@ if (EDITOR_MODE) {
     roomMeshes,
     liveRoomMap,
     getActiveFloor: () => activeFloor,
+    // Con un área en edición, las demás no se pueden mover ni redimensionar
+    canPick: (areaId) => !editFocusId || areaId === editFocusId,
     // Aplica la geometría final tras un move/resize válido: reconstruye el
     // mesh (rebuildRoomGeometry + muebles) y reancla el label flotante.
     applyGeometry: (areaId, rect, floor, vertices = null) => {
@@ -886,6 +975,10 @@ window.addEventListener("message", (e) => {
     case "SET_CAMERA_MODE":
       // Payload: { mode: 'orbita' | 'cenital' }
       window.SIAST3D.setCameraMode(payload?.mode);
+      break;
+    case "SET_EDIT_FOCUS":
+      // Payload: { areaId: string | null } — área abierta en el panel de edición
+      window.SIAST3D.setEditFocus(payload?.areaId ?? null);
       break;
     case "SET_LABELS_VISIBLE":
       // Payload: { visible: boolean }
@@ -1030,6 +1123,7 @@ const render = () => {
   controls.update();
   const pulsando = updateHighlight(delta);
   const elevada = updateRaised(); // área levantada: sube, flota y cambia de tono
+  const enfocando = updateFocus(); // resto del piso pasando a gris
   updateLoginCamera(camera, controls, delta);
 
   const camaraMovida =
@@ -1039,6 +1133,7 @@ const render = () => {
     camaraMovida ||
     pulsando ||
     elevada ||
+    enfocando ||
     loginMode ||
     _framesPendientes > 0 ||
     now - _lastDrawT >= IDLE_FRAME_MS;

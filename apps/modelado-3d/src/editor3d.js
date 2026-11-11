@@ -153,10 +153,17 @@ const _pickFloorPoint = (floor) => {
   return _raycaster.ray.intersectPlane(_floorPlane, _planeHit) ? _planeHit.clone() : null;
 };
 
-/** Mesh de área visible bajo el rayo actual (o null). Ignora meshes ocultos. */
-const _pickRoomMesh = () => {
+/**
+ * Mesh de área visible bajo el rayo actual (o null). Ignora meshes ocultos.
+ * Con un área en edición (ctx.canPick), las demás quedan bloqueadas, salvo
+ * cuando respetarBloqueo=false (dibujar: no encimar sobre ninguna área).
+ */
+const _pickRoomMesh = ({ respetarBloqueo = true } = {}) => {
   const candidates = [..._ctx.roomMeshes.values()].filter(
-    (m) => m.visible && m.parent?.visible !== false,
+    (m) =>
+      m.visible &&
+      m.parent?.visible !== false &&
+      (!respetarBloqueo || !_ctx.canPick || _ctx.canPick(m.userData.roomId)),
   );
   const hits = _raycaster.intersectObjects(candidates, false);
   return hits.length ? hits[0].object : null;
@@ -874,7 +881,7 @@ const _onPointerDown = (e) => {
   }
 
   if (_tool === "draw") {
-    if (_pickRoomMesh()) return; // solo sobre piso vacío
+    if (_pickRoomMesh({ respetarBloqueo: false })) return; // solo sobre piso vacío
     const activeFloor = _ctx.getActiveFloor();
     const floor = activeFloor >= 0 ? activeFloor : 0;
     const p = _pickFloorPoint(floor);
@@ -961,6 +968,8 @@ const _onPointerLeave = () => {
  * @param {Map}                 ctx.roomMeshes     — Map areaId → Mesh (viva)
  * @param {object}              ctx.liveRoomMap    — coords actuales por areaId
  * @param {() => number}        ctx.getActiveFloor — piso activo (-1 = todos)
+ * @param {(areaId:string) => boolean} [ctx.canPick] — false = área bloqueada
+ *        (otra área está en edición)
  * @param {(areaId:string, rect:object, floor:number) => void} ctx.applyGeometry
  *        — aplica la geometría final (rebuildRoomGeometry + label + muebles)
  */
