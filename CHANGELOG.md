@@ -2,6 +2,11 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.2.0 — 2026-11-11 · MENOR
+
+- Agregar horario de disponibilidad, ubicación con búsqueda y área levantada en Solicitudes — Jesse Ilescas (`d81a447`)
+- Agregar vista cenital, etiquetas ocultables y área levantada al visor 3D y Mapa de Áreas — Jesse Ilescas (`f46217d`)
+
 ## v1.1.2 — 2026-11-09 · ARREGLO
 
 - Mapa de áreas: la cámara no se mueve al seleccionar/editar y se empieza sin pendientes viejos — Jesse Ilescas (`082f572`)
