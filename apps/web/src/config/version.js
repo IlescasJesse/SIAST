@@ -1,3 +1,3 @@
 // Versión de SIAST que se muestra en el login. Subirla en cada release
 // junto con "version" de los package.json y el tag de git (vX.Y.Z).
-export const APP_VERSION = "1.2.0";
+export const APP_VERSION = "1.3.0";

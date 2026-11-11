@@ -2,6 +2,12 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.3.0 — 2026-11-11 · MENOR
+
+- Agregar prompt del monitor del servidor para avisos y novedades — Jesse Ilescas (`7bbf39b`)
+- Ocultar el trabajo de los Admin en Métricas para quien no es Admin — Jesse Ilescas (`f225ac6`)
+- Permitir que Admin y Mesa de Ayuda asignen solicitudes y pasos a un Admin — Jesse Ilescas (`4054753`)
+
 ## v1.2.0 — 2026-11-11 · MENOR
 
 - Agregar horario de disponibilidad, ubicación con búsqueda y área levantada en Solicitudes — Jesse Ilescas (`d81a447`)
