@@ -2,6 +2,10 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.4.0 — 2026-11-11 · MENOR
+
+- Enfocar el área levantada en Solicitudes y bloquear las demás al editar en Mapa de Áreas — Jesse Ilescas (`5a36cb0`)
+
 ## v1.3.2 — 2026-11-11 · ARREGLO
 
 - Forzar que el visor 3D se recargue al salir una versión nueva — Jesse Ilescas (`7278006`)
