@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Box } from "@mui/material";
 import { useAuthStore } from "../../store/auth.js";
+import { APP_VERSION } from "../../config/version.js";
 
 export const VIEWER_URL = (() => {
   const envUrl = import.meta.env.VITE_VIEWER_URL;
@@ -115,7 +116,9 @@ export const BuildingViewer = ({
     <Box sx={{ width: "100%", height: "100%", overflow: "hidden", borderRadius: 2, ...sx }}>
       <iframe
         ref={ref}
-        src={VIEWER_URL}
+        // ?v=versión: con cada release el navegador pide el visor nuevo en vez
+        // de usar el que tenía guardado en caché
+        src={`${VIEWER_URL}${VIEWER_URL.includes("?") ? "&" : "?"}v=${APP_VERSION}`}
         title="Edificio Saúl Martínez"
         onLoad={onLoad}
         style={{ width: "100%", height: "100%", border: "none", display: "block" }}
