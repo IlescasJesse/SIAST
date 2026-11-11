@@ -387,7 +387,12 @@ const onPointerClick = (e) => {
   }
 
   // Regenerar la lista de meshes clickeables para reflejar reconstrucciones de geometría
-  clickableMeshes = [...roomMeshes.values()];
+  // Solo áreas visibles: three.js no descarta objetos ocultos al hacer raycast,
+  // y con la cámara arriba el clic en un área del piso 2 chocaba primero con
+  // un área (oculta) del piso 4 y mandaba al piso 4.
+  clickableMeshes = [...roomMeshes.values()].filter(
+    (m) => m.visible && m.parent?.visible !== false,
+  );
   const hits = raycaster.intersectObjects(clickableMeshes);
   if (!hits.length) {
     hideInfoPanel();
