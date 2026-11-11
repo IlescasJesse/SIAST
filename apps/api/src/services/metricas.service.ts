@@ -50,6 +50,17 @@ function buildDateWhere(
   return { [field]: dateFilter };
 }
 
+// ── Helpers: excluir del área el trabajo de los Admin ─────────────────────────
+// Para quien no es Admin, los números de un área no incluyen solicitudes
+// asignadas a un Admin (aunque tenga esa área): esas solo las ve otro Admin.
+function filtroTecnicoArea(areaId: number, verAdmins: boolean) {
+  return verAdmins ? { areaSoporteId: areaId } : { areaSoporteId: areaId, rol: { not: Rol.ADMIN } };
+}
+// Para SQL directo con alias `u` de usuarios (también sirve en LEFT JOIN: u.rol NULL pasa).
+function sinAdminSql(verAdmins: boolean) {
+  return verAdmins ? Prisma.empty : Prisma.sql`AND (u.rol IS NULL OR u.rol <> 'ADMIN')`;
+}
+
 // ── Helper: calcular SLA % ────────────────────────────────────────────────────
 async function calcularSLA(where: Record<string, unknown>): Promise<number | null> {
   const resueltos = await prisma.ticket.findMany({
@@ -72,10 +83,11 @@ async function calcularTendencia(
   fechaInicio: Date,
   fechaFin: Date,
   areaId?: number,
+  verAdmins = true,
 ): Promise<TendenciaDia[]> {
   const joinClause = areaId ? Prisma.sql`LEFT JOIN usuarios u ON t.tecnicoId = u.id` : Prisma.empty;
   const areaFilter = areaId
-    ? Prisma.sql`AND (u.area_soporte_id = ${areaId} OR t.tecnicoId IS NULL)`
+    ? Prisma.sql`AND (u.area_soporte_id = ${areaId} OR t.tecnicoId IS NULL) ${sinAdminSql(verAdmins)}`
     : Prisma.empty;
 
   // Creados: agrupados por createdAt
@@ -193,6 +205,7 @@ async function calcularTiemprimeraRespuesta(
 export async function obtenerMetricasGlobal(
   fechaInicio?: Date,
   fechaFin?: Date,
+  verAdmins = false,
 ): Promise<MetricasGlobalResponse> {
   const dateWhere = buildDateWhere(fechaInicio, fechaFin);
   const resolucionWhere = buildDateWhere(fechaInicio, fechaFin, "fechaResolucion");
@@ -267,6 +280,7 @@ export async function obtenerMetricasGlobal(
         JOIN usuarios u ON t.tecnicoId = u.id
         WHERE t.activo = true
           AND u.area_soporte_id = ${a.id}
+          ${sinAdminSql(verAdmins)}
           ${dateWhere.createdAt?.gte ? Prisma.sql`AND t.createdAt >= ${dateWhere.createdAt.gte}` : Prisma.empty}
           ${dateWhere.createdAt?.lte ? Prisma.sql`AND t.createdAt <= ${dateWhere.createdAt.lte}` : Prisma.empty}
       `;
@@ -279,6 +293,7 @@ export async function obtenerMetricasGlobal(
         WHERE t.activo = true
           AND t.estado = 'RESUELTO'
           AND u.area_soporte_id = ${a.id}
+          ${sinAdminSql(verAdmins)}
           ${dateWhere.createdAt?.gte ? Prisma.sql`AND t.createdAt >= ${dateWhere.createdAt.gte}` : Prisma.empty}
           ${dateWhere.createdAt?.lte ? Prisma.sql`AND t.createdAt <= ${dateWhere.createdAt.lte}` : Prisma.empty}
       `;
@@ -332,7 +347,7 @@ export async function obtenerMetricasGlobal(
       const areaWhere = {
         activo: true,
         ...resolucionWhere,
-        tecnico: { areaSoporteId: r.areaSoporteId! },
+        tecnico: filtroTecnicoArea(r.areaSoporteId!, verAdmins),
       };
       const [resueltos, sla, tiempo] = await Promise.all([
         prisma.ticket.count({ where: { ...areaWhere, estado: "RESUELTO" } }),
@@ -354,10 +369,11 @@ export async function obtenerMetricasGlobal(
 
   // Admin / Mesa de Ayuda que resolvieron solicitudes ellos mismos en el período:
   // se listan junto a los responsables, con sus métricas personales (no de área).
+  // Las filas de Admin solo las ve otro Admin.
   const staffGlobal = await prisma.usuario.findMany({
     where: {
       activo: true,
-      rol: { in: [Rol.ADMIN, Rol.MESA_AYUDA] },
+      rol: { in: verAdmins ? [Rol.ADMIN, Rol.MESA_AYUDA] : [Rol.MESA_AYUDA] },
       ticketsAsignados: { some: { activo: true, estado: "RESUELTO", ...resolucionWhere } },
     },
     select: { id: true, nombre: true, apellidos: true, rol: true },
@@ -406,6 +422,7 @@ export async function obtenerMetricasPorArea(
   areaId: number,
   fechaInicio?: Date,
   fechaFin?: Date,
+  verAdmins = false,
 ): Promise<MetricasPorAreaResponse> {
   const dateWhere = buildDateWhere(fechaInicio, fechaFin);
   const resolucionWhere = buildDateWhere(fechaInicio, fechaFin, "fechaResolucion");
@@ -432,7 +449,7 @@ export async function obtenerMetricasPorArea(
   const areaResueltoWhere = {
     activo: true,
     ...resolucionWhere,
-    tecnico: { areaSoporteId: areaId },
+    tecnico: filtroTecnicoArea(areaId, verAdmins),
   };
 
   const [ticketsActivos, ticketsSinAsignar, slaGlobal, tiempoPromedioHoras] = await Promise.all([
@@ -440,7 +457,7 @@ export async function obtenerMetricasPorArea(
       where: {
         activo: true,
         estado: { notIn: ["RESUELTO", "CANCELADO"] },
-        tecnico: { areaSoporteId: areaId },
+        tecnico: filtroTecnicoArea(areaId, verAdmins),
       },
     }),
     prisma.ticket.count({ where: sinAsignarWhere }),
@@ -457,6 +474,7 @@ export async function obtenerMetricasPorArea(
     JOIN usuarios u ON t.tecnicoId = u.id
     WHERE t.activo = true
       AND u.area_soporte_id = ${areaId}
+      ${sinAdminSql(verAdmins)}
       AND ht.estadoNuevo = 'ABIERTO'
       AND ht.estadoAnterior IN ('RESUELTO', 'CANCELADO')
   `;
@@ -464,7 +482,7 @@ export async function obtenerMetricasPorArea(
 
   // Tendencia, distribución subcategoría
   const [tendenciaDiaria, subCatRaw, estadoAreaRaw] = await Promise.all([
-    calcularTendencia(fInicio, fFin, areaId),
+    calcularTendencia(fInicio, fFin, areaId, verAdmins),
     prisma.ticket.groupBy({
       by: ["subcategoria"],
       where: { activo: true, subcategoria: { in: subcategoriasArea } },
@@ -509,6 +527,8 @@ export async function obtenerMetricasPorArea(
       activo: true,
       areaSoporteId: areaId,
       OR: [{ rol: { notIn: rolesNoTecnico } }, { ticketsAsignados: { some: { activo: true } } }],
+      // Un Admin con área asignada no aparece en el desglose para quien no es Admin.
+      ...(verAdmins ? {} : { rol: { not: Rol.ADMIN } }),
     },
     select: { id: true, nombre: true, apellidos: true, rol: true },
   });
@@ -592,6 +612,7 @@ export async function obtenerMetricasPorTecnico(
   tecnicoId: number,
   fechaInicio?: Date,
   fechaFin?: Date,
+  verAdmins = false,
 ): Promise<MetricasPorTecnicoResponse> {
   const dateWhere = buildDateWhere(fechaInicio, fechaFin);
   const resolucionWhere = buildDateWhere(fechaInicio, fechaFin, "fechaResolucion");
@@ -668,7 +689,7 @@ export async function obtenerMetricasPorTecnico(
     ? await calcularTiempoPromedio({
         activo: true,
         ...resolucionWhere,
-        tecnico: { areaSoporteId: tecnico.areaSoporteId },
+        tecnico: filtroTecnicoArea(tecnico.areaSoporteId, verAdmins),
       })
     : null;
   const comparativaVsArea = [

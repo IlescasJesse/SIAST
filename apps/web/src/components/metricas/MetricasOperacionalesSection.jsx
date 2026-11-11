@@ -123,13 +123,13 @@ export function MetricasOperacionalesSection({ rol, areaSoporteId, userId }) {
               u.activo &&
               (ROLES_TECNICO.includes(u.rol) ||
                 ROLES_RESPONSABLE.includes(u.rol) ||
-                u.rol === "ADMIN" ||
+                (u.rol === "ADMIN" && rol === "ADMIN") ||
                 u.rol === "MESA_AYUDA"),
           ),
         ),
       )
       .catch(() => {});
-  }, [showGlobal, areaSoporteId]);
+  }, [showGlobal, areaSoporteId, rol]);
 
   // Fetch métricas
   useEffect(() => {

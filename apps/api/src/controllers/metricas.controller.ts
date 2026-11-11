@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Response, NextFunction } from "express";
 import type { AuthRequest } from "../types/index.js";
 import { ROLES_RESPONSABLE } from "../middleware/roles.middleware.js";
+import { ROLES_TECNICO } from "../services/alcance.service.js";
 import { prisma } from "../config/database.js";
 import * as metricasService from "../services/metricas.service.js";
 
@@ -26,18 +27,26 @@ const QuerySchema = z.object({
       if (isNaN(d.getTime())) throw new Error("fechaFin inválida");
       return d;
     }),
-  areaId: z.string().optional().transform((s) => {
-    if (!s) return undefined;
-    const n = Number(s);
-    if (isNaN(n) || !Number.isInteger(n) || n <= 0) throw new Error("areaId debe ser un entero positivo");
-    return n;
-  }),
-  tecnicoId: z.string().optional().transform((s) => {
-    if (!s) return undefined;
-    const n = Number(s);
-    if (isNaN(n) || !Number.isInteger(n) || n <= 0) throw new Error("tecnicoId debe ser un entero positivo");
-    return n;
-  }),
+  areaId: z
+    .string()
+    .optional()
+    .transform((s) => {
+      if (!s) return undefined;
+      const n = Number(s);
+      if (isNaN(n) || !Number.isInteger(n) || n <= 0)
+        throw new Error("areaId debe ser un entero positivo");
+      return n;
+    }),
+  tecnicoId: z
+    .string()
+    .optional()
+    .transform((s) => {
+      if (!s) return undefined;
+      const n = Number(s);
+      if (isNaN(n) || !Number.isInteger(n) || n <= 0)
+        throw new Error("tecnicoId debe ser un entero positivo");
+      return n;
+    }),
 });
 
 // ============================================================
@@ -64,16 +73,14 @@ export const obtener = async (
     const user = req.user!;
 
     // 2. Role scoping — SEGURIDAD CRÍTICA (D-12, T-04-02-01)
-    const ROLES_TECNICO = [
-      "TECNICO_TI",
-      "TECNICO_REDES",
-      "TECNICO_ELECTRICISTA",
-      "TECNICO_PLOMERO",
-      "TECNICO_MOVILIDAD",
-    ];
+    // Lista compartida con alcance.service (antes faltaba TECNICO_SISTEMAS aquí y
+    // ese rol podía consultar las métricas globales).
+    const esRolTecnico = (ROLES_TECNICO as readonly string[]).includes(user.rol);
+    // Las métricas de los administradores solo las ve otro Admin.
+    const verAdmins = user.rol === "ADMIN";
 
     // CR-01: TECNICO_* solo puede acceder a tipo=proceso (sus propias métricas)
-    if (ROLES_TECNICO.includes(user.rol) && tipo !== "proceso") {
+    if (esRolTecnico && tipo !== "proceso") {
       res.status(403).json({ error: "Técnicos solo pueden acceder a métricas tipo=proceso" });
       return;
     }
@@ -113,25 +120,42 @@ export const obtener = async (
     }
 
     // 4. TECNICO_*: para tipo=proceso, forzar su propio tecnicoId (T-04-02-04)
-    const tecnicoIdEfectivo = ROLES_TECNICO.includes(user.rol) ? user.id : (tecnicoId ?? undefined);
+    const tecnicoIdEfectivo = esRolTecnico ? user.id : (tecnicoId ?? undefined);
+
+    // Detalle de un Admin: solo para otro Admin.
+    if (tipo === "proceso" && tecnicoIdEfectivo && !verAdmins) {
+      const objetivo = await prisma.usuario.findUnique({
+        where: { id: tecnicoIdEfectivo },
+        select: { rol: true },
+      });
+      if (objetivo?.rol === "ADMIN") {
+        res.status(403).json({ error: "Sin acceso a las métricas de este usuario" });
+        return;
+      }
+    }
 
     // 5. Delegar al servicio según tipo
     let data;
     if (tipo === "area") {
-      data = await metricasService.obtenerMetricasGlobal(fechaInicio, fechaFin);
+      data = await metricasService.obtenerMetricasGlobal(fechaInicio, fechaFin, verAdmins);
     } else if (tipo === "tecnico") {
       if (!areaId) {
         res.status(400).json({ error: "areaId requerido para tipo=tecnico" });
         return;
       }
-      data = await metricasService.obtenerMetricasPorArea(areaId, fechaInicio, fechaFin);
+      data = await metricasService.obtenerMetricasPorArea(areaId, fechaInicio, fechaFin, verAdmins);
     } else {
       // tipo === "proceso"
       if (!tecnicoIdEfectivo) {
         res.status(400).json({ error: "tecnicoId requerido para tipo=proceso" });
         return;
       }
-      data = await metricasService.obtenerMetricasPorTecnico(tecnicoIdEfectivo, fechaInicio, fechaFin);
+      data = await metricasService.obtenerMetricasPorTecnico(
+        tecnicoIdEfectivo,
+        fechaInicio,
+        fechaFin,
+        verAdmins,
+      );
     }
 
     res.json(data);
