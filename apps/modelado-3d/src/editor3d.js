@@ -1018,3 +1018,13 @@ export const setEditTool = (tool) => {
  * main.js lo usa para suprimir el click normal (ROOM_CLICKED / showArea).
  */
 export const isEditToolIntercepting = () => _ctx !== null && _tool !== "select";
+
+/**
+ * true si un toque/clic simple sobre un área NO debe seleccionarla: dibujar y
+ * borrar usan el toque para sí mismas, y con un menú de vértice abierto o un
+ * vértice enfocado el toque es parte de esa edición.
+ * Con Seleccionar, Mover y Redimensionar un toque sin arrastre sí selecciona.
+ */
+export const isEditorTapBlocked = () =>
+  _ctx !== null &&
+  (_tool === "draw" || _tool === "delete" || _drag !== null || _menuEl !== null || _focus !== null);

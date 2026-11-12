@@ -39,7 +39,7 @@ import {
 import { ALL_ROOMS, FLOOR_LABELS } from "./rooms.js";
 import { FurnitureManager, loadMuebles } from "./furniture.js";
 import { createComposer, resizeComposer } from "./postprocessing.js";
-import { initEditor3D, setEditTool, isEditToolIntercepting } from "./editor3d.js";
+import { initEditor3D, setEditTool, isEditorTapBlocked } from "./editor3d.js";
 
 // Sin configurar: en dev la API corre aparte en :5101; en el build se usa el
 // mismo dominio (nginx hace proxy de /api/ y el 5101 no está abierto en la red).
@@ -355,13 +355,47 @@ const _dispatchViewChange = (level, floor, areaLabel) => {
 // ════════════════════════════════════════════════════════════
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
-// clickableMeshes es un array vivo: se regenera en onPointerClick para incluir meshes nuevos
-let clickableMeshes = [...roomMeshes.values()];
+// ¿Se ve este objeto? (él y todos sus padres visibles)
+const seVe = (obj) => {
+  for (let o = obj; o; o = o.parent) if (!o.visible) return false;
+  return true;
+};
+
+/** Piso (0..3) al que pertenece un objeto de la escena, o null. */
+const pisoDe = (obj) => {
+  for (let o = obj; o; o = o.parent) {
+    for (const [floor, group] of floorGroups) if (group === o) return floor;
+  }
+  return null;
+};
+
+/**
+ * Área bajo el rayo actual (o null).
+ * · Piso / área: solo áreas visibles. three.js no descarta objetos ocultos al
+ *   hacer raycast, y con la cámara arriba un clic en el piso 2 chocaba primero
+ *   con un área oculta del piso 4.
+ * · Edificio: las áreas están ocultas (solo se ven losas y muros). Se ve qué
+ *   piso tocó el rayo primero y se toma el área de ese piso bajo el rayo.
+ */
+const pickRoom = () => {
+  const visibles = [...roomMeshes.values()].filter(seVe);
+  if (visibles.length) {
+    const hit = raycaster.intersectObjects(visibles, false)[0];
+    if (hit) return hit.object;
+  }
+  if (viewLevel !== "building") return null;
+  const grupos = [...floorGroups.values()].filter((g) => g.visible);
+  const primero = raycaster.intersectObjects(grupos, true).find((h) => seVe(h.object));
+  const floor = primero ? pisoDe(primero.object) : null;
+  if (floor == null) return null;
+  const delPiso = [...roomMeshes.values()].filter((m) => m.userData.floor === floor);
+  return raycaster.intersectObjects(delPiso, false)[0]?.object ?? null;
+};
 
 const onPointerClick = (e) => {
   if (embedMode) return;
-  // Con herramienta de edición activa (≠ select) los clicks los gestiona editor3d.js
-  if (isEditToolIntercepting()) return;
+  // Dibujar / borrar (o un vértice en edición) usan el toque para sí mismos
+  if (isEditorTapBlocked()) return;
   pointer.x = (e.clientX / innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
@@ -378,30 +412,20 @@ const onPointerClick = (e) => {
     return;
   }
 
-  // Con un área levantada (solicitudes) o en edición (Mapa de Áreas) solo esa
-  // se puede seleccionar: las demás quedan de contexto y no reaccionan al clic.
+  // Con un área levantada (solicitudes) o con cambios sin guardar (Mapa de
+  // Áreas) solo esa cuenta: las demás quedan de contexto y no reaccionan.
   const raisedId = getRaisedId() ?? editFocusId;
   if (raisedId) {
-    const raised = roomMeshes.get(raisedId);
-    // Clic en el área levantada: no cambia nada (ya está destacada)
-    if (raised && raycaster.intersectObject(raised).length) invalidate();
+    invalidate();
     return;
   }
 
-  // Regenerar la lista de meshes clickeables para reflejar reconstrucciones de geometría
-  // Solo áreas visibles: three.js no descarta objetos ocultos al hacer raycast,
-  // y con la cámara arriba el clic en un área del piso 2 chocaba primero con
-  // un área (oculta) del piso 4 y mandaba al piso 4.
-  clickableMeshes = [...roomMeshes.values()].filter(
-    (m) => m.visible && m.parent?.visible !== false,
-  );
-  const hits = raycaster.intersectObjects(clickableMeshes);
-  if (!hits.length) {
+  const mesh = pickRoom();
+  if (!mesh) {
     hideInfoPanel();
     return;
   }
 
-  const mesh = hits[0].object;
   const { roomId, label, floor, x1, y1, x2, y2 } = mesh.userData;
   highlightRoom(roomMeshes, roomId);
   showInfoPanel({ roomId, label, floor, x1, y1, x2, y2 });
@@ -414,7 +438,33 @@ const onPointerClick = (e) => {
   parent?.postMessage({ type: "ROOM_CLICKED", payload: { floor, roomId, label } }, "*");
 };
 
-renderer.domElement.addEventListener("click", onPointerClick);
+// Toque / clic propio (mouse, dedo y lápiz). El evento "click" del navegador
+// no siempre llega en táctil cuando OrbitControls maneja el dedo, así que se
+// detecta el toque con pointerdown → pointerup: poco movimiento y poco tiempo.
+// Arrastrar (rotar la cámara, mover un área) no cuenta como toque.
+const TAP_MAX_PX = 8;
+const TAP_MAX_MS = 600;
+const _taps = new Map(); // pointerId → { x, y, t }
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  // Un segundo dedo = gesto de cámara (zoom / desplazar): no es toque
+  if (_taps.size > 0) {
+    _taps.clear();
+    return;
+  }
+  _taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
+});
+renderer.domElement.addEventListener("pointerup", (e) => {
+  const tap = _taps.get(e.pointerId);
+  _taps.delete(e.pointerId);
+  if (!tap) return;
+  const lejos = Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TAP_MAX_PX;
+  if (lejos || performance.now() - tap.t > TAP_MAX_MS) return;
+  const { clientX, clientY } = e;
+  // Después de que el editor procese su propio pointerup (menú de vértice, etc.)
+  setTimeout(() => onPointerClick({ clientX, clientY }), 0);
+});
+renderer.domElement.addEventListener("pointercancel", (e) => _taps.delete(e.pointerId));
 
 // ════════════════════════════════════════════════════════════
 // PANEL DE INFO
