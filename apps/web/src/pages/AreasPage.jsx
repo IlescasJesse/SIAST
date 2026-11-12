@@ -825,9 +825,10 @@ export const AreasPage = () => {
 
   // ── Toggle modo cámara ─────────────────────────────────────────────────────
 
-  // Área en edición → el visor bloquea y pone en gris las demás (no se pueden
-  // seleccionar ni mover hasta cerrar el panel; se cambia desde la lista).
-  const editFocusId = editForm?.id ?? null;
+  // Área con cambios sin guardar → el visor bloquea y pone en gris las demás
+  // (no se pueden seleccionar ni mover hasta guardar o cancelar). Solo
+  // seleccionar un área no bloquea: se puede pasar de una a otra con clic.
+  const editFocusId = editForm?._dirty && pendingChanges[editForm.id] ? editForm.id : null;
   useEffect(() => {
     sendToVisor("SET_EDIT_FOCUS", { areaId: editFocusId });
   }, [editFocusId, sendToVisor]);
