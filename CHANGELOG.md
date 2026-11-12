@@ -2,6 +2,10 @@
 
 Versiones generadas automáticamente al hacer push (ver VERSIONADO.md). Las entradas anteriores al versionado automático (hasta la primera versión de abajo) son un resumen.
 
+## v1.4.1 — 2026-11-12 · ARREGLO
+
+- Permitir seleccionar otra área en Mapa de Áreas; bloquear solo con cambios sin guardar — Jesse Ilescas (`151ebb9`)
+
 ## v1.4.0 — 2026-11-11 · MENOR
 
 - Enfocar el área levantada en Solicitudes y bloquear las demás al editar en Mapa de Áreas — Jesse Ilescas (`5a36cb0`)
